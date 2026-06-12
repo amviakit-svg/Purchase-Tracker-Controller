@@ -1,0 +1,10 @@
+INFO:     Started server process [3988]
+INFO:     Waiting for application startup.
+2026-06-12 16:51:26,311 [INFO] Database initialized successfully.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:64464 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64465 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64466 - "GET /static/index.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64467 - "GET /api/local-modules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64468 - "GET /health HTTP/1.1" 200 OK
