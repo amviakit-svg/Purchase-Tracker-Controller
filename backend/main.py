@@ -188,6 +188,7 @@ from backend.dedup_engine import (
     is_dedup_active, resolve_dedup_columns, build_concat,
     normalize_concat, load_existing_concat_set, detect_duplicate_rows,
     ensure_dedup_table, populate_dedup_table, write_rejected_artefact,
+    fuzzy_match_column, resolve_columns_fuzzy,
     DEDUP_COL_NAME,
 )
 
@@ -1095,7 +1096,31 @@ async def upload_file(
 
 @app.get("/api/files/{folder_id}")
 async def api_get_files(folder_id: int):
+    # --- Stale-sync recovery: any file stuck in 'in_processing' for >5 minutes
+    # is reset to 'pending' so the user can click 'force retry' to re-trigger.
+    # This protects against previous auto-sync runs that crashed mid-loop and
+    # never updated the file's status (the most common cause of the spinner
+    # being stuck forever).
+    try:
+        from database import get_db_connection
+        _conn = get_db_connection()
+        _conn.execute(
+            """UPDATE files
+               SET sync_status = 'pending', sync_error = COALESCE(sync_error, 'Recovered from stale in_processing state')
+               WHERE folder_id = ?
+                 AND sync_status = 'in_processing'
+                 AND (sync_error IS NULL OR sync_error = '')""",
+            (folder_id,),
+        )
+        _conn.commit()
+        _conn.close()
+    except Exception as _stale_err:
+        logger.warning(f"Stale-sync recovery skipped for folder {folder_id}: {_stale_err}")
+
     files = get_files_by_folder(folder_id)
+    # Decorate each row with the latest rejected-artefact summary so the UI can
+    # render the "Rejected & Download" pill on the file list.
+    _enrich_files_with_rejected_artefact(files)
     return {"success": True, "files": files}
 
 @app.delete("/api/files/{file_id}")
@@ -1463,16 +1488,29 @@ async def merge_files(
                             user_columns = actual_columns.copy()
                         selected_columns = user_columns
                     else:
-                        selected_columns = user_columns
-                    
-                    # Validate that all requested columns exist
-                    missing_columns = [col for col in selected_columns if col not in actual_columns]
-                    if missing_columns:
-                        rejected_files.append({
-                            "file": original_name,
-                            "reason": f"Column(s) not found: {', '.join(missing_columns)}"
-                        })
-                        continue
+                        # Try exact-match first; if anything is missing, fall back to fuzzy match
+                        # (handles Excel's auto-suffixed duplicates like FACILITY_1 vs FACILITY).
+                        desired = list(user_columns)
+                        exact_matched = [c for c in desired if c in actual_columns]
+                        missing_after_exact = [c for c in desired if c not in actual_columns]
+                        fuzzy_matched, still_missing = resolve_columns_fuzzy(missing_after_exact, actual_columns)
+                        if still_missing:
+                            rejected_files.append({
+                                "file": original_name,
+                                "reason": f"Column(s) not found: {', '.join(still_missing)}"
+                            })
+                            continue
+                        _seen = set()
+                        selected_columns = []
+                        for c in exact_matched + fuzzy_matched:
+                            if c not in _seen:
+                                _seen.add(c)
+                                selected_columns.append(c)
+                        if missing_after_exact:
+                            logger.info(
+                                f"Merge fuzzy column resolution for '{original_name}': "
+                                f"saved={missing_after_exact} -> file={fuzzy_matched}"
+                            )
                     
                     # Select only the requested columns
                     df = df[selected_columns]
@@ -1558,12 +1596,15 @@ async def merge_files(
                                         )
                                     except Exception:
                                         pass
+                                    _fid = file_info.get('id')
                                     rejected_files.append({
                                         "file": original_name,
                                         "reason": _reject_reason,
                                         "rejected_rows": _matched_count,
                                         "total_rows": len(df),
                                         "artefact_id": _artefact_id,
+                                        "file_id":               _fid,
+                                        "rejected_download_url": f"/api/files/{_fid}/rejected-download" if _fid else None,
                                     })
                                     # Do NOT add this file's data to the master.
                                     continue
@@ -2228,7 +2269,7 @@ async def get_master_info(folder_id: int, current_user: Optional[dict] = Depends
         master['merged_files'] = []
         master['columns'] = []
     
-    # Parse rejected files from JSON
+    # Parse rejected files from JSON (legacy column on master_files)
     if master.get('rejected_files'):
         try:
             master['rejected_files'] = json.loads(master['rejected_files'])
@@ -2236,7 +2277,32 @@ async def get_master_info(folder_id: int, current_user: Optional[dict] = Depends
             master['rejected_files'] = []
     else:
         master['rejected_files'] = []
-    
+
+    # ---- Merge in dedup-rejected artefacts so the "Rejected Files" table in
+    # the Create Master File modal reflects BOTH legacy and dedup rejections.
+    # Each artefact row is normalised into the same shape the modal expects:
+    #   { file, reason, rejected_rows, total_rows, file_id, rejected_download_url,
+    #     rejected_at } so the modal can sort by newest and show the last 5.
+    # CAP: we merge AT MOST 5 of the most-recent rejected artefacts to keep
+    # the master modal light for folders with many historical rejections.
+    try:
+        _artefacts = list_rejected_artefacts(folder_id=folder_id)[:5]
+        for _a in _artefacts:
+            _fid = _a.get('file_id')
+            master['rejected_files'].append({
+                "file":                  _a.get('original_name') or 'Unknown file',
+                "reason":                _a.get('reject_reason') or 'Rejected (duplicate detection)',
+                "rejected_rows":         _a.get('rejected_rows'),
+                "total_rows":            _a.get('total_rows'),
+                "file_id":               _fid,
+                "rejected_download_url": f"/api/files/{_fid}/rejected-download" if _fid else None,
+                "rejected_at":           _a.get('created_at'),
+            })
+        if len(master['rejected_files']):
+            master['rejected_files_total'] = len(master['rejected_files'])
+    except Exception as _a_err:
+        logger.warning(f"Could not merge rejected_artefacts into master_info for folder {folder_id}: {_a_err}")
+
     return {"success": True, "master": master}
 
 @app.get("/api/master/{folder_id}/sheets")
@@ -7491,18 +7557,33 @@ async def api_download_rejected_artefact(file_id: int, current_user: Optional[di
 
 
 def _enrich_files_with_rejected_artefact(files: list) -> list:
-    """Helper: decorate each file row with the latest rejected artefact summary (if any)."""
+    """Helper: decorate each file row with the latest rejected artefact summary (if any).
+
+    Behaviour:
+      - Decorate ANY file that has a rejected_artefacts row in the DB (regardless
+        of its current sync_status). This is the source of truth — the artefact
+        table is what we trust, not the volatile sync_status field.
+      - This fixes Bug 6: a file that was correctly rejected by dedup but is
+        still in 'in_processing' (because the previous auto-sync run crashed
+        before the post-dedup set_file_sync_status call) would otherwise be
+        invisible to the pill render in the frontend.
+    """
     for f in files:
         if not isinstance(f, dict):
             continue
-        if f.get('sync_status') == 'rejected':
-            try:
-                latest = get_latest_rejected_artefact_for_file(f.get('id'))
-                if latest:
-                    f['rejected_artefact_id']    = latest.get('id')
-                    f['rejected_artefact_rows']  = latest.get('rejected_rows')
-                    f['rejected_artefact_total'] = latest.get('total_rows')
-                    f['rejected_download_url']   = f"/api/files/{f.get('id')}/rejected-download"
-            except Exception:
-                pass
+        try:
+            latest = get_latest_rejected_artefact_for_file(f.get('id'))
+            if latest:
+                f['rejected_artefact_id']    = latest.get('id')
+                f['rejected_artefact_rows']  = latest.get('rejected_rows')
+                f['rejected_artefact_total'] = latest.get('total_rows')
+                f['rejected_download_url']   = f"/api/files/{f.get('id')}/rejected-download"
+                # If the file has a rejected artefact on disk, ALWAYS show the
+                # Rejected & Download pill — even if sync_status is stale
+                # (in_processing/pending). The pill is a UI hint that the
+                # rejected file is available for download.
+                if f.get('sync_status') not in ('rejected',):
+                    f['rejected_status_override'] = True
+        except Exception:
+            pass
     return files

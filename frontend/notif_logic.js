@@ -1923,17 +1923,40 @@
                     mergedBody.innerHTML = '<tr><td colspan="2" class="px-3 py-2 text-sm text-gray-500 text-center">No merged files</td></tr>';
                 }
                 
-                // Populate rejected files table
+                // Populate rejected files table — sort by rejected-at timestamp DESC
+                // (newest first) and show only the last 5 to keep the table compact.
+                const REJECTED_ROW_LIMIT = 5;
                 const rejectedBody = document.getElementById('master-rejected-body');
                 if (master.rejected_files && master.rejected_files.length > 0) {
-                    rejectedBody.innerHTML = master.rejected_files.map(r => `
-                        <tr>
-                            <td class="px-3 py-2 text-sm text-gray-900 font-medium">${r.file}</td>
-                            <td class="px-3 py-2 text-sm text-red-600">${r.reason}</td>
-                        </tr>
-                    `).join('');
+                    const allRej = master.rejected_files.slice().sort((a, b) => {
+                        const ta = a.rejected_at || a.created_at || '';
+                        const tb = b.rejected_at || b.created_at || '';
+                        return String(tb).localeCompare(String(ta));  // newest first
+                    });
+                    const visibleRej = allRej.slice(0, REJECTED_ROW_LIMIT);
+                    const hiddenCount = allRej.length - visibleRej.length;
+                    const rowsHtml = visibleRej.map(r => {
+                        const ts  = r.rejected_at || r.created_at || '';
+                        const tsShort = ts ? String(ts).replace('T', ' ').slice(0, 19) : '';
+                        const fileLabel = r.file || r.original_name || 'Unknown file';
+                        const reason    = r.reason || 'Rejected due to duplicate detection';
+                        const rowsInfo  = (r.rejected_rows != null && r.total_rows != null)
+                                          ? ` (${r.rejected_rows} of ${r.total_rows} duplicate rows)`
+                                          : '';
+                        return `
+                            <tr>
+                                <td class="px-3 py-2 text-sm text-gray-900 font-medium">${fileLabel}</td>
+                                <td class="px-3 py-2 text-sm text-red-600">${reason}${rowsInfo}</td>
+                                <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">${tsShort}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                    const moreHtml = hiddenCount > 0
+                        ? `<tr><td colspan="3" class="px-3 py-2 text-xs text-gray-500 text-center italic">…and ${hiddenCount} more older rejected file(s) not shown</td></tr>`
+                        : '';
+                    rejectedBody.innerHTML = rowsHtml + moreHtml;
                 } else {
-                    rejectedBody.innerHTML = '<tr><td colspan="2" class="px-3 py-2 text-sm text-gray-500 text-center">No rejected files</td></tr>';
+                    rejectedBody.innerHTML = '<tr><td colspan="3" class="px-3 py-2 text-sm text-gray-500 text-center">No rejected files</td></tr>';
                 }
                 
             } catch (error) {

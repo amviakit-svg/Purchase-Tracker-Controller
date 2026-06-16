@@ -1,9 +1,17 @@
 import sqlite3
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'metadata.db')
+
+# Indian Standard Time (UTC+5:30). Used for any user-facing timestamp we
+# INSERT into the DB so the rejected files table shows IST regardless of
+# the host server's local TZ.
+IST_TZ = timezone(timedelta(hours=5, minutes=30))
+def _ist_now_str():
+    """Current IST time as a 'YYYY-MM-DD HH:MM:SS' string (matches schema)."""
+    return datetime.now(IST_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -2416,6 +2424,10 @@ def save_rejected_artefact(folder_id, file_id, original_name, artefact_path,
     Persist a downloadable reject report (the full file + Status / Reject_Reason
     columns) for a file that was rejected by the dedup engine.
     Returns the new artefact's id.
+
+    NOTE: `created_at` is explicitly set to IST (UTC+5:30) instead of relying
+    on SQLite's `CURRENT_TIMESTAMP` default, so the rejected files table
+    shows IST-correct timestamps regardless of the host server's TZ setting.
     """
     conn = get_db_connection()
     try:
@@ -2423,11 +2435,12 @@ def save_rejected_artefact(folder_id, file_id, original_name, artefact_path,
             """
             INSERT INTO rejected_artefacts
                 (folder_id, file_id, original_name, artefact_path,
-                 reject_reason, rejected_rows, total_rows, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 reject_reason, rejected_rows, total_rows, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (folder_id, file_id, original_name, artefact_path,
-             reject_reason, rejected_rows, total_rows, source),
+             reject_reason, rejected_rows, total_rows, source,
+             _ist_now_str()),
         )
         artefact_id = cur.lastrowid
         conn.commit()

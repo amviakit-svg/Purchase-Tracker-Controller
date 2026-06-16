@@ -20,12 +20,18 @@ download — it is the full file with two extra columns:
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger("reconciliation_tool")
+
+# Indian Standard Time (UTC+5:30). Used everywhere we generate a
+# user-facing timestamp so the row-level Rejected_At column and the artefact
+# filename line up with the user's wall clock, regardless of the host
+# server's local TZ setting.
+IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
 # Reserved system column added to the master_data DuckDB table that holds
 # the per-row concat value. Prefixed with `__` so it is hidden from user
@@ -66,6 +72,66 @@ def resolve_dedup_columns(dedup_cfg, available_columns):
             cols = []
     resolved = [c for c in cols if c in (available_columns or [])]
     return resolved
+
+
+def fuzzy_match_column(saved_col, available_columns):
+    """
+    Best-effort match of a saved column name against a list of actual file columns.
+    Handles the common case where one Excel file had duplicate header names and the
+    system auto-suffixed them (FACILITY -> FACILITY_1, FACILITY_2, ...) so a later
+    file that only has the unsuffixed names can still be matched.
+
+    Strategy (in priority order):
+      1. Exact match.
+      2. Case-insensitive match.
+      3. Strip trailing ' _N' (where N is 1+ digits) from saved name and try exact match.
+         e.g. 'FACILITY_1' saved -> 'FACILITY' in file -> match.
+      4. Strip trailing ' _N' from each available column and try exact match.
+         e.g. 'FACILITY' saved, file has 'FACILITY_1' only -> match.
+
+    Returns the matched actual column name, or None if no match is found.
+    """
+    if not saved_col or not available_columns:
+        return None
+    if saved_col in available_columns:
+        return saved_col
+    saved_lower = saved_col.lower()
+    for c in available_columns:
+        if c.lower() == saved_lower:
+            return c
+    import re
+    strip_suffix = re.compile(r'[_\s]\d+$')
+    saved_stripped = strip_suffix.sub('', saved_col).strip()
+    if saved_stripped and saved_stripped in available_columns:
+        return saved_stripped
+    for c in available_columns:
+        if strip_suffix.sub('', c).strip().lower() == saved_stripped.lower():
+            return c
+    return None
+
+
+def resolve_columns_fuzzy(saved_columns, available_columns):
+    """
+    Apply fuzzy_match_column to a list of saved columns. Returns (resolved, missing):
+      - resolved: list of actual column names that each saved column maps to
+                  (preserves order, deduplicates).
+      - missing:  list of saved column names that could NOT be mapped.
+    """
+    if not saved_columns:
+        return [], []
+    seen = set()
+    resolved = []
+    missing = []
+    for sc in saved_columns:
+        if not sc:
+            continue
+        m = fuzzy_match_column(sc, available_columns or [])
+        if m and m not in seen:
+            seen.add(m)
+            resolved.append(m)
+        elif not m:
+            missing.append(sc)
+    return resolved, missing
 
 
 def build_concat(df, cols, sep=' | '):
@@ -210,7 +276,11 @@ def write_rejected_artefact(file_df, file_info, dup_mask, cols, sep=' | ', reaso
         os.makedirs(base_dir, exist_ok=True)
 
         file_id = file_info.get('id') if isinstance(file_info, dict) else None
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Use IST (UTC+5:30) for both the artefact filename and the row-level
+        # Rejected_At column so timestamps line up with what the user sees on
+        # their wall clock, regardless of the host server's local TZ setting.
+        ist_now = datetime.now(IST_TZ)
+        ts = ist_now.strftime('%Y%m%d_%H%M%S')
         file_id_part = f"file{file_id}_" if file_id is not None else ""
         artefact_name = f"{file_id_part}{ts}.xlsx"
         artefact_path = os.path.join(base_dir, artefact_name)
@@ -227,8 +297,33 @@ def write_rejected_artefact(file_df, file_info, dup_mask, cols, sep=' | ', reaso
             # Pad/truncate defensively
             dup_mask = pd.Series([False] * len(artefact_df))
 
-        artefact_df['Status']        = np.where(dup_mask, 'Rejected – Duplicate', '')
-        artefact_df['Reject_Reason'] = np.where(dup_mask, reason or 'Duplicate concat match', '')
+        # GUARD: the source file may already have a column called 'Status',
+        # 'Reject_Reason', or 'Rejected_At' (e.g. if the user previously
+        # uploaded an artefact export). In that case `artefact_df.insert(...)`
+        # raises ValueError. We DROP any conflicting column outright so the
+        # final artefact contains ONLY the freshly-computed metadata columns
+        # at the end of the user-data columns — no "Status (old)" cruft.
+        reserved = {'Status', 'Reject_Reason', 'Rejected_At'}
+        for col in reserved:
+            if col in artefact_df.columns:
+                logger.info(
+                    f"write_rejected_artefact: dropping pre-existing column "
+                    f"'{col}' (its values will be replaced by the freshly-"
+                    f"computed Rejected_At / Reject_Reason / Status below)"
+                )
+                artefact_df.drop(columns=[col], inplace=True)
+
+        # Column order (appended at the END of all user-data columns):
+        #   [user data...] | Rejected_At | Reject_Reason | Status
+        # We insert them in that order with `insert(...)` so the final layout
+        # is exactly what the user asked for.
+        rejected_at_str = ist_now.strftime('%Y-%m-%d %H:%M:%S')
+        artefact_df.insert(len(artefact_df.columns), 'Rejected_At',
+                            np.where(dup_mask, rejected_at_str, ''))
+        artefact_df.insert(len(artefact_df.columns), 'Reject_Reason',
+                            np.where(dup_mask, reason or 'Duplicate concat match', ''))
+        artefact_df.insert(len(artefact_df.columns), 'Status',
+                            np.where(dup_mask, 'Rejected – Duplicate', ''))
 
         try:
             artefact_df.to_excel(artefact_path, index=False)

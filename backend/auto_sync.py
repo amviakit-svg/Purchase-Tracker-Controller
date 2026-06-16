@@ -12,6 +12,7 @@ from backend.dedup_engine import (
     is_dedup_active, resolve_dedup_columns, build_concat,
     normalize_concat, load_existing_concat_set, detect_duplicate_rows,
     ensure_dedup_table, populate_dedup_table, write_rejected_artefact,
+    fuzzy_match_column, resolve_columns_fuzzy,
     DEDUP_COL_NAME,
 )
 from database import get_dedup_config, save_rejected_artefact, add_notification
@@ -199,12 +200,27 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
                         if is_all_columns:
                             selected_columns = actual_columns.copy()
                         else:
-                            # Only require columns that are not formulas and not Source_File_Name
-                            selected_columns = [c for c in user_columns if c not in formula_cols and c != 'Source_File_Name']
-                            
-                        missing_columns = [col for col in selected_columns if col not in actual_columns]
-                        if missing_columns:
-                            raise Exception(f"Column(s) not found: {', '.join(missing_columns)}")
+                            # Build the desired column list (excluding formula cols + Source_File_Name).
+                            desired_cols = [c for c in user_columns if c not in formula_cols and c != 'Source_File_Name']
+                            # First try exact-match; if any are missing, fall back to fuzzy match
+                            # (handles Excel's auto-suffixed duplicates like FACILITY_1 vs FACILITY).
+                            exact_matched = [c for c in desired_cols if c in actual_columns]
+                            missing_after_exact = [c for c in desired_cols if c not in actual_columns]
+                            fuzzy_matched, still_missing = resolve_columns_fuzzy(missing_after_exact, actual_columns)
+                            if still_missing:
+                                raise Exception(f"Column(s) not found: {', '.join(still_missing)}")
+                            # Preserve order; don't double-include a column the user typed twice
+                            _seen = set()
+                            selected_columns = []
+                            for c in exact_matched + fuzzy_matched:
+                                if c not in _seen:
+                                    _seen.add(c)
+                                    selected_columns.append(c)
+                            if missing_after_exact:
+                                logger.info(
+                                    f"Auto-sync fuzzy column resolution for '{f['original_name']}': "
+                                    f"saved={missing_after_exact} -> file={fuzzy_matched}"
+                                )
                             
                         df = df[selected_columns]
                         df.insert(0, 'Source_File_Name', original_name)
@@ -296,6 +312,27 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
                                 pass
                         except Exception as e:
                             logger.error(f"Failed to INSERT file ID {file_id}: {e}")
+                            # Write a downloadable reject report so the user can inspect
+                            # the offending file (now with Status / Reject_Reason / Rejected_At
+                            # columns appended at the end of all data columns).
+                            try:
+                                _err_reason = str(e)
+                                _err_mask = pd.Series([True] * len(df))  # all rows flagged
+                                _err_artefact = write_rejected_artefact(
+                                    df, f, _err_mask, _resolved_cols or [], ' | ', _err_reason
+                                )
+                                if _err_artefact:
+                                    save_rejected_artefact(
+                                        folder_id=folder_id, file_id=file_id,
+                                        original_name=f['original_name'],
+                                        artefact_path=_err_artefact,
+                                        reject_reason=_err_reason,
+                                        rejected_rows=len(df),
+                                        total_rows=len(df),
+                                        source='autosync',
+                                    )
+                            except Exception as _ae:
+                                logger.warning(f"Could not write reject artefact for file {file_id}: {_ae}")
                             set_file_sync_status(file_id, 'rejected', str(e))
                             try:
                                 from backend.database import add_notification

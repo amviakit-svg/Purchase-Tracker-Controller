@@ -648,13 +648,16 @@
                                                     </div>
                                                 </div>
                                                 <div id="master-rejected-section">
-                                                    <h5 class="text-sm font-semibold text-red-700 mb-2">Rejected Files</h5>
-                                                    <div class="overflow-x-auto border border-red-200 rounded-lg">
+                                                    <h5 class="text-sm font-semibold text-red-700 mb-2">Rejected Files <span class="text-xs text-gray-500 font-normal">(last 5, scroll for more)</span></h5>
+                                                    <!-- Scrollable container: shows at most ~4 rows (16rem) before scrolling.
+                                                         Sticky thead keeps the column titles visible while scrolling. -->
+                                                    <div class="overflow-auto border border-red-200 rounded-lg" style="max-height: 16rem;">
                                                         <table class="min-w-full divide-y divide-gray-200">
                                                             <thead class="bg-red-50">
                                                                 <tr>
                                                                     <th class="px-3 py-2 text-left text-xs font-medium text-red-700 uppercase">File Name</th>
                                                                     <th class="px-3 py-2 text-left text-xs font-medium text-red-700 uppercase">Reason</th>
+                                                                    <th class="px-3 py-2 text-left text-xs font-medium text-red-700 uppercase">Rejected At</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody class="bg-white divide-y divide-gray-200" id="master-rejected-body"></tbody>
@@ -2851,11 +2854,28 @@
                 return;
             }
 
-            container.innerHTML = files.map(file => `
-                <div class="file-row flex items-center space-x-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 transition-all cursor-pointer" 
+            container.innerHTML = files.map(file => {
+                // Rejected & Download pill (only when a rejected artefact is on disk)
+                let rejectedDownloadPill = '';
+                if (file.rejected_artefact_id && file.rejected_download_url) {
+                    const rowsInfo = (file.rejected_artefact_rows != null && file.rejected_artefact_total != null)
+                        ? ` <span class="text-gray-500 font-normal">(${file.rejected_artefact_rows}/${file.rejected_artefact_total} rows flagged)</span>`
+                        : '';
+                    rejectedDownloadPill = `
+                        <a href="${file.rejected_download_url}" target="_blank"
+                           class="inline-flex items-center space-x-1 px-2 py-1 text-xs font-medium bg-red-50 text-red-700 rounded-full border border-red-300 hover:bg-red-100 transition-colors"
+                           title="Download the full rejected file (with offending rows flagged)">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                            <span>Rejected & Download</span>${rowsInfo}
+                        </a>`;
+                }
+                return `
+                <div class="file-row flex items-center space-x-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 transition-all cursor-pointer"
                      onclick="toggleItemSelection('file', ${file.id})"
                      ondblclick="showFileDetails(${file.id})">
-                    <input type="checkbox" class="item-checkbox" data-type="file" data-id="${file.id}" 
+                    <input type="checkbox" class="item-checkbox" data-type="file" data-id="${file.id}"
                            ${selectedItems.has(`file-${file.id}`) ? 'checked' : ''}
                            onclick="event.stopPropagation(); toggleItemSelection('file', ${file.id})">
                     <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2863,9 +2883,10 @@
                     </svg>
                     <div class="flex-1 min-w-0">
                         <p class="text-sm font-medium text-gray-900 truncate">${file.original_name}</p>
-                        <div class="flex items-center space-x-2 mt-0.5">
+                        <div class="flex flex-wrap items-center gap-2 mt-0.5">
                             <p class="text-xs text-gray-500">${formatFileSize(file.size)} • ${file.format} • ${file.sheet_count} sheets</p>
                             ${getSyncStatusBadge(file)}
+                            ${rejectedDownloadPill}
                         </div>
                         <p class="text-xs text-gray-400 mt-0.5">Uploaded by: ${file.uploaded_by_name || 'System'}</p>
                     </div>
@@ -2878,7 +2899,8 @@
                         </button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
 
         function toggleItemSelection(type, id) {
@@ -3611,17 +3633,40 @@
                     mergedBody.innerHTML = '<tr><td colspan="2" class="px-3 py-2 text-sm text-gray-500 text-center">No merged files</td></tr>';
                 }
                 
-                // Populate rejected files table
+                // Populate rejected files table — sort by rejected-at timestamp DESC
+                // (newest first) and show only the last 5 to keep the table compact.
+                const REJECTED_ROW_LIMIT = 5;
                 const rejectedBody = document.getElementById('master-rejected-body');
                 if (master.rejected_files && master.rejected_files.length > 0) {
-                    rejectedBody.innerHTML = master.rejected_files.map(r => `
+                    const allRej = master.rejected_files.slice().sort((a, b) => {
+                        const ta = a.rejected_at || a.created_at || '';
+                        const tb = b.rejected_at || b.created_at || '';
+                        return String(tb).localeCompare(String(ta)); // newest first
+                    });
+                    const visibleRej = allRej.slice(0, REJECTED_ROW_LIMIT);
+                    const hiddenCount = allRej.length - visibleRej.length;
+                    const rowsHtml = visibleRej.map(r => {
+                        const ts = r.rejected_at || r.created_at || '';
+                        const tsShort = ts ? String(ts).replace('T', ' ').slice(0, 19) : '';
+                        const fileLabel = r.file || r.original_name || 'Unknown file';
+                        const reason = r.reason || 'Rejected due to duplicate detection';
+                        const rowsInfo = (r.rejected_rows != null && r.total_rows != null)
+                            ? ` (${r.rejected_rows} of ${r.total_rows} duplicate rows)`
+                            : '';
+                        return `
                         <tr>
-                            <td class="px-3 py-2 text-sm text-gray-900 font-medium">${r.file}</td>
-                            <td class="px-3 py-2 text-sm text-red-600">${r.reason}</td>
+                            <td class="px-3 py-2 text-sm text-gray-900 font-medium">${fileLabel}</td>
+                            <td class="px-3 py-2 text-sm text-red-600">${reason}${rowsInfo}</td>
+                            <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">${tsShort}</td>
                         </tr>
-                    `).join('');
+                    `;
+                    }).join('');
+                    const moreHtml = hiddenCount > 0
+                        ? `<tr><td colspan="3" class="px-3 py-2 text-xs text-gray-500 text-center italic">…and ${hiddenCount} more older rejected file(s) not shown</td></tr>`
+                        : '';
+                    rejectedBody.innerHTML = rowsHtml + moreHtml;
                 } else {
-                    rejectedBody.innerHTML = '<tr><td colspan="2" class="px-3 py-2 text-sm text-gray-500 text-center">No rejected files</td></tr>';
+                    rejectedBody.innerHTML = '<tr><td colspan="3" class="px-3 py-2 text-sm text-gray-500 text-center">No rejected files</td></tr>';
                 }
                 
             } catch (error) {
