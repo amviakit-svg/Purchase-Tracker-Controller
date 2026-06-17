@@ -895,6 +895,10 @@ def apply_activities(duck_conn, folder_id, company_id, module_id):
                 _apply_delete_activity(duck_conn, act)
             elif act_type == 'ROW_FILTER':
                 _apply_filter_activity(duck_conn, act)
+            elif act_type == 'ROW_DELETE':
+                _apply_row_delete_activity(duck_conn, act)
+            elif act_type == 'IF_CONDITION':
+                _apply_if_condition_activity(duck_conn, act)
             else:
                 mark_activity_applied(act_id, 'warning', f"Unknown activity type: {act_type}")
                 continue
@@ -906,3 +910,59 @@ def apply_activities(duck_conn, folder_id, company_id, module_id):
             except Exception:
                 pass
 
+
+# ---------------------------------------------------------------------------
+# ROW_DELETE / IF_CONDITION re-application helpers
+# ---------------------------------------------------------------------------
+
+def _apply_row_delete_activity(duck_conn, act):
+    """ROW_DELETE: re-apply soft deletes from the activity's saved fingerprint list.
+
+    Each delete is idempotent - if the row is already deleted, nothing changes.
+    """
+    from backend.row_lifecycle import ensure_lifecycle_columns, soft_delete_rows
+    ensure_lifecycle_columns(duck_conn)
+    payload = act.get('payload') or {}
+    fps = payload.get('fingerprints') or []
+    if not isinstance(fps, list):
+        fps = []
+    fps = [str(f) for f in fps if f]
+    if not fps:
+        return
+    soft_delete_rows(duck_conn, fps)
+
+
+def _apply_if_condition_activity(duck_conn, act):
+    """IF_CONDITION: re-apply the saved IF condition to its target column.
+
+    The SQL is taken from the payload (stored at IF save time) so we don't need
+    to re-parse the IF DSL on every sync.
+    """
+    payload = act.get('payload') or {}
+    col_name = act.get('target_column') or payload.get('output_column') or payload.get('column_name')
+    if not col_name:
+        raise ValueError("IF_CONDITION missing target_column / output_column")
+
+    sql_expr = payload.get('sql')
+    if not sql_expr:
+        # Re-build from conditions block if the SQL wasn't saved (older activity)
+        from backend.if_condition_engine import build_if_sql
+        cols = duck_conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        # Strip out internal columns from the conditions to avoid lookup errors
+        internal_cols = {'__is_deleted', '__deleted_at', '__row_fp'}
+        clean_payload = {
+            'conditions': payload.get('conditions') or [],
+            'logic': payload.get('logic') or 'AND',
+            'true_value': payload.get('true_value') or {'type': 'value', 'value': 'TRUE'},
+            'false_value': payload.get('false_value') or {'type': 'value', 'value': ''},
+        }
+        sql_expr, _ = build_if_sql(clean_payload, cols)
+
+    # IF_CONDITION always returns VARCHAR (CASE-WHEN can yield any type)
+    _ensure_column(duck_conn, 'master_data', col_name, 'VARCHAR')
+    duck_conn.execute(
+        f"UPDATE master_data SET {_safe_sql_ident(col_name)} = ({sql_expr}) "
+        f"WHERE (CAST(\"__is_deleted\" AS BOOLEAN) IS NULL OR CAST(\"__is_deleted\" AS BOOLEAN) = FALSE)"
+    )
+
+  

@@ -1,0 +1,14 @@
+=== STRUCTURAL CHECKS ===
+function buildIfColumnOptions definitions: 1
+function updateIfBranchInputs definitions: 1
+function readIfBranchValue definitions: 1
+function readIfConditionValue definitions: 1
+function refreshIfConditionColumnSelects definitions: 1
+=== HTML ELEMENTS ===
+if-true-column element: 1
+if-false-column element: 1
+value=\ column\ in if-true-type: 0
+value=\ column\ in if-false-type: 0
+=== ORPHAN CHECKS ===
+defined below comments: 0
+=== Cleanup: _fix.ps1 removed ===

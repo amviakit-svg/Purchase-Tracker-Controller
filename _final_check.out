@@ -1,0 +1,14 @@
+T1: CASE WHEN (TRY_CAST("Amount" AS DOUBLE) > 100) THEN 'High' ELSE 'Low' END
+T2: CASE
+  WHEN (TRY_CAST("Amount" AS DOUBLE) > 1000) THEN 'Critical'
+  WHEN (CAST("Status" AS VARCHAR) LIKE '%' || 'hold' || '%') THEN 'Review'
+  ELSE 'OK'
+END
+T3: CASE WHEN (LEFT(CAST("Order ID" AS VARCHAR), 2) LIKE 'OR' || '%') THEN 'Open' ELSE 'Other' END
+T4: False 'length' must be >= 1, got 0
+T5: CASE
+  WHEN (LEFT(CAST("Order ID" AS VARCHAR), 3) = 'ORD') AND (RIGHT(CAST("Order ID" AS VARCHAR), 2) LIKE '99' || '%') THEN 'Match'
+  WHEN (TRY_CAST("Amount" AS DOUBLE) > 500) AND (CAST("Status" AS VARCHAR) LIKE '%' || 'rev' || '%') THEN 'BigReview'
+  ELSE 'NoMatch'
+END
+ALL OK

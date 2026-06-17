@@ -2069,8 +2069,26 @@ async def get_active_syncs(current_user: Optional[dict] = Depends(get_optional_u
                     # check if master_data exists
                     tables = duck_conn.execute("SHOW TABLES").fetchall()
                     if ('master_data',) in tables:
-                        duckdb_files_res = duck_conn.execute("SELECT DISTINCT Source_File_Name FROM master_data").fetchall()
-                        duckdb_files = set([row[0] for row in duckdb_files_res])
+                        # Defensive: only query for Source_File_Name if the column actually
+                        # exists in master_data. Some legacy DBs may lack it (e.g. a folder
+                        # whose master file was rebuilt with a different schema). Querying an
+                        # absent column would throw a Binder Error and abort the entire sync
+                        # status loop, so we guard against it.
+                        master_cols = [r[0] for r in duck_conn.execute(
+                            "SELECT column_name FROM duckdb_columns() WHERE table_name = 'master_data'"
+                        ).fetchall()]
+                        if 'Source_File_Name' in master_cols:
+                            duckdb_files_res = duck_conn.execute(
+                                'SELECT DISTINCT "Source_File_Name" FROM master_data'
+                            ).fetchall()
+                            duckdb_files = set([row[0] for row in duckdb_files_res])
+                        else:
+                            # Column missing — log once and treat as "no file references in master"
+                            logger.warning(
+                                f"Folder {folder_id}: master_data has no 'Source_File_Name' "
+                                f"column (existing columns: {master_cols}); skipping deletion check."
+                            )
+                            duckdb_files = set()
                         
                         sqlite_files_res = conn.execute("SELECT original_name FROM files WHERE folder_id = ?", (folder_id,)).fetchall()
                         sqlite_files = set([row['original_name'] for row in sqlite_files_res])
@@ -2372,57 +2390,164 @@ async def query_master(folder_id: str = Form(...), query: str = Form("SELECT * F
 @app.get("/api/master/{folder_id}/preview")
 async def preview_master(
     folder_id: int,
-    limit: int = Query(10, ge=1, le=1000),
+    limit: int = Query(10, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     source_file: str = Query(None),
     search: str = Query(None),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
-    """Get preview rows with optional filtering by source file and search text"""
+    """Get preview rows with optional filtering by source file and search text.
+
+    The ``search`` parameter is applied **inside DuckDB** (via a case-insensitive
+    LIKE on every user column) so that the filter runs **before** the LIMIT/OFFSET
+    window.  This guarantees we return matching rows regardless of where they
+    live in the dataset, even when the row limit is smaller than the dataset
+    size.  ``total_count`` therefore reflects the search-filtered total when a
+    search is active, so the frontend can correctly communicate "X matches
+    found, showing Y".
+    """
     try:
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
             raise HTTPException(status_code=404, detail="Master file not found")
-        
+
+        # Make sure lifecycle meta-columns exist before we open read-only.
+        # ALTER TABLE on a read-only DuckDB connection fails, so we use a
+        # short-lived writeable connection to run the migration.
+        try:
+            from backend.row_lifecycle import ensure_lifecycle_columns
+            _mig_conn = duckdb.connect(master['db_path'], read_only=False)
+            try:
+                ensure_lifecycle_columns(_mig_conn)
+            finally:
+                _mig_conn.close()
+        except Exception:
+            pass
+
         conn = duckdb.connect(master['db_path'], read_only=True)
-        
-        # Build query dynamically
+
+        # Get column names first — we need them to build the search predicate.
+        all_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        internal_cols = {"__is_deleted", "__deleted_at", "__row_fp"}
+        # Public column list excludes the internal __ meta columns
+        columns = [c for c in all_cols if c not in internal_cols]
+        # User columns are the columns we should match against for `search`
+        user_cols = [c for c in all_cols if c not in internal_cols]
+
+        # Build query dynamically.  Soft-deleted rows are always hidden, but
+        # only if the lifecycle columns actually exist (older DBs pre-date
+        # the migration and won't have them).
         conditions = []
+        try:
+            _existing_cols = {
+                row[0] for row in conn.execute(
+                    "SELECT column_name FROM duckdb_columns() WHERE table_name = 'master_data'"
+                ).fetchall()
+            }
+        except Exception:
+            _existing_cols = set()
+        if "__is_deleted" in _existing_cols:
+            conditions.append("(CAST(\"__is_deleted\" AS BOOLEAN) IS NULL OR CAST(\"__is_deleted\" AS BOOLEAN) = FALSE)")
         params = []
-        
+
         if source_file and source_file != 'All Files':
             conditions.append("Source_File_Name = ?")
             params.append(source_file)
-        
-        where_clause = ""
-        if conditions:
-            where_clause = "WHERE " + " AND ".join(conditions)
-        
-        # Get total filtered count
+
+        # Normalize the search term once.  Stripping/rejecting empty strings
+        # avoids accidentally matching everything with `LIKE '%%'`.
+        search_active = bool(search and search.strip())
+        search_term = search.strip() if search_active else ""
+
+        # Build the DuckDB search predicate (case-insensitive LIKE on every
+        # user column).  This runs BEFORE LIMIT/OFFSET so matches anywhere in
+        # the dataset are found — not just those in the first `limit` rows.
+        if search_active and user_cols:
+            # Escape SQL LIKE wildcards in the user input so that typing
+            # `%` or `_` doesn't turn into a wildcard match.
+            escaped = (
+                search_term
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            like_conditions = [
+                f"CAST(\"{c}\" AS VARCHAR) ILIKE ? ESCAPE '\\'" for c in user_cols
+            ]
+            conditions.append("(" + " OR ".join(like_conditions) + ")")
+            params.extend(f"%{escaped}%" for _ in user_cols)
+
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+        # Total count is the row count AFTER all filters (including search).
+        # This way the frontend can correctly communicate "X matches found".
         count_query = f"SELECT COUNT(*) FROM master_data {where_clause}"
         total_count = conn.execute(count_query, params).fetchone()[0]
-        
-        # Get column names
-        columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
-        
-        # Build data query
-        query = f"SELECT * FROM master_data {where_clause} LIMIT ? OFFSET ?"
+
+        # Build data query.  We still select __row_fp (and rename) so the
+        # frontend can use it as the row identifier for delete / restore.
+        data_select = ", ".join(f'"{c}"' for c in all_cols)
+        query = f"SELECT {data_select} FROM master_data {where_clause} LIMIT ? OFFSET ?"
         query_params = params + [limit, offset]
-        
+
         result = conn.execute(query, query_params).fetchdf()
-        
-        # Apply search filter in Python if specified (search across all columns)
+
+        # Build the _row_fp column. We have THREE cases:
+        #   A) DB has __row_fp column AND values are non-null  -> use them
+        #   B) DB has __row_fp column BUT values are null      -> re-compute in DuckDB now
+        #   C) DB has no __row_fp column at all (old DB)      -> compute in DuckDB now
+        # All three paths use the SAME DuckDB formula that
+        # backend.row_lifecycle.compute_fingerprint uses, so the
+        # fingerprints we return here are guaranteed to match what
+        # the delete endpoint will use.
+        if not result.empty:
+            if "__row_fp" in all_cols and "__row_fp" in result.columns:
+                existing_fps = result["__row_fp"].tolist()
+                needs_recompute = all((v is None or v == "" or (isinstance(v, float) and pd.isna(v))) for v in existing_fps)
+                if needs_recompute:
+                    # Re-compute in DuckDB using the same formula
+                    user_cols = [c for c in all_cols if c not in {"__is_deleted", "__deleted_at", "__row_fp"}]
+                    parts = ", ".join(
+                        f"coalesce(cast(\"{c}\" AS VARCHAR), '<NULL>')"
+                        for c in user_cols
+                    )
+                    fp_select = f"md5(concat_ws('||', {parts})) AS __row_fp"
+                    # Use the same WHERE + LIMIT/OFFSET we used above
+                    fp_query = f"SELECT {fp_select} FROM master_data {where_clause} LIMIT ? OFFSET ?"
+                    fps = conn.execute(fp_query, query_params).fetchdf()["__row_fp"].tolist()
+                    result["_row_fp"] = fps
+                else:
+                    result["_row_fp"] = existing_fps
+            else:
+                # Old DB without __row_fp column. Compute fingerprints in DuckDB
+                # so they match exactly what soft_delete_rows will use later.
+                user_cols = [c for c in all_cols if c not in {"__is_deleted", "__deleted_at", "__row_fp"}]
+                parts = ", ".join(
+                    f"coalesce(cast(\"{c}\" AS VARCHAR), '<NULL>')"
+                    for c in user_cols
+                )
+                fp_select = f"md5(concat_ws('||', {parts})) AS __row_fp"
+                fp_query = f"SELECT {fp_select} FROM master_data {where_clause} LIMIT ? OFFSET ?"
+                fps = conn.execute(fp_query, query_params).fetchdf()["__row_fp"].tolist()
+                result["_row_fp"] = fps
+
+        # Hide internal meta columns from the row payloads (AFTER we copied __row_fp)
+        for _ic in internal_cols:
+            if _ic in result.columns:
+                result = result.drop(columns=[_ic])
+
+        # NOTE: The search filter has ALREADY been applied inside DuckDB
+        # (above, before LIMIT/OFFSET).  We do NOT re-filter in Python here
+        # because that would over-restrict (it would only see the first
+        # ``limit`` matches, not all matches in the dataset).  We still clean
+        # NaN/Inf values for JSON safety and drop any rows missing a fingerprint
+        # so the frontend delete action always has a stable id to send back.
         data = clean_nan_values(result.to_dict(orient='records'))
-        if search:
-            search_lower = search.lower()
-            data = [
-                row for row in data
-                if any(str(v).lower().find(search_lower) >= 0 for v in row.values() if v is not None)
-            ]
-        
+        data = [row for row in data if row.get("_row_fp")]
+
         conn.close()
-        
+
         return {
             "success": True,
             "columns": columns,
@@ -2430,7 +2555,14 @@ async def preview_master(
             "total_count": total_count,
             "returned_count": len(data),
             "limit": limit,
-            "offset": offset
+            "offset": offset,
+            # ``search_active`` lets the frontend show a friendly
+            # "X matches found" / "no rows match" message without having to
+            # inspect the query string itself.
+            "search_active": search_active,
+            # When search returns more matches than the row limit allows the
+            # frontend can prompt the user to bump ``limit`` to see the rest.
+            "truncated_by_limit": bool(search_active and total_count > len(data)),
         }
     except HTTPException:
         raise
@@ -2898,6 +3030,306 @@ async def filtered_preview(
 
 # ============ MASTER FILE FORMULA APIs ============
 
+# ---------------------------------------------------------------------------
+# Row delete / restore / list endpoints (soft-delete with fingerprint id)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/master/{folder_id}/rows/delete")
+async def api_delete_master_rows(
+    folder_id: int,
+    fingerprints: str = Form(...),
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    """Soft-delete one or more rows by their fingerprint.
+
+    Body form field: `fingerprints` = JSON list of fingerprint strings.
+
+    Persists a ROW_DELETE activity so the delete survives auto-sync.
+    """
+    try:
+        master = get_master_file(folder_id)
+        if not master:
+            raise HTTPException(status_code=404, detail="Master file not found")
+
+        cid, mid = _get_context(current_user)
+        if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
+            raise HTTPException(status_code=404, detail="Master file not found")
+
+        try:
+            fps = json.loads(fingerprints) if isinstance(fingerprints, str) else fingerprints
+            if not isinstance(fps, list):
+                fps = []
+        except (json.JSONDecodeError, TypeError):
+            raise HTTPException(status_code=422, detail="fingerprints must be a JSON array of strings")
+        fps = [str(f) for f in fps if f]
+        if not fps:
+            raise HTTPException(status_code=422, detail="No fingerprints provided")
+
+        conn = duckdb.connect(master['db_path'])
+        try:
+            from backend.row_lifecycle import (
+                ensure_lifecycle_columns, soft_delete_rows, compute_fingerprint,
+            )
+            ensure_lifecycle_columns(conn)
+            compute_fingerprint(conn)
+            affected = soft_delete_rows(conn, fps)
+        finally:
+            conn.close()
+
+        # AUTO-CAPTURE: ROW_DELETE activity (persists so auto-sync keeps them deleted)
+        activity_id = None
+        try:
+            cid_d = (current_user or {}).get('company_id') or master.get('company_id')
+            mid_d = (current_user or {}).get('module_id') or master.get('module_id')
+            # Append to payload (so multiple deletes accumulate) and write
+            payload = {
+                "fingerprints": fps,
+                "deleted_count": int(affected),
+                "source": "user",
+            }
+            _create_activity_from_action(
+                folder_id=folder_id, action_type='ROW_DELETE',
+                payload=payload, target_column=None,
+                company_id=cid_d, module_id=mid_d,
+                master_file_id=master.get('id'),
+                user_id=current_user.get('user_id') if current_user else None,
+            )
+        except Exception as _e:
+            logger.warning(f'Auto-capture ROW_DELETE failed: {_e}')
+
+        return {
+            "success": True,
+            "deleted": int(affected),
+            "fingerprints": fps,
+            "message": f"Deleted {int(affected)} row(s)",
+            "activity_id": activity_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete master rows error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/master/{folder_id}/rows/restore")
+async def api_restore_master_rows(
+    folder_id: int,
+    fingerprints: str = Form(...),
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    """Restore one or more soft-deleted rows by their fingerprint."""
+    try:
+        master = get_master_file(folder_id)
+        if not master:
+            raise HTTPException(status_code=404, detail="Master file not found")
+
+        cid, mid = _get_context(current_user)
+        if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
+            raise HTTPException(status_code=404, detail="Master file not found")
+
+        try:
+            fps = json.loads(fingerprints) if isinstance(fingerprints, str) else fingerprints
+            if not isinstance(fps, list):
+                fps = []
+        except (json.JSONDecodeError, TypeError):
+            raise HTTPException(status_code=422, detail="fingerprints must be a JSON array of strings")
+        fps = [str(f) for f in fps if f]
+        if not fps:
+            raise HTTPException(status_code=422, detail="No fingerprints provided")
+
+        conn = duckdb.connect(master['db_path'])
+        try:
+            from backend.row_lifecycle import (
+                ensure_lifecycle_columns, restore_rows,
+            )
+            ensure_lifecycle_columns(conn)
+            affected = restore_rows(conn, fps)
+        finally:
+            conn.close()
+
+        # Best-effort: remove the matching ROW_DELETE activity so the row
+        # is no longer re-deleted on the next auto-sync.  We match on the
+        # fingerprint signature stored in payload_json.
+        try:
+            from backend.database import get_db_connection
+            sql_conn = get_db_connection()
+            # Find ROW_DELETE activities for this folder whose payload_json
+            # contains any of our fingerprints.  Done via a series of
+            # LIKE statements because SQLite doesn't have JSON array ops.
+            for fp in fps:
+                sql_conn.execute(
+                    "DELETE FROM master_activities "
+                    "WHERE folder_id = ? AND activity_type = 'ROW_DELETE' "
+                    "AND payload_json LIKE ?",
+                    (folder_id, f'%{fp}%'),
+                )
+            sql_conn.commit()
+            sql_conn.close()
+        except Exception as _e:
+            logger.warning(f"Failed to clear ROW_DELETE activity on restore: {_e}")
+
+        return {
+            "success": True,
+            "restored": int(affected),
+            "fingerprints": fps,
+            "message": f"Restored {int(affected)} row(s)",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Restore master rows error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/master/{folder_id}/rows/deleted")
+async def api_list_deleted_rows(
+    folder_id: int,
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    search: str = Query(None),
+    source_file: str = Query(None),
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    """List the soft-deleted rows for the Deleted Row panel."""
+    try:
+        cid, mid = _get_context(current_user)
+        master = get_master_file(folder_id)
+        if not master or master.get('company_id') != cid or master.get('module_id') != mid:
+            raise HTTPException(status_code=404, detail="Master file not found")
+
+        conn = duckdb.connect(master['db_path'], read_only=True)
+        try:
+            from backend.row_lifecycle import (
+                ensure_lifecycle_columns, list_deleted_rows, count_deleted_rows, list_deleted_source_files,
+            )
+            ensure_lifecycle_columns(conn)
+            rows = list_deleted_rows(conn, limit=limit, offset=offset, search=search, source_file=source_file)
+            count = count_deleted_rows(conn, search=search, source_file=source_file)
+            sources = list_deleted_source_files(conn)
+        finally:
+            conn.close()
+
+        return {
+            "success": True,
+            "data": clean_nan_values(rows),
+            "total_count": int(count),
+            "returned_count": len(rows),
+            "limit": limit,
+            "offset": offset,
+            "source_files": sources,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"List deleted rows error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/master/{folder_id}/rows/deleted/count")
+async def api_count_deleted_rows(
+    folder_id: int,
+    search: str = Query(None),
+    source_file: str = Query(None),
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    """Just the count of deleted rows (for the panel header)."""
+    try:
+        cid, mid = _get_context(current_user)
+        master = get_master_file(folder_id)
+        if not master or master.get('company_id') != cid or master.get('module_id') != mid:
+            raise HTTPException(status_code=404, detail="Master file not found")
+
+        conn = duckdb.connect(master['db_path'], read_only=True)
+        try:
+            from backend.row_lifecycle import (
+                ensure_lifecycle_columns, count_deleted_rows,
+            )
+            ensure_lifecycle_columns(conn)
+            count = count_deleted_rows(conn, search=search, source_file=source_file)
+        finally:
+            conn.close()
+        return {"success": True, "count": int(count)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Count deleted rows error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/master/{folder_id}/rows/deleted/export")
+async def api_export_deleted_rows(
+    folder_id: int,
+    search: str = Query(None),
+    source_file: str = Query(None),
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    """Stream all currently-deleted rows (respecting current filters) as .xlsx."""
+    try:
+        cid, mid = _get_context(current_user)
+        master = get_master_file(folder_id)
+        if not master or master.get('company_id') != cid or master.get('module_id') != mid:
+            raise HTTPException(status_code=404, detail="Master file not found")
+
+        conn = duckdb.connect(master['db_path'], read_only=True)
+        try:
+            from backend.row_lifecycle import (
+                ensure_lifecycle_columns, list_deleted_rows,
+            )
+            ensure_lifecycle_columns(conn)
+            # Large limit — pull everything for export
+            rows = list_deleted_rows(conn, limit=1000000, offset=0, search=search, source_file=source_file)
+        finally:
+            conn.close()
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="No deleted rows to export")
+
+        # Build DataFrame in stable column order
+        # Always put Source_File_Name + Deleted_At first for clarity
+        ordered = []
+        if 'Source_File_Name' in rows[0]:
+            ordered.append('Source_File_Name')
+        if '_deleted_at' in rows[0]:
+            ordered.append('_deleted_at')
+        # Add remaining user columns, excluding the internal fingerprint
+        for c in rows[0].keys():
+            if c in ('_row_fp', '_deleted_at', 'Source_File_Name'):
+                continue
+            ordered.append(c)
+        # Re-order
+        df = pd.DataFrame(rows)
+        # Rename _deleted_at to a friendlier label
+        if '_deleted_at' in df.columns:
+            df = df.rename(columns={'_deleted_at': 'Deleted_At'})
+            # Move Deleted_At next to Source_File_Name
+            if 'Deleted_At' in ordered:
+                ordered.remove('Deleted_At')
+            if 'Deleted_At' in df.columns:
+                ordered.insert(ordered.index('Source_File_Name') + 1, 'Deleted_At')
+        if '_row_fp' in df.columns:
+            df = df.drop(columns=['_row_fp'])
+        if ordered:
+            # Keep only columns that actually exist
+            ordered = [c for c in ordered if c in df.columns]
+            df = df[ordered]
+
+        import tempfile
+        fd, temp_path = tempfile.mkstemp(suffix='.xlsx')
+        os.close(fd)
+        df.to_excel(temp_path, index=False, engine='openpyxl')
+
+        return FileResponse(
+            temp_path,
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            filename=f"master_deleted_rows_{folder_id}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Export deleted rows error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/api/master/{folder_id}")
 async def delete_master_api(folder_id: int, current_user: Optional[dict] = Depends(get_optional_user)):
     """Delete a master file (DuckDB + metadata record) - moves to recycle bin first"""
@@ -2958,7 +3390,7 @@ async def apply_master_formula(
     folder_id: int,
     formula_type: str = Form(...),
     column_name: str = Form(...),
-    source_columns: str = Form(...),
+    source_columns: str = Form(""),
     constant_value: Optional[str] = Form(None),
     # SUMIF/COUNTIF parameters
     primary_column: Optional[str] = Form(None),
@@ -2968,39 +3400,92 @@ async def apply_master_formula(
     secondary_value_column: Optional[str] = Form(None),
     count_column: Optional[str] = Form(None),
     match_type: Optional[str] = Form("exact"),
+    # IF_CONDITION parameters (passed as JSON)
+    if_payload: Optional[str] = Form(None),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     """
     Apply a formula to create a new column in the master file.
-    
-    Formulas:
-    - SUM(col1, col2, ...): Add numeric values across columns
-    - SUBTRACT(col1, col2): col1 - col2
-    - MULTIPLY(col1, col2): col1 * col2
-    - DIVIDE(col1, col2): col1 / col2 (handles div-by-zero)
-    - PERCENTAGE(part, whole): (part / whole) * 100
-    - CONCAT(col1, col2, ...): Join text columns
-    - SUMIF(primary_col, secondary_file, secondary_sheet, match_col, value_col): Sum from secondary where matches
-    - COUNTIF(primary_col, secondary_file, secondary_sheet, match_col): Count from secondary where matches
     """
     try:
         master = get_master_file(folder_id)
         if not master:
             raise HTTPException(status_code=404, detail="Master file not found")
-        
+
         formula_type = formula_type.upper()
-        
+
         # Connect to DuckDB
         conn = duckdb.connect(master['db_path'])
-        
+
         # Get existing columns
         existing_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
-        
+
         # Check if new column name already exists
         if column_name in existing_cols:
             conn.close()
             raise HTTPException(status_code=422, detail=f"Column '{column_name}' already exists")
-        
+
+        # ---- IF_CONDITION: conditional CASE expression ----
+        if formula_type == 'IF_CONDITION':
+            try:
+                payload = json.loads(if_payload) if if_payload else None
+            except (json.JSONDecodeError, TypeError):
+                conn.close()
+                raise HTTPException(status_code=422, detail="if_payload must be a valid JSON object")
+            if not payload or not isinstance(payload, dict):
+                conn.close()
+                raise HTTPException(status_code=422, detail="if_payload is required for IF_CONDITION")
+            from backend.if_condition_engine import build_if_sql
+            try:
+                sql_expr, referenced = build_if_sql(payload, existing_cols)
+            except ValueError as e:
+                conn.close()
+                raise HTTPException(status_code=422, detail=f"IF condition error: {e}")
+            try:
+                conn.execute(f'ALTER TABLE master_data ADD COLUMN "{column_name}" VARCHAR')
+                conn.execute(f'UPDATE master_data SET "{column_name}" = {sql_expr}')
+            except Exception as e:
+                conn.close()
+                raise HTTPException(status_code=500, detail=f"Failed to apply IF condition: {e}")
+            row_count = conn.execute("SELECT COUNT(*) FROM master_data").fetchone()[0]
+            updated_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+            conn.close()
+            # Update metadata columns
+            try:
+                conn_sqlite = get_db_connection()
+                conn_sqlite.execute(
+                    "UPDATE master_files SET columns = ? WHERE folder_id = ?",
+                    (json.dumps(updated_cols), folder_id),
+                )
+                conn_sqlite.commit()
+                conn_sqlite.close()
+            except Exception as e:
+                logger.warning(f"Failed to update master metadata columns: {e}")
+            # AUTO-CAPTURE: IF_CONDITION activity (persists so re-sync keeps it)
+            try:
+                cid_f = (current_user or {}).get('company_id') or master.get('company_id')
+                mid_f = (current_user or {}).get('module_id') or master.get('module_id')
+                _create_activity_from_action(
+                    folder_id=folder_id, action_type='IF_CONDITION',
+                    payload={**payload, 'sql': sql_expr, 'output_column': column_name},
+                    target_column=column_name,
+                    company_id=cid_f, module_id=mid_f,
+                    master_file_id=master.get('id'),
+                    user_id=current_user.get('user_id') if current_user else None,
+                )
+            except Exception as _e:
+                logger.warning(f'Auto-capture IF_CONDITION failed: {_e}')
+            return {
+                "success": True,
+                "message": "IF condition applied successfully",
+                "column_name": column_name,
+                "formula_type": "IF_CONDITION",
+                "sql": sql_expr,
+                "referenced_columns": referenced,
+                "rows_affected": row_count,
+                "columns": updated_cols,
+            }
+
         # Handle SUMIF/COUNTIF/VLOOKUP/HLOOKUP formulas
         if formula_type in ('SUMIF', 'COUNTIF', 'VLOOKUP', 'HLOOKUP'):
             # Validate required parameters
@@ -3462,7 +3947,7 @@ async def delete_master_column(folder_id: int, column_name: str, current_user: O
 async def preview_master_formula(
     folder_id: int,
     formula_type: str = Form(...),
-    source_columns: str = Form(...),
+    source_columns: Optional[str] = Form(None),
     constant_value: Optional[str] = Form(None),
     # SUMIF/COUNTIF parameters
     primary_column: Optional[str] = Form(None),
@@ -3471,7 +3956,9 @@ async def preview_master_formula(
     secondary_match_column: Optional[str] = Form(None),
     secondary_value_column: Optional[str] = Form(None),
     count_column: Optional[str] = Form(None),
-    match_type: Optional[str] = Form("exact")
+    match_type: Optional[str] = Form("exact"),
+    # IF_CONDITION payload (JSON string with logic/conditions/true_value/false_value)
+    if_payload: Optional[str] = Form(None),
 ):
     """Preview formula result on first 5 rows without saving"""
     try:
@@ -3482,7 +3969,38 @@ async def preview_master_formula(
         formula_type = formula_type.upper()
         
         conn = duckdb.connect(master['db_path'], read_only=True)
-        
+
+        # ---- IF_CONDITION: conditional CASE expression preview (must come before SUMIF return) ----
+        if formula_type == 'IF_CONDITION':
+            try:
+                payload = json.loads(if_payload) if if_payload else None
+            except (json.JSONDecodeError, TypeError):
+                conn.close()
+                raise HTTPException(status_code=422, detail="if_payload must be a valid JSON object")
+            if not payload or not isinstance(payload, dict):
+                conn.close()
+                raise HTTPException(status_code=422, detail="if_payload is required for IF_CONDITION preview")
+            from backend.if_condition_engine import build_if_sql
+            try:
+                existing_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+                sql_expr, _ = build_if_sql(payload, existing_cols)
+            except ValueError as e:
+                conn.close()
+                raise HTTPException(status_code=422, detail=f"IF condition error: {e}")
+            try:
+                result = conn.execute(f"SELECT ({sql_expr}) AS result FROM master_data LIMIT 5").fetchdf()
+            except Exception as e:
+                conn.close()
+                raise HTTPException(status_code=500, detail=f"Failed to run IF preview: {e}")
+            conn.close()
+            preview_data = clean_nan_values(result['result'].tolist())
+            return {
+                "success": True,
+                "formula_type": "IF_CONDITION",
+                "sql": sql_expr,
+                "preview": preview_data,
+            }
+
         # Handle SUMIF/COUNTIF/VLOOKUP/HLOOKUP previews
         if formula_type in ('SUMIF', 'COUNTIF', 'VLOOKUP', 'HLOOKUP'):
             # Validate required parameters
@@ -3504,13 +4022,13 @@ async def preview_master_formula(
             if formula_type == 'COUNTIF' and not count_column:
                 conn.close()
                 raise HTTPException(status_code=422, detail="Count column is required for COUNTIF preview")
-            
+
             # Validate primary column exists in master
             existing_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
             if primary_column not in existing_cols:
                 conn.close()
                 raise HTTPException(status_code=422, detail=f"Primary column '{primary_column}' not found in master file")
-            
+
             # Load secondary data
             try:
                 if secondary_file.startswith('master_'):
@@ -3526,15 +4044,15 @@ async def preview_master_formula(
                     sec_file_id = int(secondary_file)
                     db_conn = get_db_connection()
                     file_record = db_conn.execute(
-                        "SELECT file_path, format FROM files WHERE id = ?", 
+                        "SELECT file_path, format FROM files WHERE id = ?",
                         (sec_file_id,)
                     ).fetchone()
                     db_conn.close()
-                    
+
                     if not file_record:
                         conn.close()
                         raise HTTPException(status_code=404, detail="Secondary file not found")
-                    
+
                     file_format = file_record['format'].upper() if file_record['format'] else ''
                     if file_format == 'CSV':
                         sec_df = pd.read_csv(file_record['file_path'])
@@ -3543,17 +4061,17 @@ async def preview_master_formula(
             except Exception as e:
                 conn.close()
                 raise HTTPException(status_code=500, detail=f"Failed to load secondary file: {str(e)}")
-            
+
             # Create temporary table for secondary data
             conn.execute("CREATE TEMPORARY TABLE IF NOT EXISTS temp_secondary AS SELECT * FROM sec_df")
-            
+
             # Build the aggregation query
             match_type = match_type or 'exact'
             if match_type == 'exact':
                 join_condition = f'master."{primary_column}" = secondary."{secondary_match_column}"'
             else:  # contains - partial match
                 join_condition = f'CAST(master."{primary_column}" AS VARCHAR) LIKE \'%\' || CAST(secondary."{secondary_match_column}" AS VARCHAR) || \'%\''
-            
+
             # Build preview query (first 5 rows)
             if formula_type == 'SUMIF':
                 query = f'''
@@ -3590,13 +4108,19 @@ async def preview_master_formula(
                 FROM master_data AS master
                 LIMIT 5
                 '''
-            
-            result = conn.execute(query).fetchdf()
+
+            # Execute the SUMIF/COUNTIF/VLOOKUP/HLOOKUP preview query
+            try:
+                result = conn.execute(query).fetchdf()
+            except Exception as e:
+                conn.close()
+                raise HTTPException(status_code=500, detail=f"Failed to run {formula_type} preview: {e}")
+
             conn.execute("DROP TABLE IF EXISTS temp_secondary")
             conn.close()
-            
+
             preview_data = clean_nan_values(result['result'].tolist())
-            
+
             return {
                 "success": True,
                 "formula_type": formula_type,
@@ -3606,7 +4130,7 @@ async def preview_master_formula(
                 "secondary_match_column": secondary_match_column,
                 "secondary_value_column": secondary_value_column
             }
-        
+
         # Regular formulas
         cols = [c.strip() for c in source_columns.split(',') if c.strip()]
         if not cols:
@@ -4094,7 +4618,7 @@ async def api_create_activity(
             raise HTTPException(status_code=422, detail="payload must be valid JSON")
 
         # Validate activity_type
-        valid_types = {'FORMULA_ADD', 'FORMULA_UPDATE', 'FIND_REPLACE', 'COLUMN_RENAME', 'COLUMN_DELETE', 'ROW_FILTER'}
+        valid_types = {'FORMULA_ADD', 'FORMULA_UPDATE', 'FIND_REPLACE', 'COLUMN_RENAME', 'COLUMN_DELETE', 'ROW_FILTER', 'ROW_DELETE', 'IF_CONDITION'}
         act_upper = (activity_type or '').upper()
         if act_upper not in valid_types:
             raise HTTPException(status_code=422, detail=f"activity_type must be one of: {sorted(valid_types)}")

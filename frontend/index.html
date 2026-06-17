@@ -666,6 +666,46 @@
                                                 </div>
                                             </div>
 
+                                            <!-- Deleted Row Panel (Phase 1) — soft-deleted rows are restorable and survive auto-sync -->
+                                            <div id="master-deleted-row-section" class="border border-red-200 rounded-lg p-3 bg-red-50/30">
+                                                <div class="flex flex-wrap items-center justify-between mb-2 gap-2">
+                                                    <h5 class="text-sm font-semibold text-red-800 flex items-center space-x-1">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+                                                        </svg>
+                                                        <span>Deleted Row <span class="text-xs text-gray-500 font-normal">(soft-deleted · restorable · survives auto-sync)</span></span>
+                                                    </h5>
+                                                    <div class="flex items-center space-x-2">
+                                                        <span class="text-xs text-gray-500" id="master-deleted-row-info">0 deleted rows</span>
+                                                        <input type="text" id="master-deleted-row-search" oninput="debouncedLoadDeletedRows()" placeholder="Search deleted rows…" class="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-red-500" />
+                                                        <button type="button" onclick="exportDeletedRows()" title="Export deleted rows to Excel" class="inline-flex items-center justify-center w-8 h-8 text-green-700 hover:bg-green-100 rounded transition-colors">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/>
+                                                            </svg>
+                                                        </button>
+                                                        <button type="button" onclick="loadDeletedRows()" title="Refresh deleted rows" class="inline-flex items-center justify-center w-8 h-8 text-red-700 hover:bg-red-100 rounded transition-colors">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div class="overflow-auto border border-red-200 rounded-lg" style="max-height: 16rem;">
+                                                    <table class="min-w-full divide-y divide-gray-200">
+                                                        <thead class="bg-red-50" id="master-deleted-row-head">
+                                                            <tr>
+                                                                <th class="px-3 py-2 text-left text-xs font-medium text-red-700 uppercase">Loading…</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody class="bg-white divide-y divide-gray-200" id="master-deleted-row-body">
+                                                            <tr>
+                                                                <td class="px-3 py-2 text-sm text-gray-500 text-center">Loading deleted rows…</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
                                             <!-- Advanced SQL Section -->
                                             <div class="border border-gray-200 rounded-lg">
                                                 <button onclick="toggleMasterSql()" class="w-full px-4 py-2 bg-gray-50 hover:bg-gray-100 flex items-center justify-between text-sm font-medium text-gray-700 rounded-t-lg">
@@ -1356,6 +1396,7 @@
                         <option value="COUNTIF">COUNTIF — Count from secondary file where matches</option>
                         <option value="VLOOKUP">VLOOKUP — Extract value from secondary where matches</option>
                         <option value="HLOOKUP">HLOOKUP — Extract value from secondary where matches</option>
+                        <option value="IF_CONDITION">IF — Conditional value (Greater than / Smaller than / Start with / End with / Blank)</option>
                     </select>
                 </div>
 
@@ -1420,6 +1461,38 @@
                             <option value="exact">Exact Match</option>
                             <option value="contains">Contains (partial match)</option>
                         </select>
+                    </div>
+                </div>
+
+                <!-- IF_CONDITION Builder (Phase 2) -->
+                <div id="formula-if-condition-container" class="hidden space-y-4 border border-purple-200 rounded-lg p-4 bg-purple-50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-purple-800">IF Condition Groups</div>
+                            <p class="text-xs text-gray-600 mt-0.5">Add multiple groups — the first group whose conditions match wins. Use Left / Right / Mid for character-position checks.</p>
+                        </div>
+                        <button type="button" onclick="addIfGroup()" class="flex items-center space-x-1 text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 font-medium" title="Add another group">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            <span>Add Group</span>
+                        </button>
+                    </div>
+
+                    <!-- Groups container (one card per group; seeded with 1 group) -->
+                    <div id="if-groups-container" class="space-y-3">
+                        <!-- Group cards appended here -->
+                    </div>
+
+                    <!-- Default (FALSE) value — applies when NO group matches -->
+                    <div class="border-t border-purple-100 pt-3">
+                        <label class="text-xs font-bold text-purple-700 mb-1 block">Default Value (when no group matches)</label>
+                        <div class="grid grid-cols-12 gap-2">
+                            <select id="if-false-type" class="col-span-3 border border-gray-300 rounded px-2 py-1.5 text-sm" onchange="updateIfBranchInputs('false')">
+                                <option value="value">Value / Text</option>
+                                <option value="column">From column</option>
+                            </select>
+                            <input type="text" id="if-false-value" class="col-span-9 border border-gray-300 rounded px-2 py-1.5 text-sm" placeholder="e.g., FALSE or 0" value="">
+                            <select id="if-false-column" class="col-span-9 hidden border border-gray-300 rounded px-2 py-1.5 text-sm"></select>
+                        </div>
                     </div>
                 </div>
 
@@ -3697,7 +3770,7 @@
             if (limit > 10000) limit = 10000;
             const sourceFile = document.getElementById('master-source-filter').value;
             const search = document.getElementById('master-search').value;
-            
+
             try {
                 let url = `/api/master/${currentFolderId}/preview?limit=${limit}`;
                 if (sourceFile && sourceFile !== 'All Files') {
@@ -3706,38 +3779,77 @@
                 if (search) {
                     url += `&search=${encodeURIComponent(search)}`;
                 }
-                
+
                 const data = await apiCall(url);
-                
+
                 const headEl = document.getElementById('master-preview-head');
                 const bodyEl = document.getElementById('master-preview-body');
                 const infoEl = document.getElementById('master-preview-info');
-                
+
                 if (!data.success || !data.columns || data.columns.length === 0) {
                     headEl.innerHTML = '<tr><th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">No Data</th></tr>';
                     bodyEl.innerHTML = '<tr><td class="px-3 py-2 text-sm text-gray-500 text-center">No data available</td></tr>';
                     infoEl.textContent = 'Showing 0 of 0 rows';
                     return;
                 }
-                
-                // Render headers
-                headEl.innerHTML = '<tr>' + data.columns.map(col => 
-                    `<th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${col}</th>`
-                ).join('') + '</tr>';
-                
-                // Render data rows
-                if (data.data && data.data.length > 0) {
-                    bodyEl.innerHTML = data.data.map(row => 
-                        '<tr>' + data.columns.map(col => 
-                            `<td class="px-3 py-2 text-sm text-gray-900 whitespace-nowrap">${row[col] !== null && row[col] !== undefined ? String(row[col]).substring(0, 100) : ''}</td>`
-                        ).join('') + '</tr>'
-                    ).join('');
+
+                // Build the header info text.  When a search is active we make
+                // the count very explicit so the user knows whether their match
+                // was actually found, or whether it's just beyond the row limit.
+                const totalCount = data.total_count || 0;
+                const returnedCount = data.returned_count || 0;
+                const searchActive = !!data.search_active;
+                const truncated = !!data.truncated_by_limit;
+                if (searchActive) {
+                    if (totalCount === 0) {
+                        infoEl.innerHTML = `<span class="text-amber-700 font-medium">No rows match \"${escapeHtml(search)}\"</span> &middot; 0 of 0 matches`;
+                    } else if (truncated) {
+                        infoEl.innerHTML = `<span class="text-blue-700 font-medium">${totalCount.toLocaleString()} match${totalCount === 1 ? '' : 'es'} found</span> for \"${escapeHtml(search)}\" &middot; showing first ${returnedCount.toLocaleString()} &mdash; <button type=\"button\" onclick=\"document.getElementById('master-row-limit').value = Math.min(10000, ${Math.max(returnedCount * 2, 500)}); loadMasterPreview();\" class=\"underline hover:text-blue-900\">increase row limit to see all</button>`;
+                    } else {
+                        infoEl.innerHTML = `<span class=\"text-green-700 font-medium\">${totalCount.toLocaleString()} match${totalCount === 1 ? '' : 'es'} found</span> for \"${escapeHtml(search)}\"`;
+                    }
                 } else {
-                    bodyEl.innerHTML = '<tr><td colspan="' + data.columns.length + '" class="px-3 py-2 text-sm text-gray-500 text-center">No matching rows found</td></tr>';
+                    infoEl.textContent = `Showing ${returnedCount.toLocaleString()} of ${totalCount.toLocaleString()} rows`;
                 }
-                
-                infoEl.textContent = `Showing ${data.returned_count || 0} of ${data.total_count || 0} rows`;
-                
+
+                // Render headers (add a trailing Action column for the delete button)
+                const allCols = data.columns.slice();
+                const allColSet = new Set(allCols);
+                headEl.innerHTML = '<tr>' + allCols.map(col =>
+                    `<th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${col}</th>`
+                ).join('') + '<th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50">Action</th></tr>';
+
+                // Render data rows - each row gets a delete (trash) button using _row_fp
+                if (data.data && data.data.length > 0) {
+                    bodyEl.innerHTML = data.data.map(row => {
+                        const fp = row._row_fp || '';
+                        const cells = allCols.map(col => {
+                            let v = row[col];
+                            if (v === null || v === undefined) v = '';
+                            v = String(v);
+                            if (v.length > 200) v = v.substring(0, 200) + '…';
+                            return `<td class="px-3 py-2 text-sm text-gray-900 whitespace-nowrap">${escapeHtml(v)}</td>`;
+                        }).join('');
+                        const actionCell = `<td class="px-3 py-2 text-center sticky right-0 bg-white">
+                            <button onclick="confirmDeleteRow('${escapeHtml(fp)}')" class="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors" title="Delete this row">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"></path></svg>
+                            </button>
+                        </td>`;
+                        return `<tr data-row-fp="${escapeHtml(fp)}">${cells}${actionCell}</tr>`;
+                    }).join('');
+                } else {
+                    bodyEl.innerHTML = '<tr><td colspan="' + (allCols.length + 1) + '" class="px-3 py-2 text-sm text-gray-500 text-center">No matching rows found</td></tr>';
+                }
+
+                // NOTE: infoEl was already updated above with the search-aware
+                // ("X matches found") copy when searchActive=true, or the simple
+                // "Showing X of Y rows" copy otherwise. Do not overwrite it here.
+
+                // Refresh the Deleted Row section so the user sees their delete instantly
+                if (typeof loadDeletedRows === 'function') {
+                    loadDeletedRows();
+                }
+
             } catch (error) {
                 console.error('Error loading preview:', error);
             }
@@ -8581,7 +8693,7 @@
 
         let formulaColumnsList = [];
 
-        function openFormulaModal(folderId) {
+        async function openFormulaModal(folderId) {
             const fid = folderId || currentFolderId;
             if (!fid) {
                 showToast('Please select a folder first', 'warning');
@@ -8603,7 +8715,12 @@
             modalEl.style.alignItems = 'center';
             modalEl.style.justifyContent = 'center';
             modalEl.style.backgroundColor = 'rgba(0,0,0,0.5)';
-            loadFormulaColumns();
+            // Await the column load so formulaColumnsList is populated BEFORE
+            // we seed the IF_CONDITION condition rows. Even if the load fails
+            // (e.g. no master file yet), resetFormulaForm() still works — the
+            // rows are rendered with the placeholder option and refreshIfConditionColumnSelects()
+            // (called inside loadFormulaColumns) repopulates them once data arrives.
+            await loadFormulaColumns();
             resetFormulaForm();
         }
 
@@ -8621,7 +8738,597 @@
             document.getElementById('formula-error').classList.add('hidden');
             document.getElementById('formula-progress').classList.add('hidden');
             document.getElementById('formula-apply-btn').disabled = false;
+            resetIfBuilder();
             updateFormulaUI();
+        }
+
+        // ---------------- IF_CONDITION builder helpers (Phase 2) ----------------
+        // Aggregator dropdown options. Position operators (Left/Right/Mid) are tagged
+        // with `is_position: true` so the row UI knows to render extra position fields.
+        const IF_AGG_OPTIONS = [
+            { v: '>',           label: 'Greater than (>)' },
+            { v: '<',           label: 'Less than (<)' },
+            { v: '>=',          label: 'Greater than or equal (≥)' },
+            { v: '<=',          label: 'Less than or equal (≤)' },
+            { v: '=',           label: 'Equal to (=)' },
+            { v: '!=',          label: 'Not equal to (≠)' },
+            { v: 'starts_with', label: 'Starts with' },
+            { v: 'ends_with',   label: 'Ends with' },
+            { v: 'contains',    label: 'Contains' },
+            { v: 'blank',       label: 'Is blank / empty' },
+            { v: 'not_blank',   label: 'Is NOT blank / empty' },
+            { v: 'left_eq',     label: 'Left N chars (position)',  is_position: true },
+            { v: 'right_eq',    label: 'Right N chars (position)', is_position: true },
+            { v: 'mid_eq',      label: 'Mid (start, length) chars', is_position: true }
+        ];
+        // Inner text-op options exposed when an aggregator is a position operator.
+        const IF_POS_TEXT_OPS = [
+            { v: '=',           label: 'Equal to (=)' },
+            { v: '!=',          label: 'Not equal to (≠)' },
+            { v: 'starts_with', label: 'Starts with' },
+            { v: 'ends_with',   label: 'Ends with' },
+            { v: 'contains',    label: 'Contains' }
+        ];
+        // Group counter so each group card has a unique DOM id.
+        let ifGroupCounter = 1;
+
+        function resetIfBuilder() {
+            const container = document.getElementById('if-groups-container');
+            if (container) container.innerHTML = '';
+            const fType = document.getElementById('if-false-type');
+            const fVal = document.getElementById('if-false-value');
+            const fCol = document.getElementById('if-false-column');
+            if (fType) fType.value = 'value';
+            if (fVal) fVal.value = '';
+            if (fCol) fCol.value = '';
+            // Seed exactly one group with one condition row.
+            ifGroupCounter = 1;
+            addIfGroup();
+            if (typeof updateIfBranchInputs === 'function') {
+                updateIfBranchInputs('false');
+            }
+        }
+
+        // Build the <option> markup for a column <select> using the latest formulaColumnsList,
+        // filtering out internal __* bookkeeping columns so the user only sees real data columns.
+        function buildIfColumnOptions() {
+            const cols = (typeof formulaColumnsList !== 'undefined' && formulaColumnsList.length > 0)
+                ? formulaColumnsList.filter(c => !String(c).startsWith('__'))
+                : [];
+            return ['<option value="">-- Select column --</option>']
+                .concat(cols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`))
+                .join('');
+        }
+
+        // Refresh every column dropdown inside the IF_CONDITION container (groups,
+        // condition rows, group-value branches, and the global default branch).
+        function refreshIfConditionColumnSelects() {
+            const colOpts = buildIfColumnOptions();
+            const container = document.getElementById('if-groups-container');
+            if (container) {
+                // Each .if-col inside every group
+                container.querySelectorAll('select.if-col').forEach(sel => {
+                    const prev = sel.value;
+                    sel.innerHTML = colOpts;
+                    if (prev && Array.from(sel.options).some(o => o.value === prev)) {
+                        sel.value = prev;
+                    }
+                });
+                // Each .if-col-value (per-row "From column")
+                container.querySelectorAll('select.if-col-value').forEach(sel => {
+                    const prev = sel.value;
+                    sel.innerHTML = colOpts;
+                    if (prev && Array.from(sel.options).some(o => o.value === prev)) {
+                        sel.value = prev;
+                    }
+                });
+                // Each .if-group-value-column (group TRUE-value branch)
+                container.querySelectorAll('select.if-group-value-column').forEach(sel => {
+                    const prev = sel.value;
+                    sel.innerHTML = colOpts;
+                    if (prev && Array.from(sel.options).some(o => o.value === prev)) {
+                        sel.value = prev;
+                    }
+                });
+            }
+            // Global Default branch "From column"
+            const fCol = document.getElementById('if-false-column');
+            if (fCol) {
+                const prev = fCol.value;
+                fCol.innerHTML = colOpts;
+                if (prev && Array.from(fCol.options).some(o => o.value === prev)) {
+                    fCol.value = prev;
+                }
+            }
+        }
+
+        // Returns the currently effective value of a condition row, reading from
+        // the text input OR the column select depending on the vtype.  Position
+        // operators always use the literal value input (column-reference disabled).
+        function readIfConditionValue(row) {
+            const vtypeEl = row.querySelector('.if-vtype');
+            const vtype = vtypeEl ? vtypeEl.value : 'value';
+            if (vtype === 'column') {
+                const sel = row.querySelector('.if-col-value');
+                return sel ? sel.value : '';
+            }
+            const txt = row.querySelector('.if-val');
+            return txt ? txt.value : '';
+        }
+
+        // Build the aggregator dropdown HTML.
+        function buildIfAggOptionsHtml(selected) {
+            return IF_AGG_OPTIONS.map(o =>
+                `<option value="${o.v}" ${o.v === selected ? 'selected' : ''}>${o.label}</option>`
+            ).join('');
+        }
+        function buildIfPosTextOpsHtml(selected) {
+            return IF_POS_TEXT_OPS.map(o =>
+                `<option value="${o.v}" ${o.v === selected ? 'selected' : ''}>${o.label}</option>`
+            ).join('');
+        }
+
+        // Add a new IF group card. Each group has its own AND/OR logic, list of
+        // conditions, and a "group value" that is written into the target column
+        // when the group's conditions match.
+        function addIfGroup(opts = {}) {
+            const container = document.getElementById('if-groups-container');
+            if (!container) return;
+            const groupId = ifGroupCounter++;
+            const colOpts = buildIfColumnOptions();
+            const aggOptsHtml = buildIfAggOptionsHtml('');
+            const logic = (opts.logic || 'AND').toUpperCase();
+            const valueType = opts.value_type || 'value';
+            const valueVal = opts.value !== undefined ? opts.value : '';
+            const conditions = Array.isArray(opts.conditions) && opts.conditions.length > 0
+                ? opts.conditions
+                : [{}];
+
+            const card = document.createElement('div');
+            card.className = 'bg-white border border-purple-200 rounded-lg p-3 if-group';
+            card.dataset.groupId = groupId;
+            card.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs font-bold text-purple-700">Group #${groupId}</span>
+                        <span class="text-xs text-gray-500">(first match wins)</span>
+                    </div>
+                    <button type="button" onclick="removeIfGroup(this)" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50" title="Remove group">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                </div>
+
+                <!-- AND/OR radio -->
+                <div class="flex items-center space-x-4 mb-2">
+                    <span class="text-xs font-medium text-gray-600">Combine conditions with:</span>
+                    <label class="flex items-center space-x-1 cursor-pointer">
+                        <input type="radio" name="if-logic-${groupId}" value="AND" ${logic === 'AND' ? 'checked' : ''} class="text-purple-600 focus:ring-purple-500 if-logic">
+                        <span class="text-xs text-gray-700">AND</span>
+                    </label>
+                    <label class="flex items-center space-x-1 cursor-pointer">
+                        <input type="radio" name="if-logic-${groupId}" value="OR" ${logic === 'OR' ? 'checked' : ''} class="text-purple-600 focus:ring-purple-500 if-logic">
+                        <span class="text-xs text-gray-700">OR</span>
+                    </label>
+                </div>
+
+                <!-- Conditions list for this group -->
+                <div class="if-group-conditions space-y-1.5 mb-3"></div>
+
+                <button type="button" onclick="addIfConditionRow(this)" class="flex items-center space-x-1 text-xs text-purple-600 hover:text-purple-800 font-medium mb-3">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                    <span>Add Condition</span>
+                </button>
+
+                <!-- Group TRUE value -->
+                <div class="border-t border-purple-100 pt-2 mt-1">
+                    <label class="text-xs font-bold text-purple-700 mb-1 block">Value to write when this group's conditions match</label>
+                    <div class="grid grid-cols-12 gap-2">
+                        <select class="if-group-value-type col-span-3 text-xs border border-gray-300 rounded px-2 py-1.5" onchange="updateIfGroupValueInputs(this)">
+                            <option value="value"  ${valueType === 'value'  ? 'selected' : ''}>Value / Text</option>
+                            <option value="column" ${valueType === 'column' ? 'selected' : ''}>From column</option>
+                        </select>
+                        <input type="text" class="if-group-value-value col-span-9 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="e.g., High or Refund" value="${escapeHtml(String(valueVal))}">
+                        <select class="if-group-value-column col-span-9 hidden text-xs border border-gray-300 rounded px-2 py-1.5">${colOpts}</select>
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+
+            // Seed condition rows from opts
+            const list = card.querySelector('.if-group-conditions');
+            conditions.forEach(cond => {
+                addIfConditionRow(card.querySelector('button[onclick="addIfConditionRow(this)"]'), cond);
+            });
+            // Trigger value-input swap so column vs value is shown correctly
+            const typeSel = card.querySelector('.if-group-value-type');
+            if (typeSel) updateIfGroupValueInputs(typeSel);
+            const colSel = card.querySelector('.if-group-value-column');
+            if (colSel && valueType === 'column' && valueVal) {
+                // Try to set the previously-saved column value if it exists in options
+                if (Array.from(colSel.options).some(o => o.value === valueVal)) {
+                    colSel.value = valueVal;
+                }
+            }
+            // Keep column dropdowns in sync with master file columns (may load later)
+            if ((typeof formulaColumnsList === 'undefined' || !formulaColumnsList || formulaColumnsList.length === 0)
+                && typeof loadFormulaColumns === 'function') {
+                loadFormulaColumns().then(() => refreshIfConditionColumnSelects()).catch(() => {});
+            }
+            return card;
+        }
+
+        function removeIfGroup(btn) {
+            const card = btn.closest('.if-group');
+            if (!card) return;
+            const container = document.getElementById('if-groups-container');
+            if (container && container.querySelectorAll('.if-group').length <= 1) {
+                showToast('At least one group is required', 'warning');
+                return;
+            }
+            card.remove();
+        }
+
+        // Wire up the per-group value type dropdown so the value field swaps
+        // between a text input and a column <select>.
+        function updateIfGroupValueInputs(typeSel) {
+            const card = typeSel.closest('.if-group');
+            if (!card) return;
+            const valInput = card.querySelector('.if-group-value-value');
+            const colSelect = card.querySelector('.if-group-value-column');
+            if (!valInput || !colSelect) return;
+            if (typeSel.value === 'column') {
+                valInput.classList.add('hidden'); valInput.disabled = true; valInput.value = '';
+                colSelect.classList.remove('hidden'); colSelect.disabled = false;
+                colSelect.innerHTML = buildIfColumnOptions();
+            } else {
+                colSelect.classList.add('hidden'); colSelect.disabled = true; colSelect.value = '';
+                valInput.classList.remove('hidden'); valInput.disabled = false;
+                valInput.placeholder = 'e.g., High, Refund, OK';
+            }
+        }
+
+        // Add a condition row to the group that contains `triggerBtn`.  Optionally
+        // seed it from a saved condition object.
+        function addIfConditionRow(triggerBtn, savedCond = null) {
+            let card = triggerBtn && triggerBtn.closest ? triggerBtn.closest('.if-group') : null;
+            if (!card) {
+                // Fallback: append to the first group (used during reset before groups exist)
+                card = document.querySelector('#if-groups-container .if-group');
+            }
+            if (!card) return;
+            const list = card.querySelector('.if-group-conditions');
+            if (!list) return;
+            const idx = list.children.length;
+
+            const colOpts = buildIfColumnOptions();
+            const aggOptsHtml = buildIfAggOptionsHtml(savedCond?.aggregator || '');
+            const agg = savedCond?.aggregator || '';
+            const isPos = ['left_eq', 'right_eq', 'mid_eq'].includes(agg);
+            const vtype = savedCond?.value_type || 'value';
+            const v = savedCond?.value !== undefined ? savedCond.value : '';
+
+            const row = document.createElement('div');
+            row.className = 'flex flex-col bg-gray-50 border border-gray-200 rounded p-2 if-condition';
+            row.dataset.idx = idx;
+            row.innerHTML = `
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-xs font-medium text-gray-500 w-6">#${idx + 1}</span>
+                    <select class="if-col flex-1 min-w-[120px] text-xs border border-gray-300 rounded px-2 py-1" onchange="onIfCondChange(this)">
+                        ${colOpts}
+                    </select>
+                    <select class="if-agg w-40 text-xs border border-gray-300 rounded px-2 py-1" onchange="onIfCondChange(this)">
+                        ${aggOptsHtml}
+                    </select>
+                    <select class="if-vtype w-24 text-xs border border-gray-300 rounded px-2 py-1" onchange="onIfCondChange(this)">
+                        <option value="value"  ${vtype === 'value'  ? 'selected' : ''}>Value</option>
+                        <option value="column" ${vtype === 'column' ? 'selected' : ''}>Column</option>
+                    </select>
+                    <input type="text" class="if-val flex-1 min-w-[100px] text-xs border border-gray-300 rounded px-2 py-1" placeholder="Value">
+                    <select class="if-col-value hidden flex-1 min-w-[120px] text-xs border border-gray-300 rounded px-2 py-1">${colOpts}</select>
+                    <button type="button" onclick="removeIfConditionRow(this)" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50" title="Remove condition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <!-- Position-operator extra fields (hidden unless aggregator is a position operator) -->
+                <div class="if-pos-extras mt-1.5 ${isPos ? '' : 'hidden'} grid grid-cols-12 gap-2">
+                    <div class="col-span-3">
+                        <label class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Position</label>
+                        <select class="if-pos-position w-full text-xs border border-gray-300 rounded px-2 py-1 if-pos-field">
+                            <option value="left"  ${(savedCond?.position || 'left') === 'left'  ? 'selected' : ''}>Left</option>
+                            <option value="right" ${(savedCond?.position || 'left') === 'right' ? 'selected' : ''}>Right</option>
+                            <option value="mid"   ${(savedCond?.position || 'left') === 'mid'   ? 'selected' : ''}>Mid</option>
+                        </select>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">N (length)</label>
+                        <input type="number" min="1" step="1" class="if-pos-length w-full text-xs border border-gray-300 rounded px-2 py-1 if-pos-field" placeholder="1" value="${savedCond?.length || ''}">
+                    </div>
+                    <div class="col-span-2 if-pos-start-wrap">
+                        <label class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Start (Mid)</label>
+                        <input type="number" min="1" step="1" class="if-pos-start w-full text-xs border border-gray-300 rounded px-2 py-1 if-pos-field" placeholder="1" value="${savedCond?.start || ''}">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Text op</label>
+                        <select class="if-pos-text-op w-full text-xs border border-gray-300 rounded px-2 py-1 if-pos-field">
+                            ${buildIfPosTextOpsHtml(savedCond?.text_op || '=')}
+                        </select>
+                    </div>
+                    <div class="col-span-3 flex items-end">
+                        <span class="text-[10px] text-gray-500 italic">RHS: literal text OR column.  Column RHS is sliced the same way (e.g. LEFT(A,2) = LEFT(B,2)).</span>
+                    </div>
+                </div>
+            `;
+            list.appendChild(row);
+
+            // Restore saved selections
+            if (savedCond) {
+                const colSel = row.querySelector('.if-col');
+                if (colSel && savedCond.column && Array.from(colSel.options).some(o => o.value === savedCond.column)) {
+                    colSel.value = savedCond.column;
+                }
+                if (savedCond.value_type === 'column' && savedCond.value) {
+                    const ccSel = row.querySelector('.if-col-value');
+                    if (ccSel && Array.from(ccSel.options).some(o => o.value === savedCond.value)) {
+                        ccSel.value = savedCond.value;
+                    }
+                }
+            }
+            // Trigger the value/vtype swap to reflect current aggregator
+            onIfCondChange(row.querySelector('.if-agg'));
+            // If this is a position aggregator, also set the literal value
+            if (isPos && v !== '') {
+                row.querySelector('.if-val').value = v;
+            }
+            // Toggle Mid start visibility based on saved position
+            const posSel = row.querySelector('.if-pos-position');
+            if (posSel) {
+                posSel.onchange = () => updateIfPositionStartVisibility(row);
+                updateIfPositionStartVisibility(row);
+            }
+            return row;
+        }
+
+        function updateIfPositionStartVisibility(row) {
+            const posSel = row.querySelector('.if-pos-position');
+            const startWrap = row.querySelector('.if-pos-start-wrap');
+            if (!posSel || !startWrap) return;
+            startWrap.style.display = (posSel.value === 'mid') ? '' : 'none';
+        }
+
+        function removeIfConditionRow(btn) {
+            const row = btn.closest('.if-condition');
+            if (!row) return;
+            const list = row.parentElement;
+            if (list.querySelectorAll('.if-condition').length <= 1) {
+                showToast('At least one condition is required', 'warning');
+                return;
+            }
+            row.remove();
+        }
+
+        // React to changes on the column / aggregator / value-type selects.
+        function onIfCondChange(el) {
+            const row = el.closest('.if-condition');
+            if (!row) return;
+            const agg = row.querySelector('.if-agg').value;
+            const vtype = row.querySelector('.if-vtype');
+            const valInput = row.querySelector('.if-val');
+            const colSelect = row.querySelector('.if-col-value');
+            const posExtras = row.querySelector('.if-pos-extras');
+            const isPos = ['left_eq', 'right_eq', 'mid_eq'].includes(agg);
+
+            // Position operators: show extra fields. RHS can be a literal value
+            // OR a column reference (slice-symmetric).  When value_type='column',
+            // hide the literal input and show the column select (which is
+            // populated by onIfCondChange).
+            if (isPos) {
+                if (posExtras) posExtras.classList.remove('hidden');
+                if (vtype) {
+                    vtype.disabled = false;
+                }
+                if (valInput && colSelect) {
+                    if (vtype && vtype.value === 'column') {
+                        valInput.classList.add('hidden');
+                        valInput.disabled = true;
+                        valInput.value = '';
+                        colSelect.classList.remove('hidden');
+                        colSelect.disabled = false;
+                        colSelect.innerHTML = buildIfColumnOptions();
+                        valInput.placeholder = 'Value to compare against (literal text)';
+                    } else {
+                        colSelect.classList.add('hidden');
+                        colSelect.disabled = true;
+                        colSelect.value = '';
+                        valInput.classList.remove('hidden');
+                        valInput.disabled = false;
+                        valInput.placeholder = 'Value to compare against (literal text)';
+                    }
+                }
+                // Also update start visibility for the current position
+                updateIfPositionStartVisibility(row);
+                return;
+            }
+
+            // Non-position: hide extras
+            if (posExtras) posExtras.classList.add('hidden');
+
+            if (agg === 'blank' || agg === 'not_blank') {
+                if (vtype) vtype.disabled = true;
+                if (valInput) { valInput.disabled = true; valInput.placeholder = '(no value needed)'; valInput.value = ''; }
+                if (colSelect) { colSelect.disabled = true; colSelect.value = ''; }
+            } else {
+                if (vtype) vtype.disabled = false;
+                if (vtype && vtype.value === 'column') {
+                    if (valInput) { valInput.classList.add('hidden'); valInput.disabled = true; valInput.value = ''; }
+                    if (colSelect) {
+                        colSelect.classList.remove('hidden');
+                        colSelect.disabled = false;
+                        colSelect.innerHTML = buildIfColumnOptions();
+                    }
+                } else {
+                    if (colSelect) { colSelect.classList.add('hidden'); colSelect.disabled = true; colSelect.value = ''; }
+                    if (valInput) {
+                        valInput.classList.remove('hidden');
+                        valInput.disabled = false;
+                        valInput.placeholder = 'Value (e.g., 100, TRUE, "hello")';
+                    }
+                }
+            }
+        }
+
+        // Build the value for the global Default (FALSE) branch.
+        function readIfBranchValue(branch) {
+            const typeEl = document.getElementById(`if-${branch}-type`);
+            const type = typeEl ? typeEl.value : 'value';
+            if (type === 'column') {
+                const sel = document.getElementById(`if-${branch}-column`);
+                return sel ? sel.value : '';
+            }
+            const val = document.getElementById(`if-${branch}-value`);
+            return val ? val.value : '';
+        }
+
+        // Wire up the Default-branch type dropdown so the value field swaps
+        // between a text input and a column <select>.
+        function updateIfBranchInputs(branch) {
+            const type = document.getElementById(`if-${branch}-type`);
+            const valInput = document.getElementById(`if-${branch}-value`);
+            const colSelect = document.getElementById(`if-${branch}-column`);
+            if (!type || !valInput || !colSelect) return;
+
+            if (type.value === 'column') {
+                valInput.classList.add('hidden');
+                valInput.disabled = true;
+                valInput.value = '';
+                colSelect.classList.remove('hidden');
+                colSelect.disabled = false;
+                colSelect.innerHTML = buildIfColumnOptions();
+            } else {
+                colSelect.classList.add('hidden');
+                colSelect.disabled = true;
+                colSelect.value = '';
+                valInput.classList.remove('hidden');
+                valInput.disabled = false;
+                valInput.placeholder = branch === 'true' ? 'e.g., TRUE or 1' : 'e.g., FALSE or 0';
+            }
+        }
+
+        // Build the IF payload.  Emits the multi-group shape whenever:
+        //   - there is more than one group, OR
+        //   - any condition uses a position operator (left_eq / right_eq / mid_eq).
+        // Otherwise it emits the legacy single-group shape so existing saves stay valid.
+        function buildIfPayload() {
+            const errorEl = document.getElementById('formula-error');
+            if (errorEl) errorEl.classList.add('hidden');
+
+            const container = document.getElementById('if-groups-container');
+            if (!container) throw new Error('IF groups container missing.');
+            const groupCards = Array.from(container.querySelectorAll('.if-group'));
+            if (groupCards.length === 0) {
+                throw new Error('Add at least one condition group.');
+            }
+
+            let usesPosition = false;
+            const groups = [];
+            groupCards.forEach((card, gIdx) => {
+                const groupId = card.dataset.groupId || (gIdx + 1);
+                const logicEl = card.querySelector(`input[name="if-logic-${groupId}"]:checked`)
+                    || card.querySelector('.if-logic:checked');
+                const logic = (logicEl?.value || 'AND').toUpperCase();
+                const conditions = [];
+                Array.from(card.querySelectorAll('.if-condition')).forEach((row, cIdx) => {
+                    const col = (row.querySelector('.if-col')?.value || '').trim();
+                    const agg = row.querySelector('.if-agg')?.value || '';
+                    const vtypeEl = row.querySelector('.if-vtype');
+                    const vtype = (vtypeEl?.value || 'value').toLowerCase();
+                    if (!col) throw new Error(`Group #${groupId} · Condition #${cIdx + 1}: select a column.`);
+                    if (!agg) throw new Error(`Group #${groupId} · Condition #${cIdx + 1}: select an aggregator.`);
+                    const isPos = ['left_eq', 'right_eq', 'mid_eq'].includes(agg);
+
+                    if (isPos) usesPosition = true;
+
+                    const cond = {
+                        column: col,
+                        aggregator: agg,
+                        value_type: vtype,
+                    };
+
+                    if (agg === 'blank' || agg === 'not_blank') {
+                        cond.value = '';
+                    } else if (isPos) {
+                        const position = (row.querySelector('.if-pos-position')?.value || 'left').toLowerCase();
+                        const lengthVal = row.querySelector('.if-pos-length')?.value || '';
+                        const startVal  = row.querySelector('.if-pos-start')?.value || '';
+                        const textOp    = row.querySelector('.if-pos-text-op')?.value || '=';
+                        // For position operators, RHS can be a literal value OR
+                        // a column reference (the engine slices the RHS column
+                        // the same way the LHS is sliced, e.g.
+                        // LEFT(A, 2) = LEFT(B, 2) row-wise).
+                        const rhsValue = (vtype === 'column')
+                            ? (row.querySelector('.if-col-value')?.value || '')
+                            : (row.querySelector('.if-val')?.value || '');
+                        if (!lengthVal || Number(lengthVal) < 1) {
+                            throw new Error(`Group #${groupId} · Condition #${cIdx + 1}: N (length) must be ≥ 1.`);
+                        }
+                        if (position === 'mid' && (!startVal || Number(startVal) < 1)) {
+                            throw new Error(`Group #${groupId} · Condition #${cIdx + 1}: Start (Mid) must be ≥ 1.`);
+                        }
+                        if (!rhsValue) {
+                            throw new Error(`Group #${groupId} · Condition #${cIdx + 1}: enter a value or column to compare against.`);
+                        }
+                        cond.value = rhsValue;
+                        cond.position = position;
+                        cond.length = Number(lengthVal);
+                        if (position === 'mid') cond.start = Number(startVal);
+                        cond.text_op = textOp;
+                    } else {
+                        const val = readIfConditionValue(row);
+                        if (val === '' || val === null || val === undefined) {
+                            throw new Error(`Group #${groupId} · Condition #${cIdx + 1}: value cannot be empty for '${agg}'.`);
+                        }
+                        cond.value = val;
+                    }
+                    conditions.push(cond);
+                });
+                if (conditions.length === 0) {
+                    throw new Error(`Group #${groupId} needs at least one condition.`);
+                }
+                // Group TRUE-value branch
+                const vTypeEl = card.querySelector('.if-group-value-type');
+                const vType = vTypeEl?.value || 'value';
+                let vValue;
+                if (vType === 'column') {
+                    vValue = card.querySelector('.if-group-value-column')?.value || '';
+                } else {
+                    vValue = card.querySelector('.if-group-value-value')?.value || '';
+                }
+                groups.push({
+                    logic: logic,
+                    conditions: conditions,
+                    value: { type: vType, value: vValue }
+                });
+            });
+
+            const fType = document.getElementById('if-false-type')?.value || 'value';
+            const fVal = readIfBranchValue('false');
+
+            // Decide payload shape: multi-group when there's >1 group OR any
+            // position operator is in play (single-group legacy can't represent them).
+            if (groups.length > 1 || usesPosition) {
+                return {
+                    groups: groups,
+                    false_value: { type: fType, value: fVal }
+                };
+            }
+
+            // Legacy single-group payload — keep it stable so old saves re-apply.
+            const g = groups[0];
+            return {
+                logic: g.logic,
+                conditions: g.conditions,
+                true_value: g.value,
+                false_value: { type: fType, value: fVal }
+            };
         }
 
         async function loadFormulaColumns() {
@@ -8635,6 +9342,11 @@
             } catch (e) {
                 formulaColumnsList = [];
             }
+            // After the async load completes, repopulate any IF_CONDITION
+            // condition rows that were already on screen with the fresh
+            // column list (so the dropdown never appears empty).
+            try { refreshIfConditionColumnSelects(); } catch (_) { /* safe-guard */ }
+            return formulaColumnsList;
         }
 
         function updateFormulaUI() {
@@ -8656,11 +9368,31 @@
             };
             document.getElementById('formula-columns-label').textContent = labels[type] || 'Columns';
             
+            const ifContainer = document.getElementById('formula-if-condition-container');
+
             // Show/hide containers based on formula type
-            if (type === 'SUMIF' || type === 'COUNTIF' || type === 'VLOOKUP' || type === 'HLOOKUP') {
+            if (type === 'IF_CONDITION') {
+                container.classList.add('hidden');
+                sumifContainer.classList.add('hidden');
+                constantContainer.classList.add('hidden');
+                ifContainer.classList.remove('hidden');
+                // resetIfBuilder() (called once from resetFormulaForm) already seeded
+                // one group with one condition row.  We only need to make sure the
+                // IF container has at least one group if the user toggled the
+                // dropdown type before any group existed (defensive).
+                const groupsContainer = document.getElementById('if-groups-container');
+                if (groupsContainer && groupsContainer.querySelectorAll('.if-group').length === 0) {
+                    addIfGroup();
+                }
+                // Also refresh existing rows in case columns were loaded after they were rendered
+                if (typeof refreshIfConditionColumnSelects === 'function') {
+                    refreshIfConditionColumnSelects();
+                }
+            } else if (type === 'SUMIF' || type === 'COUNTIF' || type === 'VLOOKUP' || type === 'HLOOKUP') {
                 container.classList.add('hidden');
                 sumifContainer.classList.remove('hidden');
                 constantContainer.classList.add('hidden');
+                ifContainer.classList.add('hidden');
                 // Show/hide value vs count column based on formula type
                 if (type === 'SUMIF' || type === 'VLOOKUP' || type === 'HLOOKUP') {
                     valueContainer.classList.remove('hidden');
@@ -8882,7 +9614,55 @@
 
         async function previewFormula() {
             const type = document.getElementById('formula-type').value;
-            
+
+            // IF_CONDITION: build payload, send if_payload, render 5-row preview
+            if (type === 'IF_CONDITION') {
+                const columnName = document.getElementById('formula-column-name').value.trim();
+                if (!columnName) {
+                    const errEl = document.getElementById('formula-error');
+                    errEl.textContent = 'Please enter a new column name';
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                let payload;
+                try {
+                    payload = buildIfPayload();
+                } catch (e) {
+                    const errEl = document.getElementById('formula-error');
+                    errEl.textContent = e.message;
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                document.getElementById('formula-error').classList.add('hidden');
+                showFormulaProgress('Computing IF preview...');
+                try {
+                    const formData = new FormData();
+                    formData.append('formula_type', 'IF_CONDITION');
+                    formData.append('source_columns', '');
+                    formData.append('column_name', columnName);
+                    formData.append('if_payload', JSON.stringify(payload));
+                    const data = await apiCall(`/api/master/${currentFolderId}/formula-preview`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    hideFormulaProgress();
+                    if (data.success) {
+                        const resultEl = document.getElementById('formula-preview-result');
+                        const rows = (data.preview || []).map((v, i) => {
+                            return `<div class="text-sm font-mono text-gray-700">Row ${i + 1}: ${v !== null && v !== undefined ? v : 'NULL'}</div>`;
+                        }).join('');
+                        resultEl.innerHTML = `<p class="text-xs text-gray-500 mb-1">Preview (first 5 rows) — SQL: <span class="font-mono text-purple-700">${escapeHtml(data.sql || '')}</span></p>${rows}`;
+                        resultEl.classList.remove('hidden');
+                    } else {
+                        showToast(data.message || data.detail || 'Preview failed', 'error');
+                    }
+                } catch (error) {
+                    hideFormulaProgress();
+                    showToast('Preview failed: ' + error.message, 'error');
+                }
+                return;
+            }
+
             // Handle SUMIF/COUNTIF/VLOOKUP/HLOOKUP validation
             if (type === 'SUMIF' || type === 'COUNTIF' || type === 'VLOOKUP' || type === 'HLOOKUP') {
                 const primaryCol = document.getElementById('formula-primary-column').value;
@@ -8996,13 +9776,61 @@
         async function applyFormula() {
             const type = document.getElementById('formula-type').value;
             const columnName = document.getElementById('formula-column-name').value.trim();
-            
+
             if (!columnName) {
                 document.getElementById('formula-error').textContent = 'Please enter a new column name';
                 document.getElementById('formula-error').classList.remove('hidden');
                 return;
             }
-            
+
+            // IF_CONDITION: build payload, send if_payload, apply SQL update + activity
+            if (type === 'IF_CONDITION') {
+                let payload;
+                try {
+                    payload = buildIfPayload();
+                } catch (e) {
+                    const errEl = document.getElementById('formula-error');
+                    errEl.textContent = e.message;
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                document.getElementById('formula-error').classList.add('hidden');
+                document.getElementById('formula-apply-btn').disabled = true;
+                showFormulaProgress('Applying IF formula, please wait...');
+                try {
+                    const formData = new FormData();
+                    formData.append('formula_type', 'IF_CONDITION');
+                    formData.append('source_columns', '');
+                    formData.append('column_name', columnName);
+                    formData.append('if_payload', JSON.stringify(payload));
+                    const data = await apiCall(`/api/master/${currentFolderId}/formula`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    hideFormulaProgress();
+                    document.getElementById('formula-apply-btn').disabled = false;
+                    if (data.success) {
+                        const actIdPart = data.activity_id ? ` · Activity #${data.activity_id} saved` : '';
+                        showToast(`IF formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}'${actIdPart}`, 'success', 4500);
+                        closeFormulaModal();
+                        await Promise.all([
+                            loadMasterPreview(),
+                            loadMasterStats(),
+                            loadMasterSummary(),
+                            loadMasterValidation(),
+                            typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                        ]);
+                    } else {
+                        showToast(data.message || data.detail || 'Apply failed', 'error');
+                    }
+                } catch (error) {
+                    hideFormulaProgress();
+                    document.getElementById('formula-apply-btn').disabled = false;
+                    showToast('Apply failed: ' + error.message, 'error');
+                }
+                return;
+            }
+
             // Handle SUMIF/COUNTIF/VLOOKUP/HLOOKUP validation and submission
             if (type === 'SUMIF' || type === 'COUNTIF' || type === 'VLOOKUP' || type === 'HLOOKUP') {
                 const primaryCol = document.getElementById('formula-primary-column').value;
@@ -9152,6 +9980,170 @@
             } catch (error) {
                 showToast('Delete failed: ' + error.message, 'error');
             }
+        }
+
+        // ==================== DELETED ROW (Phase 1) ====================
+        // Soft-deletes a master row by fingerprint; the row leaves the preview
+        // and appears in the "Deleted Row" panel below Rejected Files. The
+        // backend auto-captures a ROW_DELETE activity so the delete survives
+        // the next auto-sync.
+
+        let deletedRowsDebounceTimer = null;
+        function debouncedLoadDeletedRows() {
+            clearTimeout(deletedRowsDebounceTimer);
+            deletedRowsDebounceTimer = setTimeout(() => loadDeletedRows(), 350);
+        }
+
+        async function confirmDeleteRow(rowFp) {
+            if (!rowFp) {
+                showToast('Cannot delete row: missing fingerprint', 'error');
+                return;
+            }
+            if (!confirm('Move this row to the "Deleted Row" section? You can restore it later from there.')) {
+                return;
+            }
+            try {
+                const formData = new FormData();
+                formData.append('fingerprints', JSON.stringify([rowFp]));
+                const data = await apiCall(`/api/master/${currentFolderId}/rows/delete`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (data.success) {
+                    const deleted = data.deleted || 0;
+                    const actIdPart = data.activity_id ? ` \u00b7 Activity #${data.activity_id} saved` : '';
+                    if (deleted > 0) {
+                        showToast(`Row moved to "Deleted Row"${actIdPart}`, 'success', 3500);
+                    } else {
+                        showToast('Row was already deleted (no change)', 'info', 3000);
+                    }
+                    // Refresh the preview and the deleted-row panel in parallel
+                    await Promise.all([
+                        typeof loadMasterPreview === 'function' ? loadMasterPreview() : Promise.resolve(),
+                        typeof loadDeletedRows === 'function' ? loadDeletedRows() : Promise.resolve()
+                    ]);
+                } else {
+                    showToast(data.message || data.detail || 'Delete failed', 'error');
+                }
+            } catch (error) {
+                showToast('Delete failed: ' + error.message, 'error');
+            }
+        }
+
+        async function loadDeletedRows() {
+            const headEl = document.getElementById('master-deleted-row-head');
+            const bodyEl = document.getElementById('master-deleted-row-body');
+            const infoEl = document.getElementById('master-deleted-row-info');
+            const searchEl = document.getElementById('master-deleted-row-search');
+            if (!headEl || !bodyEl || !infoEl) return;
+
+            const search = searchEl ? (searchEl.value || '').trim() : '';
+            try {
+                let url = `/api/master/${currentFolderId}/rows/deleted?limit=200`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+                const data = await apiCall(url);
+
+                if (!data.success) {
+                    headEl.innerHTML = '<tr><th class="px-3 py-2 text-left text-xs font-medium text-red-700 uppercase">Error</th></tr>';
+                    bodyEl.innerHTML = `<tr><td class="px-3 py-2 text-sm text-red-600 text-center">${escapeHtml((data && (data.message || data.detail)) || 'Failed to load deleted rows')}</td></tr>`;
+                    infoEl.textContent = '0 deleted rows';
+                    return;
+                }
+
+                const rows = (data.data || []).filter(r => r && Object.keys(r).length > 0);
+                const total = data.total_count || 0;
+                const returned = data.returned_count || rows.length;
+
+                // Build the user-visible column list (exclude internal fields from the header)
+                const internal = new Set(['_row_fp', '_deleted_at']);
+                const cols = rows.length > 0
+                    ? Object.keys(rows[0]).filter(c => !internal.has(c))
+                    : [];
+
+                if (rows.length === 0) {
+                    headEl.innerHTML = cols.length
+                        ? `<tr>${cols.map(c => `<th class="px-3 py-2 text-left text-xs font-medium text-red-700 uppercase">${escapeHtml(c)}</th>`).join('')}<th class="px-3 py-2 text-center text-xs font-medium text-red-700 uppercase sticky right-0 bg-red-50">Action</th></tr>`
+                        : '<tr><th class="px-3 py-2 text-left text-xs font-medium text-red-700 uppercase">No deleted rows</th></tr>';
+                    bodyEl.innerHTML = `<tr><td colspan="${Math.max(cols.length, 1)}" class="px-3 py-2 text-sm text-gray-500 text-center">No deleted rows${search ? ' match your search' : ''}.</td></tr>`;
+                    infoEl.textContent = total === 0 ? '0 deleted rows' : `Showing ${returned} of ${total} deleted rows`;
+                    return;
+                }
+
+                // Header
+                headEl.innerHTML = '<tr>' + cols.map(c =>
+                    `<th class="px-3 py-2 text-left text-xs font-medium text-red-700 uppercase tracking-wider">${escapeHtml(c)}</th>`
+                ).join('') + '<th class="px-3 py-2 text-center text-xs font-medium text-red-700 uppercase tracking-wider sticky right-0 bg-red-50">Action</th></tr>';
+
+                // Body
+                bodyEl.innerHTML = rows.map(row => {
+                    const fp = row._row_fp || '';
+                    const cells = cols.map(c => {
+                        let v = row[c];
+                        if (v === null || v === undefined) v = '';
+                        v = String(v);
+                        if (v.length > 200) v = v.substring(0, 200) + '…';
+                        return `<td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap" title="${escapeHtml(v)}">${escapeHtml(v)}</td>`;
+                    }).join('');
+                    const actionCell = `<td class="px-3 py-2 text-center sticky right-0 bg-white">
+                        <button onclick="restoreDeletedRow('${escapeHtml(fp)}')" class="inline-flex items-center justify-center w-8 h-8 text-green-700 hover:text-green-900 hover:bg-green-50 rounded transition-colors" title="Restore to Data Preview">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h11a5 5 0 11-5 5M3 10l4-4M3 10l4 4"/></svg>
+                        </button>
+                    </td>`;
+                    return `<tr data-row-fp="${escapeHtml(fp)}">${cells}${actionCell}</tr>`;
+                }).join('');
+
+                infoEl.textContent = total === returned
+                    ? `${total} deleted row${total === 1 ? '' : 's'}`
+                    : `Showing ${returned} of ${total} deleted rows`;
+            } catch (error) {
+                if (bodyEl) {
+                    bodyEl.innerHTML = `<tr><td class="px-3 py-2 text-sm text-red-600 text-center">${escapeHtml(error.message || 'Failed to load deleted rows')}</td></tr>`;
+                }
+                if (infoEl) infoEl.textContent = '0 deleted rows';
+                console.error('Error loading deleted rows:', error);
+            }
+        }
+
+        async function restoreDeletedRow(rowFp) {
+            if (!rowFp) {
+                showToast('Cannot restore row: missing fingerprint', 'error');
+                return;
+            }
+            if (!confirm('Restore this row back to the Data Preview?')) return;
+            try {
+                const formData = new FormData();
+                formData.append('fingerprints', JSON.stringify([rowFp]));
+                const data = await apiCall(`/api/master/${currentFolderId}/rows/restore`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (data.success) {
+                    const restored = data.restored || 0;
+                    if (restored > 0) {
+                        showToast(`Row restored to Data Preview`, 'success', 3000);
+                    } else {
+                        showToast('Row was not in the deleted section (no change)', 'info', 3000);
+                    }
+                    await Promise.all([
+                        typeof loadMasterPreview === 'function' ? loadMasterPreview() : Promise.resolve(),
+                        typeof loadDeletedRows === 'function' ? loadDeletedRows() : Promise.resolve()
+                    ]);
+                } else {
+                    showToast(data.message || data.detail || 'Restore failed', 'error');
+                }
+            } catch (error) {
+                showToast('Restore failed: ' + error.message, 'error');
+            }
+        }
+
+        function exportDeletedRows() {
+            const searchEl = document.getElementById('master-deleted-row-search');
+            const search = searchEl ? (searchEl.value || '').trim() : '';
+            let url = `/api/master/${currentFolderId}/rows/deleted/export`;
+            if (search) url += `?search=${encodeURIComponent(search)}`;
+            // Open in a new tab to trigger the browser's native file download
+            window.open(url, '_blank');
+            showToast('Preparing Excel export of deleted rows...', 'info', 2500);
         }
 
         // ==================== RECYCLE BIN FUNCTIONS ====================
