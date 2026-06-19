@@ -57,7 +57,7 @@ def _get_primary_storage_path(company_id=None, module_id=None):
     os.makedirs(PRIMARY_DIR, exist_ok=True)
     return PRIMARY_DIR
 
-def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_amount_column=None, fields=None):
+def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_amount_column=None, fields=None, validation_id=1):
     """
     Generate unique primary data from selected file/sheet/column.
     Supports multi-field extraction with SUM and VLOOKUP aggregations.
@@ -75,6 +75,114 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
     """
     from database import get_db_connection, get_master_file
     
+
+    # Validation 1 & 3: Raw dump of all columns
+    if validation_id in [1, 3]:
+        # Handle regular file vs master file
+        if isinstance(file_id, str) and file_id.startswith('master_'):
+            folder_id = int(file_id.replace('master_', ''))
+            from database import get_master_file
+            master = get_master_file(folder_id)
+            if not master: raise Exception("Master file not found")
+            import duckdb
+            conn = duckdb.connect(master['db_path'], read_only=True)
+            try:
+                # Fetch non-deleted rows
+                df = conn.execute(
+                    """
+                    SELECT * FROM master_data 
+                    WHERE "__is_deleted" = FALSE OR "__is_deleted" IS NULL
+                    """
+                ).fetchdf()
+                
+                # Drop internal metadata columns
+                meta_cols = ["__is_deleted", "__deleted_at", "__row_fp"]
+                df = df.drop(columns=[col for col in meta_cols if col in df.columns])
+            finally:
+                conn.close()
+            df = df.astype(str)
+            company_id = master['company_id']
+            module_id = master['module_id']
+            original_name = f"Master_File_{folder_id}"
+        else:
+            from database import get_db_connection
+            conn = get_db_connection()
+            file = conn.execute("SELECT file_path, original_name, format, company_id, module_id FROM files WHERE id = ?", (file_id,)).fetchone()
+            conn.close()
+            if not file: raise Exception("File not found")
+            company_id = file['company_id']
+            module_id = file['module_id']
+            file_path = file['file_path']
+            if not os.path.exists(file_path):
+                file_path = os.path.join(UPLOAD_DIR, os.path.basename(file_path))
+            original_name = file['original_name']
+            file_format = file['format'].upper() if file['format'] else ''
+            
+            if file_format == 'CSV':
+                df = pd.read_csv(file_path, header=header_row-1, dtype=str, low_memory=False)
+            else:
+                s_name = sheet_name if sheet_name else 0
+                df = pd.read_excel(file_path, sheet_name=s_name, header=header_row-1, dtype=str)
+        
+        # Check for deactivated columns
+        deactivated_columns = []
+        if isinstance(fields, dict) and 'deactivated_columns' in fields:
+            deactivated_columns = fields['deactivated_columns']
+
+        # Build primary_df exactly as it is, with all columns assigned a letter
+        output_columns = []
+        letter_idx = 1
+        active_cols_in_df = []
+        for col in df.columns:
+            col_str = str(col)
+            if col_str in deactivated_columns:
+                continue
+            
+            letter = _column_number_to_letter(letter_idx) # A, B, C...
+            output_columns.append({
+                'letter': letter,
+                'name': col_str,
+                'reserved': False,
+                'aggregation': 'RAW',
+                'source_column': col_str
+            })
+            active_cols_in_df.append(col)
+            letter_idx += 1
+            
+        primary_df = df[active_cols_in_df].copy()
+        primary_df = primary_df.fillna("")
+        num_rows = len(primary_df)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        from database import get_physical_storage_path
+        storage_dir = get_physical_storage_path(PRIMARY_DIR, company_id, module_id)
+        os.makedirs(storage_dir, exist_ok=True)
+        
+        if num_rows > 1_000_000:
+            primary_filename = f"primary_file_val{validation_id}.csv"
+            primary_path = os.path.join(storage_dir, primary_filename)
+            primary_df.to_csv(primary_path, index=False)
+        else:
+            primary_filename = f"primary_file_val{validation_id}.xlsx"
+            primary_path = os.path.join(storage_dir, primary_filename)
+            primary_df.to_excel(primary_path, index=False, sheet_name='working')
+            
+        preview_records = primary_df.head(10).to_dict(orient='records')
+        
+        return {
+            'file_path': primary_path,
+            'filename': primary_filename,
+            'original_file': original_name,
+            'sheet_name': sheet_name,
+            'column_name': column_name,
+            'total_unique': num_rows,
+            'preview': preview_records,
+            'all_values': primary_df.to_dict(orient='records'),
+            'fields': output_columns,
+            'columns': output_columns,
+            'warnings': []
+        }
+
     # ---- Backward compatibility: migrate old sales_amount_column to fields ----
     if not fields and sales_amount_column:
         fields = [{
@@ -328,13 +436,50 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
     }
 
 
-def preview_primary_data(file_id, sheet_name, column_name, header_row=1, fields=None):
+def preview_primary_data(file_id, sheet_name, column_name, header_row=1, fields=None, validation_id=1):
     """
     Generate a quick preview without saving to disk.
     Returns preview rows and unique count only.
     """
     from database import get_db_connection, get_master_file
     
+
+    # Validation 1 & 3: Raw dump preview
+    if validation_id in [1, 3]:
+        from database import get_db_connection, get_master_file
+        if isinstance(file_id, str) and file_id.startswith('master_'):
+            folder_id = int(file_id.replace('master_', ''))
+            master = get_master_file(folder_id)
+            if not master: raise Exception("Master file not found")
+            import duckdb
+            conn = duckdb.connect(master['db_path'], read_only=True)
+            try:
+                df = conn.execute("SELECT * FROM master_data LIMIT 10").fetchdf()
+            finally:
+                conn.close()
+            df = df.astype(str)
+        else:
+            conn = get_db_connection()
+            file = conn.execute("SELECT file_path, original_name, format FROM files WHERE id = ?", (file_id,)).fetchone()
+            conn.close()
+            if not file: raise Exception("File not found")
+            file_path = file['file_path']
+            if not os.path.exists(file_path):
+                file_path = os.path.join(UPLOAD_DIR, os.path.basename(file_path))
+            file_format = file['format'].upper() if file['format'] else ''
+            
+            if file_format == 'CSV':
+                df = pd.read_csv(file_path, header=header_row-1, dtype=str, nrows=10)
+            else:
+                s_name = sheet_name if sheet_name else 0
+                df = pd.read_excel(file_path, sheet_name=s_name, header=header_row-1, dtype=str, nrows=10)
+                
+        return {
+            'preview': df.to_dict(orient='records'),
+            'total_unique': len(df), # In preview we don't know total length for raw fast, just return 0 or len(df)
+            'has_source_file_name': False
+        }
+
     if not fields:
         fields = []
     
@@ -548,7 +693,7 @@ def read_primary_file(filename, company_id=None, module_id=None):
             return pd.read_excel(file_path, sheet_name=0, header=0, dtype=str)
 
 
-def get_primary_field_columns(company_id=None, module_id=None):
+def get_primary_field_columns(company_id=None, module_id=None, validation_id=1):
     """
     Get the list of field column definitions from the most recent Phase 1 rule config.
     Used by Phase 2 and Phase 4 to know available primary data columns.
@@ -557,7 +702,7 @@ def get_primary_field_columns(company_id=None, module_id=None):
     conn = get_db_connection()
     try:
         rule = conn.execute(
-            "SELECT config FROM rules WHERE phase = 1 ORDER BY id DESC LIMIT 1"
+            "SELECT config FROM rules WHERE phase = 1 AND validation_id = ? ORDER BY id DESC LIMIT 1", (validation_id,)
         ).fetchone()
         if not rule:
             return []

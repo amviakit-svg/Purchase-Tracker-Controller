@@ -270,6 +270,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Request logging middleware to help diagnose 405/404 mismatches
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    response = await call_next(request)
+    if response.status_code >= 400:
+        logger.warning(f"HTTP {response.status_code} {request.method} {request.url.path}{'?' + request.url.query if request.url.query else ''}")
+    return response
+
 # Initialize DB on startup (ensure tables and migrations run)
 @app.on_event("startup")
 async def startup_event():
@@ -407,6 +415,29 @@ async def pydantic_validation_exception_handler(request, exc):
             "hint": "Check data types and required fields"
         }
     )
+
+# ============ 405 METHOD NOT ALLOWED HANDLER (Diagnose frontend/backend mismatch) ============
+async def method_not_allowed_handler(request, exc):
+    """
+    Log and return the exact method/path that triggered a 405.
+    This catches frontend calls hitting endpoints with the wrong HTTP verb.
+    """
+    logger.warning(f"405 Method Not Allowed: {request.method} {request.url.path} | Query: {request.url.query} | Headers: {dict(request.headers)}")
+    return JSONResponse(
+        status_code=405,
+        content={
+            "success": False,
+            "status": "error",
+            "message": f"Method {request.method} not allowed for {request.url.path}",
+            "detail": f"Method {request.method} not allowed for {request.url.path}",
+            "suggestion": "Check that the frontend uses the correct HTTP method for this endpoint",
+            "path": request.url.path,
+            "method": request.method
+        }
+    )
+
+# Register for both raw 405 responses and HTTPException(status_code=405)
+app.add_exception_handler(405, method_not_allowed_handler)
 
 # ============ STORAGE ERROR HANDLER ============
 @app.exception_handler(OSError)
@@ -2084,7 +2115,7 @@ async def get_active_syncs(current_user: Optional[dict] = Depends(get_optional_u
                             duckdb_files = set([row[0] for row in duckdb_files_res])
                         else:
                             # Column missing — log once and treat as "no file references in master"
-                            logger.warning(
+                            logger.debug(
                                 f"Folder {folder_id}: master_data has no 'Source_File_Name' "
                                 f"column (existing columns: {master_cols}); skipping deletion check."
                             )
@@ -2261,16 +2292,19 @@ async def get_master_info(folder_id: int, current_user: Optional[dict] = Depends
         conn = duckdb.connect(master['db_path'], read_only=True)
         count = conn.execute("SELECT COUNT(*) FROM master_data").fetchone()[0]
         
-        # Get distinct source files and their row counts
-        source_files = conn.execute("""
-            SELECT Source_File_Name, COUNT(*) as row_count 
-            FROM master_data 
-            GROUP BY Source_File_Name
-        """).fetchall()
-        
         # Get column names
         columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
         master['columns'] = columns
+        
+        if 'Source_File_Name' in columns:
+            # Get distinct source files and their row counts
+            source_files = conn.execute("""
+                SELECT Source_File_Name, COUNT(*) as row_count 
+                FROM master_data 
+                GROUP BY Source_File_Name
+            """).fetchall()
+        else:
+            source_files = []
         
         conn.close()
         master['row_count'] = count
@@ -3389,7 +3423,7 @@ async def delete_master_api(folder_id: int, current_user: Optional[dict] = Depen
 async def apply_master_formula(
     folder_id: int,
     formula_type: str = Form(...),
-    column_name: str = Form(...),
+    column_name: str = Form(''),
     source_columns: str = Form(""),
     constant_value: Optional[str] = Form(None),
     # SUMIF/COUNTIF parameters
@@ -4353,7 +4387,7 @@ async def find_replace_master(
 async def apply_formula_expression(
     folder_id: int,
     expression: str = Form(...),
-    column_name: str = Form(...),
+    column_name: str = Form(''),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     """
@@ -4909,11 +4943,12 @@ async def api_migrate_legacy_formulas(current_user: Optional[dict] = Depends(get
 @app.post("/api/primary/generate")
 async def generate_primary(
     file_id: str = Form(...),
-    sheet_name: str = Form(...),
-    column_name: str = Form(...),
+    sheet_name: str = Form(''),
+    column_name: str = Form(''),
     header_row: str = Form("1"),
     sales_amount_column: str = Form(None),
     fields: str = Form(None),
+    validation_id: int = Form(1),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     """Generate primary data file. Accepts optional 'fields' JSON array for multi-field extraction."""
@@ -4934,7 +4969,8 @@ async def generate_primary(
         result = generate_primary_data(
             file_id, sheet_name, column_name, header_row_int,
             sales_amount_column=sales_amount_column,
-            fields=parsed_fields
+            fields=parsed_fields,
+            validation_id=validation_id
         )
         
         cid, mid = _get_context(current_user)
@@ -4967,8 +5003,8 @@ async def generate_primary(
 @app.post("/api/primary/preview-live")
 async def preview_primary_live(
     file_id: str = Form(...),
-    sheet_name: str = Form(...),
-    column_name: str = Form(...),
+    sheet_name: str = Form(''),
+    column_name: str = Form(''),
     header_row: str = Form("1"),
     fields: str = Form(None)
 ):
@@ -5081,6 +5117,7 @@ async def create_rule(
     config: str = Form(...),
     name: Optional[str] = Form(None),
     processing_type: Optional[str] = Form('both'),
+    validation_id: int = Form(1),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     try:
@@ -5090,7 +5127,7 @@ async def create_rule(
         except:
             config_parsed = config
             
-        rule_id = save_rule(phase, config_parsed, name=name, processing_type=processing_type, company_id=cid, module_id=mid)
+        rule_id = save_rule(phase, config_parsed, name=name, processing_type=processing_type, company_id=cid, module_id=mid, validation_id=validation_id)
         return {"success": True, "rule_id": rule_id, "message": "Rule saved successfully"}
     except HTTPException:
         raise
@@ -5098,9 +5135,9 @@ async def create_rule(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/rules/{phase}")
-async def api_get_rules_by_phase(phase: int, current_user: Optional[dict] = Depends(get_optional_user)):
+async def api_get_rules_by_phase(phase: int, validation_id: int = 1, current_user: Optional[dict] = Depends(get_optional_user)):
     cid, mid = _get_context(current_user)
-    rules = get_rules_by_phase(phase, company_id=cid, module_id=mid)
+    rules = get_rules_by_phase(phase, company_id=cid, module_id=mid, validation_id=validation_id)
     for rule in rules:
         if rule.get('config') and isinstance(rule['config'], str):
             try:
@@ -5112,9 +5149,9 @@ async def api_get_rules_by_phase(phase: int, current_user: Optional[dict] = Depe
     return {"success": True, "rules": rules}
 
 @app.get("/api/rules")
-async def api_get_all_rules(current_user: Optional[dict] = Depends(get_optional_user)):
+async def api_get_all_rules(validation_id: int = 1, current_user: Optional[dict] = Depends(get_optional_user)):
     cid, mid = _get_context(current_user)
-    rules = get_all_rules(company_id=cid, module_id=mid)
+    rules = get_all_rules(company_id=cid, module_id=mid, validation_id=validation_id)
     for rule in rules:
         if rule.get('config') and isinstance(rule['config'], str):
             try:
@@ -5148,16 +5185,17 @@ def process_rules_background():
         cid = processing_status.get("company_id")
         mid = processing_status.get("module_id")
         uid = processing_status.get("user_id")
+        vid = processing_status.get("validation_id", 2)
         
         # Load rules scoped to company/module if authenticated context exists
         conn = get_db_connection()
         if cid is not None and mid is not None:
             all_rules = conn.execute(
-                "SELECT * FROM rules WHERE company_id = ? AND module_id = ? ORDER BY phase, id",
-                (cid, mid)
+                "SELECT * FROM rules WHERE company_id = ? AND module_id = ? AND validation_id = ? ORDER BY phase, id",
+                (cid, mid, vid)
             ).fetchall()
         else:
-            all_rules = conn.execute("SELECT * FROM rules ORDER BY phase, id").fetchall()
+            all_rules = conn.execute("SELECT * FROM rules WHERE validation_id = ? ORDER BY phase, id", (vid,)).fetchall()
         conn.close()
         
         if not all_rules:
@@ -5205,10 +5243,36 @@ def process_rules_background():
                 primary_df = read_primary_file(primary_generated_filename, cid, mid)
         
         if primary_df is None:
-            processing_status["result"] = {"success": False, "message": "Primary data file not found"}
-            processing_status["is_processing"] = False
-            processing_status["progress"] = "completed"
-            return
+            if vid in (1, 3):
+                try:
+                    f_id = p1_config.get('file_id')
+                    if p1_config.get('is_master') and str(f_id).isdigit():
+                        f_id = f'master_{f_id}'
+                    
+                    from primary_data import generate_primary_data
+                    primary_res = generate_primary_data(
+                        file_id=f_id,
+                        sheet_name=p1_config.get('sheet_name', ''),
+                        column_name=p1_config.get('column', ''),
+                        header_row=p1_config.get('header_row', 1),
+                        sales_amount_column=p1_config.get('sales_amount_column'),
+                        fields=p1_config.get('fields'),
+                        validation_id=vid
+                    )
+                    if primary_res and 'file_path' in primary_res:
+                        path = primary_res['file_path']
+                        if path.endswith('.csv'):
+                            primary_df = pd.read_csv(path, dtype=str, low_memory=False)
+                        else:
+                            primary_df = pd.read_excel(path, dtype=str)
+                except Exception as e:
+                    logger.error(f'Error generating primary data on the fly: {e}')
+            
+            if primary_df is None:
+                processing_status["result"] = {"success": False, "message": "Primary data file not found or could not be generated."}
+                processing_status["is_processing"] = False
+                processing_status["progress"] = "error"
+                return
         
         # ---- NEW: Apply Source File Name Filter ----
         filter_sources = processing_status.get("filter_sources")
@@ -5324,6 +5388,7 @@ def process_rules_background():
         # FIX BUG #4: Track created columns to detect overwrites
         _phase2_created_columns = set()
         
+        rules_list = []
         for rule in phase2_rules:
             config = json.loads(rule['config'])
             if isinstance(config, str):
@@ -5758,16 +5823,15 @@ def process_rules_background():
         # ===== PHASE 4: SUMMARY & PIVOT =====
         with processing_lock:
             processing_status["progress"] = "phase4"
-        
         # Load Phase 4 summaries scoped to company/module
         conn = get_db_connection()
         if cid is not None and mid is not None:
             phase4_rules = conn.execute(
-                "SELECT * FROM rules WHERE phase = 4 AND company_id = ? AND module_id = ? ORDER BY id",
-                (cid, mid)
+                "SELECT * FROM rules WHERE phase = 4 AND company_id = ? AND module_id = ? AND validation_id = ? ORDER BY id",
+                (cid, mid, vid)
             ).fetchall()
         else:
-            phase4_rules = conn.execute("SELECT * FROM rules WHERE phase = 4 ORDER BY id").fetchall()
+            phase4_rules = conn.execute("SELECT * FROM rules WHERE phase = 4 AND validation_id = ? ORDER BY id", (vid,)).fetchall()
         conn.close()
         
         summary_sheets = {}
@@ -5977,30 +6041,12 @@ def process_rules_background():
                     # Drop rows where all numeric values are 0 (e.g. Cartesian product artifacts), excluding Grand Total
                     if not pivot_table.empty:
                         num_cols = pivot_table.select_dtypes(include=['number']).columns
-                        if len(num_cols) > 0:
-                            non_zero_mask = (pivot_table[num_cols] != 0).any(axis=1)
-                            if isinstance(pivot_table.index, pd.MultiIndex):
-                                try:
-                                    non_zero_mask = non_zero_mask | (pivot_table.index.get_level_values(0) == 'Grand Total')
-                                except: pass
-                            else:
-                                if 'Grand Total' in pivot_table.index:
-                                    non_zero_mask.loc['Grand Total'] = True
-                            pivot_table = pivot_table[non_zero_mask]
+
                     
                     # Drop rows where all numeric values are 0 (e.g. Cartesian product artifacts), excluding Grand Total
                     if not pivot_table.empty:
                         num_cols = pivot_table.select_dtypes(include=['number']).columns
-                        if len(num_cols) > 0:
-                            non_zero_mask = (pivot_table[num_cols] != 0).any(axis=1)
-                            if isinstance(pivot_table.index, pd.MultiIndex):
-                                try:
-                                    non_zero_mask = non_zero_mask | (pivot_table.index.get_level_values(0) == 'Grand Total')
-                                except: pass
-                            else:
-                                if 'Grand Total' in pivot_table.index:
-                                    non_zero_mask.loc['Grand Total'] = True
-                            pivot_table = pivot_table[non_zero_mask]
+
                     
                     # Log summary stats for debugging
                     total_rows_in_filter = len(filtered_df)
@@ -6439,7 +6485,8 @@ def process_rules_background():
                 file_size=file_size_mb,
                 processing_time=f"{elapsed:.1f}s",
                 company_id=cid,
-                module_id=mid
+                module_id=mid,
+                validation_id=vid
             )
         except Exception as e:
             logger.error(f"Error saving processed file metadata: {e}")
@@ -6503,13 +6550,13 @@ def process_rules_background():
             processing_status["is_processing"] = False
 
 @app.get("/api/primary/source-files")
-async def get_primary_source_files(current_user: Optional[dict] = Depends(get_optional_user)):
+async def get_primary_source_files(validation_id: int = 1, current_user: Optional[dict] = Depends(get_optional_user)):
     """Get all unique Source_File_Name entries from the active primary data file"""
     try:
         cid, mid = _get_context(current_user)
-        rules = get_rules_by_phase(1, company_id=cid, module_id=mid)
+        rules = get_rules_by_phase(1, company_id=cid, module_id=mid, validation_id=validation_id)
         if not rules:
-            return {"success": False, "message": "No Phase 1 rule configured"}
+            return {"success": False, "message": f"No Phase 1 rule configured for validation {validation_id}"}
         
         config = json.loads(rules[-1]['config'])
         if isinstance(config, str):
@@ -6549,6 +6596,7 @@ async def process_all_rules(
     selected_source_files: Optional[str] = Form(None),
     custom_filename: Optional[str] = Form(None),
     force: bool = Form(False),
+    validation_id: int = Form(2),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     """Start processing in background with optional source file filter"""
@@ -6572,9 +6620,9 @@ async def process_all_rules(
         try:
             conn = get_db_connection()
             if cid is not None and mid is not None:
-                all_rules = conn.execute("SELECT * FROM rules WHERE company_id = ? AND module_id = ? ORDER BY phase, id", (cid, mid)).fetchall()
+                all_rules = conn.execute("SELECT * FROM rules WHERE company_id = ? AND module_id = ? AND validation_id = ? ORDER BY phase, id", (cid, mid, validation_id)).fetchall()
             else:
-                all_rules = conn.execute("SELECT * FROM rules ORDER BY phase, id").fetchall()
+                all_rules = conn.execute("SELECT * FROM rules WHERE validation_id = ? ORDER BY phase, id", (validation_id,)).fetchall()
             conn.close()
             
             p1 = [dict(r) for r in all_rules if r['phase'] == 1]
@@ -6623,7 +6671,7 @@ async def process_all_rules(
                 except: pass
                 
             missing = required_cols - generated_cols
-            if missing:
+            if missing and validation_id not in (1, 3):
                 return {
                     "success": False,
                     "type": "validation_warning",
@@ -6654,6 +6702,7 @@ async def process_all_rules(
             "custom_filename": custom_filename,
             "company_id": cid,
             "module_id": mid,
+            "validation_id": validation_id,
             "user_id": current_user.get('user_id') if current_user else None
         }
     
@@ -6738,15 +6787,16 @@ async def save_summary(
     config: str = Form(...), 
     name: str = Form(...), 
     processing_type: Optional[str] = Form('both'),
+    validation_id: int = Form(1),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     try:
         cid, mid = _get_context(current_user)
         conn = get_db_connection()
-        conn.execute("DELETE FROM rules WHERE phase = 4 AND name = ? AND company_id = ? AND module_id = ?", (name, cid, mid))
+        conn.execute("DELETE FROM rules WHERE phase = 4 AND name = ? AND company_id = ? AND module_id = ? AND validation_id = ?", (name, cid, mid, validation_id))
         cursor = conn.execute(
-            "INSERT INTO rules (name, phase, config, processing_type, company_id, module_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (name, 4, config, processing_type, cid, mid)
+            "INSERT INTO rules (name, phase, config, processing_type, company_id, module_id, validation_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, 4, config, processing_type, cid, mid, validation_id)
         )
         rule_id = cursor.lastrowid
         conn.commit()
@@ -6760,11 +6810,11 @@ async def save_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/summary/list")
-async def list_summaries(current_user: Optional[dict] = Depends(get_optional_user)):
+async def list_summaries(validation_id: int = 1, current_user: Optional[dict] = Depends(get_optional_user)):
     try:
         cid, mid = _get_context(current_user)
         conn = get_db_connection()
-        rules = conn.execute("SELECT * FROM rules WHERE phase = 4 AND company_id = ? AND module_id = ? ORDER BY id DESC", (cid, mid)).fetchall()
+        rules = conn.execute("SELECT * FROM rules WHERE phase = 4 AND company_id = ? AND module_id = ? AND validation_id = ? ORDER BY id DESC", (cid, mid, validation_id)).fetchall()
         conn.close()
         summaries = []
         for r in rules:
@@ -6799,12 +6849,12 @@ async def delete_summary(summary_id: int, current_user: Optional[dict] = Depends
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/summary/clear-all")
-async def clear_all_summaries(current_user: Optional[dict] = Depends(get_optional_user)):
-    """Delete ALL Phase 4 summary rules for current company and module."""
+async def clear_all_summaries(validation_id: int = 1, current_user: Optional[dict] = Depends(get_optional_user)):
+    """Delete ALL Phase 4 summary rules for current company, module, and validation."""
     try:
         cid, mid = _get_context(current_user)
         conn = get_db_connection()
-        conn.execute("DELETE FROM rules WHERE phase = 4 AND company_id = ? AND module_id = ?", (cid, mid))
+        conn.execute("DELETE FROM rules WHERE phase = 4 AND company_id = ? AND module_id = ? AND validation_id = ?", (cid, mid, validation_id))
         conn.commit()
         conn.close()
         return {"success": True, "message": "All summaries cleared"}
@@ -6952,29 +7002,11 @@ async def preview_summary(
         
         if not pivot_table.empty:
             num_cols = pivot_table.select_dtypes(include=['number']).columns
-            if len(num_cols) > 0:
-                non_zero_mask = (pivot_table[num_cols] != 0).any(axis=1)
-                if isinstance(pivot_table.index, pd.MultiIndex):
-                    try:
-                        non_zero_mask = non_zero_mask | (pivot_table.index.get_level_values(0) == 'Grand Total')
-                    except: pass
-                else:
-                    if 'Grand Total' in pivot_table.index:
-                        non_zero_mask.loc['Grand Total'] = True
-                pivot_table = pivot_table[non_zero_mask]
+
         
         if not pivot_table.empty:
             num_cols = pivot_table.select_dtypes(include=['number']).columns
-            if len(num_cols) > 0:
-                non_zero_mask = (pivot_table[num_cols] != 0).any(axis=1)
-                if isinstance(pivot_table.index, pd.MultiIndex):
-                    try:
-                        non_zero_mask = non_zero_mask | (pivot_table.index.get_level_values(0) == 'Grand Total')
-                    except: pass
-                else:
-                    if 'Grand Total' in pivot_table.index:
-                        non_zero_mask.loc['Grand Total'] = True
-                pivot_table = pivot_table[non_zero_mask]
+
         
         # Rename index and columns to custom primary column label if configured
         custom_primary_label = p1_config.get('column', 'Primary_Value')
@@ -7377,12 +7409,13 @@ async def get_processed_files_list(
     financial_year: Optional[str] = None,
     report_type: Optional[str] = None,
     month_name: Optional[str] = None,
+    validation_id: Optional[int] = None,
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
     try:
         from database import get_processed_files
         cid, mid = _get_context(current_user)
-        files = get_processed_files(company_id=cid, module_id=mid, financial_year=financial_year, report_type=report_type, month_name=month_name)
+        files = get_processed_files(company_id=cid, module_id=mid, financial_year=financial_year, report_type=report_type, month_name=month_name, validation_id=validation_id)
         # Format created_at to IST for each file
         for file in files:
             if 'created_at' in file and file['created_at']:
@@ -7827,14 +7860,33 @@ async def download_processed_file(file_id: int):
         file_path = file['file_path']
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="File not found on disk")
+            
+        # Construct dynamic filename based on validation type
+        val_id = file.get('validation')
+        dt_str = "Unknown_Date"
+        created_at_str = file.get('created_at')
+        if created_at_str:
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
+                dt_str = dt.strftime("%d-%m-%Y %H-%M-%S")
+            except:
+                pass
+
+        if val_id == 1:
+            dl_filename = f"GRN vs Vendor Invoice Reconciliation Report {dt_str}.xlsx"
+        elif val_id == 3:
+            dl_filename = f"Tally vs Vendor Invoice Reconciliation Report {dt_str}.xlsx"
+        else:
+            dl_filename = f"Vendor Invoice vs Tally Reconciliation Report {dt_str}.xlsx"
         
         from starlette.responses import FileResponse as StarletteFileResponse
         return StarletteFileResponse(
             file_path,
-            filename=file['filename'],
+            filename=dl_filename,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f'attachment; filename="{file["filename"]}"',
+                "Content-Disposition": f'attachment; filename="{dl_filename}"',
                 "Cache-Control": "no-cache"
             }
         )

@@ -1719,7 +1719,102 @@
             
             const columnNamesInput = document.getElementById('master-column-names').value.trim();
             
-            let hasError = false;
+            
+                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+                
+                // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
+                if (isVal1or3) {
+                    if (!fileId) {
+                        showFieldError('phase1-file', 'Please select a file');
+                        hasError = true;
+                        firstErrorElement = document.getElementById('phase1-file');
+                    }
+                    if (hasError) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        if (firstErrorElement) firstErrorElement.focus();
+                        return;
+                    }
+                    
+                    // Call generation first
+                    const generateForm = new FormData();
+                    generateForm.append('file_id', fileId);
+                    generateForm.append('validation_id', window.currentValidation);
+                    
+                    const genData = await apiCall('/api/primary/generate', {
+                        method: 'POST',
+                        body: generateForm
+                    });
+                    
+                    if (!genData || !genData.success) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        showToast('Failed to generate primary data: ' + (genData?.detail || 'Unknown error'), 'error');
+                        return;
+                    }
+
+                    const config = {
+                        file_id: fileId,
+                        sheet: '',
+                        column: '',
+                        fields: genData.fields || [],
+                        primary_file: genData.filename,
+                        total_unique: genData.total_unique
+                    };
+                    
+                    const formData = new FormData();
+                    formData.append('phase', 1);
+                    formData.append('validation_id', window.currentValidation);
+                    formData.append('config', JSON.stringify(config));
+                    
+                    const data = await apiCall('/api/rules', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (saveBtn) saveBtn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                    
+                    if (data.success) {
+                        showToast('Phase 1 configuration saved!', 'success');
+                        
+                        // Update Phase 4 preview headers directly if we are on Val 1/3
+                        const thead = document.getElementById('phase4-primary-preview-header');
+                        if (thead && genData.fields) {
+                            let headerHtml = '';
+                            genData.fields.forEach(f => {
+                                headerHtml += `<th class="text-left font-medium text-gray-600 px-3 py-2">${f.name}</th>`;
+                            });
+                            thead.innerHTML = headerHtml;
+                        }
+                        const tbody = document.getElementById('phase4-primary-preview-body');
+                        if (tbody && genData.preview) {
+                            tbody.innerHTML = '';
+                            genData.preview.forEach(row => {
+                                const tr = document.createElement('tr');
+                                tr.className = 'border-b border-gray-100';
+                                let rowHtml = '';
+                                genData.fields.forEach(f => {
+                                    const val = row[f.name] !== undefined ? row[f.name] : '';
+                                    rowHtml += `<td class="px-3 py-2 text-gray-800">${val}</td>`;
+                                });
+                                tr.innerHTML = rowHtml;
+                                tbody.appendChild(tr);
+                            });
+                        }
+                        
+                        const p4c = document.getElementById('phase4-primary-preview-container');
+                        if (p4c) p4c.classList.remove('hidden');
+                        
+                        await loadAvailableColumnsForSummary();
+                    }
+                    return;
+                }
+
+                let hasError = false;
             let firstErrorElement = null;
 
             // Validate Column Names (mandatory)
@@ -2257,6 +2352,29 @@
         }
 
         // ==================== RULE MAPPING ====================
+        window.currentValidation = 1;
+
+        function switchValidation(validationId) {
+            window.currentValidation = validationId;
+            document.querySelectorAll('.val-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-900');
+                btn.classList.add('text-gray-600');
+            });
+            const activeBtn = document.getElementById(`val-${validationId}-btn`);
+            if(activeBtn) {
+                activeBtn.classList.add('bg-white', 'shadow-sm', 'text-gray-900');
+                activeBtn.classList.remove('text-gray-600');
+            }
+            
+            // Reload all phases for the new validation
+            const pageRules = document.getElementById('page-rules');
+            if (pageRules && !pageRules.classList.contains('hidden')) {
+                loadSavedPhase1();
+                if (window.currentValidation === 2) loadSavedPhase2();
+                loadSavedPhase3();
+                loadSavedPhase4();
+            }
+        }
         function switchPhase(phase) {
             document.querySelectorAll('.phase-content').forEach(el => el.classList.add('hidden'));
             document.getElementById(`phase-${phase}`).classList.remove('hidden');
@@ -2480,7 +2598,17 @@
 
         async function loadSavedPhase1() {
             // Load saved Phase 1 rules
-            const data = await apiCall('/api/rules/1');
+            const data = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
+            if (!data.success || !data.rules || data.rules.length === 0) {
+                document.getElementById('phase1-file').value = '';
+                document.getElementById('phase1-sheet').innerHTML = '<option value="">-- Select Sheet --</option>';
+                document.getElementById('phase1-column').innerHTML = '<option value="">-- Select Column --</option>';
+                const dyn = document.getElementById('phase1-dynamic-fields');
+                if (dyn) dyn.innerHTML = '';
+                const p4c = document.getElementById('phase4-primary-preview-container');
+                if(p4c) p4c.classList.add('hidden');
+                return;
+            }
             if (data.success && data.rules && data.rules.length > 0) {
                 const latestRule = data.rules[data.rules.length - 1];
                 try {
@@ -2522,7 +2650,7 @@
         async function loadPhase4PrimaryPreviewState(config = null) {
             try {
                 if (!config) {
-                    const data = await apiCall('/api/rules/1');
+                    const data = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
                     if (data.success && data.rules && data.rules.length > 0) {
                         const latestRule = data.rules[data.rules.length - 1];
                         config = JSON.parse(latestRule.config);
@@ -2593,7 +2721,7 @@
             
             let data;
             try {
-                data = await apiCall('/api/rules/2');
+                data = await apiCall(`/api/rules/2?validation_id=${window.currentValidation}`);
             } catch (e) {
                 console.error('Failed to load Phase 2 rules:', e);
                 tbody.innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-sm text-gray-500">Unable to load saved rules. Add new rules below.</td></tr>';
@@ -2892,7 +3020,7 @@
             
             // Get primary file info
             const primaryData = await apiCall('/api/primary/files');
-            const rulesData1 = await apiCall('/api/rules/1');
+            const rulesData1 = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
             let primaryOption = '';
             
             let hasPhase1Rules = false;
@@ -3157,7 +3285,7 @@
             }
 
             const primaryData = await apiCall('/api/primary/files');
-            const rulesData = await apiCall('/api/rules/1');
+            const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
             
             let primaryFiles = [];
             if (primaryData.success && primaryData.files && primaryData.files.length > 0) {
@@ -3388,13 +3516,109 @@
                 if (spinner) spinner.classList.remove('hidden');
                 if (saveText) saveText.textContent = 'Saving...';
                 
+                let hasError = false;
+                let firstErrorElement = null;
                 const fileEl = document.getElementById('phase1-file');
                 const fileId = String(fileEl.value || '');
                 const sheetName = String(document.getElementById('phase1-sheet').value || '');
                 const column = String(document.getElementById('phase1-column').value || '');
 
-                let hasError = false;
-                let firstErrorElement = null;
+                
+                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+                
+                // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
+                if (isVal1or3) {
+                    if (!fileId) {
+                        showFieldError('phase1-file', 'Please select a file');
+                        hasError = true;
+                        firstErrorElement = document.getElementById('phase1-file');
+                    }
+                    if (hasError) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        if (firstErrorElement) firstErrorElement.focus();
+                        return;
+                    }
+                    
+                    // Call generation first
+                    const generateForm = new FormData();
+                    generateForm.append('file_id', fileId);
+                    generateForm.append('validation_id', window.currentValidation);
+                    
+                    const genData = await apiCall('/api/primary/generate', {
+                        method: 'POST',
+                        body: generateForm
+                    });
+                    
+                    if (!genData || !genData.success) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        showToast('Failed to generate primary data: ' + (genData?.detail || 'Unknown error'), 'error');
+                        return;
+                    }
+
+                    const config = {
+                        file_id: fileId,
+                        sheet: '',
+                        column: '',
+                        fields: genData.fields || [],
+                        primary_file: genData.filename,
+                        total_unique: genData.total_unique
+                    };
+                    
+                    const formData = new FormData();
+                    formData.append('phase', 1);
+                    formData.append('validation_id', window.currentValidation);
+                    formData.append('config', JSON.stringify(config));
+                    
+                    const data = await apiCall('/api/rules', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (saveBtn) saveBtn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                    
+                    if (data.success) {
+                        showToast('Phase 1 configuration saved!', 'success');
+                        
+                        // Update Phase 4 preview headers directly if we are on Val 1/3
+                        const thead = document.getElementById('phase4-primary-preview-header');
+                        if (thead && genData.fields) {
+                            let headerHtml = '';
+                            genData.fields.forEach(f => {
+                                headerHtml += `<th class="text-left font-medium text-gray-600 px-3 py-2">${f.name}</th>`;
+                            });
+                            thead.innerHTML = headerHtml;
+                        }
+                        const tbody = document.getElementById('phase4-primary-preview-body');
+                        if (tbody && genData.preview) {
+                            tbody.innerHTML = '';
+                            genData.preview.forEach(row => {
+                                const tr = document.createElement('tr');
+                                tr.className = 'border-b border-gray-100';
+                                let rowHtml = '';
+                                genData.fields.forEach(f => {
+                                    const val = row[f.name] !== undefined ? row[f.name] : '';
+                                    rowHtml += `<td class="px-3 py-2 text-gray-800">${val}</td>`;
+                                });
+                                tr.innerHTML = rowHtml;
+                                tbody.appendChild(tr);
+                            });
+                        }
+                        
+                        const p4c = document.getElementById('phase4-primary-preview-container');
+                        if (p4c) p4c.classList.remove('hidden');
+                        
+                        await loadAvailableColumnsForSummary();
+                    }
+                    return;
+                }
+
+                
 
                 if (!fileId) {
                     showFieldError('phase1-file', 'Please select a file');
@@ -3463,6 +3687,7 @@
 
                 const formData = new FormData();
                 formData.append('phase', 1);
+                formData.append('validation_id', window.currentValidation || 1);
                 formData.append('config', config);
                 formData.append('name', 'Primary Data Selection');
 
@@ -3511,7 +3736,7 @@
                 if (saveText) saveText.textContent = 'Generating...';
                 
                 // Fetch saved Phase 1 Rule
-                const p1Data = await apiCall('/api/rules/1');
+                const p1Data = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
                 if (!p1Data.success || !p1Data.rules || p1Data.rules.length === 0) {
                     throw new Error("No Phase 1 rule found. Please configure and save Phase 1 first.");
                 }
@@ -3552,6 +3777,7 @@
 
                 const formData = new FormData();
                 formData.append('phase', 1);
+                formData.append('validation_id', window.currentValidation || 1);
                 formData.append('config', JSON.stringify(p1Config));
                 formData.append('name', 'Primary Data Selection');
 
@@ -4348,7 +4574,7 @@
 
             // Get primary data files - fetch rules to get column names
             const primaryData = await apiCall('/api/primary/files');
-            const rulesData = await apiCall('/api/rules/1');
+            const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
             
             let primaryFiles = [];
             if (primaryData.success && primaryData.files && primaryData.files.length > 0) {
@@ -4479,7 +4705,7 @@
         async function getPhase1Columns() {
             let cols = ['Unique_ID', 'Source_File_Name'];
             try {
-                const rulesData = await apiCall('/api/rules/1');
+                const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
                 if (rulesData.success && rulesData.rules && rulesData.rules.length > 0) {
                     let configRaw = rulesData.rules[rulesData.rules.length - 1].config;
                     const p1Config = typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw;
@@ -4574,7 +4800,102 @@
             
             const rows = document.querySelectorAll('#matching-rules-body tr');
             const rules = [];
-            let hasError = false;
+            
+                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+                
+                // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
+                if (isVal1or3) {
+                    if (!fileId) {
+                        showFieldError('phase1-file', 'Please select a file');
+                        hasError = true;
+                        firstErrorElement = document.getElementById('phase1-file');
+                    }
+                    if (hasError) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        if (firstErrorElement) firstErrorElement.focus();
+                        return;
+                    }
+                    
+                    // Call generation first
+                    const generateForm = new FormData();
+                    generateForm.append('file_id', fileId);
+                    generateForm.append('validation_id', window.currentValidation);
+                    
+                    const genData = await apiCall('/api/primary/generate', {
+                        method: 'POST',
+                        body: generateForm
+                    });
+                    
+                    if (!genData || !genData.success) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        showToast('Failed to generate primary data: ' + (genData?.detail || 'Unknown error'), 'error');
+                        return;
+                    }
+
+                    const config = {
+                        file_id: fileId,
+                        sheet: '',
+                        column: '',
+                        fields: genData.fields || [],
+                        primary_file: genData.filename,
+                        total_unique: genData.total_unique
+                    };
+                    
+                    const formData = new FormData();
+                    formData.append('phase', 1);
+                    formData.append('validation_id', window.currentValidation);
+                    formData.append('config', JSON.stringify(config));
+                    
+                    const data = await apiCall('/api/rules', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (saveBtn) saveBtn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                    
+                    if (data.success) {
+                        showToast('Phase 1 configuration saved!', 'success');
+                        
+                        // Update Phase 4 preview headers directly if we are on Val 1/3
+                        const thead = document.getElementById('phase4-primary-preview-header');
+                        if (thead && genData.fields) {
+                            let headerHtml = '';
+                            genData.fields.forEach(f => {
+                                headerHtml += `<th class="text-left font-medium text-gray-600 px-3 py-2">${f.name}</th>`;
+                            });
+                            thead.innerHTML = headerHtml;
+                        }
+                        const tbody = document.getElementById('phase4-primary-preview-body');
+                        if (tbody && genData.preview) {
+                            tbody.innerHTML = '';
+                            genData.preview.forEach(row => {
+                                const tr = document.createElement('tr');
+                                tr.className = 'border-b border-gray-100';
+                                let rowHtml = '';
+                                genData.fields.forEach(f => {
+                                    const val = row[f.name] !== undefined ? row[f.name] : '';
+                                    rowHtml += `<td class="px-3 py-2 text-gray-800">${val}</td>`;
+                                });
+                                tr.innerHTML = rowHtml;
+                                tbody.appendChild(tr);
+                            });
+                        }
+                        
+                        const p4c = document.getElementById('phase4-primary-preview-container');
+                        if (p4c) p4c.classList.remove('hidden');
+                        
+                        await loadAvailableColumnsForSummary();
+                    }
+                    return;
+                }
+
+                let hasError = false;
             let firstErrorElement = null;
             
             rows.forEach(row => {
@@ -4768,6 +5089,7 @@
 
             const formData = new FormData();
             formData.append('phase', 2);
+                formData.append('validation_id', window.currentValidation || 1);
             formData.append('config', JSON.stringify(rules));
             formData.append('name', 'Matching Rules');
 
@@ -5016,7 +5338,102 @@
             
             const groups = [];
             const groupDivs = document.querySelectorAll('#remarks-groups-container > div');
-            let hasError = false;
+            
+                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+                
+                // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
+                if (isVal1or3) {
+                    if (!fileId) {
+                        showFieldError('phase1-file', 'Please select a file');
+                        hasError = true;
+                        firstErrorElement = document.getElementById('phase1-file');
+                    }
+                    if (hasError) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        if (firstErrorElement) firstErrorElement.focus();
+                        return;
+                    }
+                    
+                    // Call generation first
+                    const generateForm = new FormData();
+                    generateForm.append('file_id', fileId);
+                    generateForm.append('validation_id', window.currentValidation);
+                    
+                    const genData = await apiCall('/api/primary/generate', {
+                        method: 'POST',
+                        body: generateForm
+                    });
+                    
+                    if (!genData || !genData.success) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        showToast('Failed to generate primary data: ' + (genData?.detail || 'Unknown error'), 'error');
+                        return;
+                    }
+
+                    const config = {
+                        file_id: fileId,
+                        sheet: '',
+                        column: '',
+                        fields: genData.fields || [],
+                        primary_file: genData.filename,
+                        total_unique: genData.total_unique
+                    };
+                    
+                    const formData = new FormData();
+                    formData.append('phase', 1);
+                    formData.append('validation_id', window.currentValidation);
+                    formData.append('config', JSON.stringify(config));
+                    
+                    const data = await apiCall('/api/rules', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (saveBtn) saveBtn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                    
+                    if (data.success) {
+                        showToast('Phase 1 configuration saved!', 'success');
+                        
+                        // Update Phase 4 preview headers directly if we are on Val 1/3
+                        const thead = document.getElementById('phase4-primary-preview-header');
+                        if (thead && genData.fields) {
+                            let headerHtml = '';
+                            genData.fields.forEach(f => {
+                                headerHtml += `<th class="text-left font-medium text-gray-600 px-3 py-2">${f.name}</th>`;
+                            });
+                            thead.innerHTML = headerHtml;
+                        }
+                        const tbody = document.getElementById('phase4-primary-preview-body');
+                        if (tbody && genData.preview) {
+                            tbody.innerHTML = '';
+                            genData.preview.forEach(row => {
+                                const tr = document.createElement('tr');
+                                tr.className = 'border-b border-gray-100';
+                                let rowHtml = '';
+                                genData.fields.forEach(f => {
+                                    const val = row[f.name] !== undefined ? row[f.name] : '';
+                                    rowHtml += `<td class="px-3 py-2 text-gray-800">${val}</td>`;
+                                });
+                                tr.innerHTML = rowHtml;
+                                tbody.appendChild(tr);
+                            });
+                        }
+                        
+                        const p4c = document.getElementById('phase4-primary-preview-container');
+                        if (p4c) p4c.classList.remove('hidden');
+                        
+                        await loadAvailableColumnsForSummary();
+                    }
+                    return;
+                }
+
+                let hasError = false;
             let firstErrorElement = null;
             
             groupDivs.forEach(groupDiv => {
@@ -5164,6 +5581,7 @@
             
             const formData = new FormData();
             formData.append('phase', 3);
+                formData.append('validation_id', window.currentValidation || 1);
             formData.append('config', JSON.stringify(groups));
             formData.append('name', 'Remarks & Actions');
             
@@ -5182,8 +5600,8 @@
         }
 
         async function loadSavedPhase3() {
-            const data = await apiCall('/api/rules/3');
-            if (!data.success || !data.rules || data.rules.length === 0) return;
+            const data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`);
+            if (!data.success || !data.rules || data.rules.length === 0) { document.getElementById('remarks-groups-container').innerHTML = ''; return; }
             
             const latestRule = data.rules[data.rules.length - 1];
             let groups;
@@ -5310,13 +5728,13 @@
         async function loadAvailableColumnsForSummary() {
             // Get columns from Phase 1 primary data
             const primaryData = await apiCall('/api/primary/files');
-            const rulesData = await apiCall('/api/rules/1');
+            const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
             
             await getPhase1Columns();
             let columns = [...GLOBAL_PHASE1_COLUMNS];
             
             // Get columns from Phase 2 rules
-            const phase2Data = await apiCall('/api/rules/2');
+            const phase2Data = await apiCall(`/api/rules/2?validation_id=${window.currentValidation}`);
             if (phase2Data.success && phase2Data.rules && phase2Data.rules.length > 0) {
                 try {
                     const rules = JSON.parse(phase2Data.rules[phase2Data.rules.length - 1].config);
@@ -5327,7 +5745,7 @@
             }
             
             // Get columns from Phase 3 rules
-            const phase3Data = await apiCall('/api/rules/3');
+            const phase3Data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`);
             if (phase3Data.success && phase3Data.rules && phase3Data.rules.length > 0) {
                 try {
                     const groups = JSON.parse(phase3Data.rules[phase3Data.rules.length - 1].config);
@@ -5820,7 +6238,102 @@
             
             const cards = document.querySelectorAll('#summary-configs-container > div[id^="summary-card-"]');
             const summaries = [];
-            let hasError = false;
+            
+                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+                
+                // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
+                if (isVal1or3) {
+                    if (!fileId) {
+                        showFieldError('phase1-file', 'Please select a file');
+                        hasError = true;
+                        firstErrorElement = document.getElementById('phase1-file');
+                    }
+                    if (hasError) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        if (firstErrorElement) firstErrorElement.focus();
+                        return;
+                    }
+                    
+                    // Call generation first
+                    const generateForm = new FormData();
+                    generateForm.append('file_id', fileId);
+                    generateForm.append('validation_id', window.currentValidation);
+                    
+                    const genData = await apiCall('/api/primary/generate', {
+                        method: 'POST',
+                        body: generateForm
+                    });
+                    
+                    if (!genData || !genData.success) {
+                        if (saveBtn) saveBtn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                        showToast('Failed to generate primary data: ' + (genData?.detail || 'Unknown error'), 'error');
+                        return;
+                    }
+
+                    const config = {
+                        file_id: fileId,
+                        sheet: '',
+                        column: '',
+                        fields: genData.fields || [],
+                        primary_file: genData.filename,
+                        total_unique: genData.total_unique
+                    };
+                    
+                    const formData = new FormData();
+                    formData.append('phase', 1);
+                    formData.append('validation_id', window.currentValidation);
+                    formData.append('config', JSON.stringify(config));
+                    
+                    const data = await apiCall('/api/rules', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (saveBtn) saveBtn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    if (saveText) saveText.textContent = 'Save Phase 1 Rule';
+                    
+                    if (data.success) {
+                        showToast('Phase 1 configuration saved!', 'success');
+                        
+                        // Update Phase 4 preview headers directly if we are on Val 1/3
+                        const thead = document.getElementById('phase4-primary-preview-header');
+                        if (thead && genData.fields) {
+                            let headerHtml = '';
+                            genData.fields.forEach(f => {
+                                headerHtml += `<th class="text-left font-medium text-gray-600 px-3 py-2">${f.name}</th>`;
+                            });
+                            thead.innerHTML = headerHtml;
+                        }
+                        const tbody = document.getElementById('phase4-primary-preview-body');
+                        if (tbody && genData.preview) {
+                            tbody.innerHTML = '';
+                            genData.preview.forEach(row => {
+                                const tr = document.createElement('tr');
+                                tr.className = 'border-b border-gray-100';
+                                let rowHtml = '';
+                                genData.fields.forEach(f => {
+                                    const val = row[f.name] !== undefined ? row[f.name] : '';
+                                    rowHtml += `<td class="px-3 py-2 text-gray-800">${val}</td>`;
+                                });
+                                tr.innerHTML = rowHtml;
+                                tbody.appendChild(tr);
+                            });
+                        }
+                        
+                        const p4c = document.getElementById('phase4-primary-preview-container');
+                        if (p4c) p4c.classList.remove('hidden');
+                        
+                        await loadAvailableColumnsForSummary();
+                    }
+                    return;
+                }
+
+                let hasError = false;
             let firstErrorElement = null;
             
             if (cards.length === 0) {
@@ -5903,6 +6416,7 @@
                 const formData = new FormData();
                 formData.append('name', summary.name);
                 formData.append('config', JSON.stringify(summary));
+                formData.append('validation_id', window.currentValidation || 1);
                 
                 await apiCall('/api/summary/save', {
                     method: 'POST',
@@ -5916,7 +6430,7 @@
 
         async function loadSavedPhase4() {
             try {
-                const data = await apiCall('/api/summary/list');
+                const data = await apiCall(`/api/summary/list?validation_id=${window.currentValidation || 1}`);
                 console.log('Phase 4 loaded:', data);
                 
                 const container = document.getElementById('summary-configs-container');

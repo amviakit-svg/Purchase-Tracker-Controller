@@ -1,0 +1,176 @@
+async function processAllRules(force = false) {
+            try {
+            try {
+            const btn = document.getElementById('process-btn');
+            const spinner = document.getElementById('process-spinner');
+            const resultDiv = document.getElementById('process-result');
+            
+            btn.disabled = true;
+            spinner.classList.remove('hidden');
+            resultDiv.classList.add('hidden');
+            
+            // Auto-save phase 4 rules before processing starts
+            const saveResult = await savePhase4Rules(true);
+            if (saveResult === false) {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+                return; // Error shown by savePhase4Rules
+            }
+            
+            // Get selected source files
+            const selectedSourceFiles = getSelectedSourceFiles();
+            if (selectedSourceFiles.length === 0) {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+                showToast('Please select at least one source file', 'error');
+                return;
+            }
+            
+            // Validate custom output filename
+            const monthInput = document.getElementById('output-month');
+            const yearInput = document.getElementById('output-year');
+            const month = monthInput ? monthInput.value : '';
+            const year = yearInput ? yearInput.value : '';
+            if (!month || !year) {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+                showToast('Please select both Month and Year', 'error');
+                return;
+            }
+            const customFilename = `Reconciliation Report ${month} ${year}`;
+            
+            // Reset all statuses
+            document.getElementById('process-phase1-status').textContent = 'Pending';
+            document.getElementById('process-phase2-status').textContent = 'Pending';
+            document.getElementById('process-phase3-status').textContent = 'Pending';
+            
+            // Start background processing with selected source files
+            const formData = new FormData();
+            formData.append('selected_source_files', JSON.stringify(selectedSourceFiles));
+            formData.append('custom_filename', customFilename);
+            formData.append('force', force);
+            formData.append('validation_id', currentFinalValidation);
+            
+            const startData = await apiCall('/api/process', { 
+                method: 'POST',
+                body: formData
+            });
+            
+            if (startData.type === 'validation_warning') {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+                
+                const ul = document.getElementById('validation-missing-columns');
+                ul.innerHTML = startData.missing_columns.map(c => `<li>${c}</li>`).join('');
+                
+                const modal = document.getElementById('validation-warning-modal');
+                modal.classList.remove('hidden');
+                
+                document.getElementById('validation-force-btn').onclick = () => {
+                    modal.classList.add('hidden');
+                    processAllRules(true);
+                };
+                
+                document.getElementById('validation-cancel-btn').onclick = () => {
+                    modal.classList.add('hidden');
+                };
+                return;
+            }
+            
+            if (!startData.success) {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+                showToast(startData.message || 'Failed to start processing', 'error');
+                return;
+            }
+            
+            const filterInfo = startData.filtered ? ` (Filtering ${startData.filter_count} source files)` : '';
+            showToast(`Processing started${filterInfo}. Please wait...`, 'success');
+            
+            // Poll for status every 2 seconds
+            const pollInterval = setInterval(async () => {
+                const statusData = await apiCall('/api/process/status');
+                
+                if (statusData.status === 'processing') {
+                    // Update phase statuses based on progress
+                    const progress = statusData.progress;
+                    if (progress === 'loading_primary') {
+                        document.getElementById('process-phase1-status').textContent = 'Running...';
+                    } else if (progress === 'phase2') {
+                        document.getElementById('process-phase1-status').textContent = 'Completed';
+                        document.getElementById('process-phase2-status').textContent = 'Running...';
+                    } else if (progress === 'phase3') {
+                        document.getElementById('process-phase1-status').textContent = 'Completed';
+                        document.getElementById('process-phase2-status').textContent = 'Completed';
+                        document.getElementById('process-phase3-status').textContent = 'Running...';
+                    } else if (progress === 'saving') {
+                        document.getElementById('process-phase1-status').textContent = 'Completed';
+                        document.getElementById('process-phase2-status').textContent = 'Completed';
+                        document.getElementById('process-phase3-status').textContent = 'Saving...';
+                    }
+                } else if (statusData.status === 'completed') {
+                    clearInterval(pollInterval);
+                    btn.disabled = false;
+                    spinner.classList.add('hidden');
+                    
+                    // All completed
+                    document.getElementById('process-phase1-status').textContent = 'Completed';
+                    document.getElementById('process-phase2-status').textContent = 'Completed';
+                    document.getElementById('process-phase3-status').textContent = 'Completed';
+                    document.getElementById('process-phase4-status').textContent = 'Completed';
+                    
+                    // Auto-refresh dashboard stats
+                    loadDashboardStats();
+                    loadProcessedTree();
+                    
+                    // Hide any lingering loading overlays
+                    const loadingOverlay = document.getElementById('rules-loading-overlay');
+                    if (loadingOverlay) loadingOverlay.classList.add('hidden');
+                    
+                    // Show result info (no download button - file saved to processed)
+                    const result = statusData.result;
+                    if (result && result.success) {
+                        resultDiv.classList.remove('hidden');
+                        
+                        // Populate the info spans
+                        document.getElementById('result-processed-at').textContent = result.processed_at || 'N/A';
+                        document.getElementById('result-rows-processed').textContent = result.rows_processed?.toLocaleString() || 0;
+                        document.getElementById('result-rules-applied').textContent = result.total_rules || 0;
+                        document.getElementById('result-time-taken').textContent = result.processing_time || 'N/A';
+                        
+                        showToast(result.message || 'Processing completed successfully!', 'success');
+                        // Auto-refresh the processed files history
+                        loadFinalProcessedHistory();
+                    }
+                } else if (statusData.status === 'error') {
+                    clearInterval(pollInterval);
+                    btn.disabled = false;
+                    spinner.classList.add('hidden');
+                    showToast(statusData.message || 'Processing failed', 'error');
+                }
+            }, 2000);
+        
+            } catch(err) {
+
+                console.error("Error starting processing:", err);
+                const btn = document.getElementById('process-all-btn');
+                const spinner = document.getElementById('process-all-spinner');
+                if (btn) btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                showToast(err.message || 'Failed to start processing. Please try again.', 'error');
+
+            }
+        
+            } catch(err) {
+
+                console.error("Error starting processing:", err);
+                const btn = document.getElementById('process-all-btn');
+                const spinner = document.getElementById('process-all-spinner');
+                if (btn) btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                showToast(err.message || 'Failed to start processing. Please try again.', 'error');
+
+            }
+        }
+        // ==================== FINAL PROCESSED HISTORY ====================
+        

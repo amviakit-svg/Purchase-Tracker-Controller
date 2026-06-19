@@ -320,6 +320,7 @@ def init_db():
             module_id INTEGER,
             name TEXT,
             phase INTEGER NOT NULL,
+            validation_id INTEGER DEFAULT 1,
             config TEXT NOT NULL,
             processing_type TEXT DEFAULT 'both',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -427,6 +428,13 @@ def init_db():
     ''')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_rejected_artefacts_folder ON rejected_artefacts(folder_id)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_rejected_artefacts_file   ON rejected_artefacts(file_id)')
+    
+    # Migrations
+    try:
+        conn.execute('ALTER TABLE rules ADD COLUMN validation_id INTEGER DEFAULT 1')
+    except sqlite3.OperationalError:
+        # Column already exists
+        pass
     
     # =================== DEFAULT DATA ===================
     
@@ -643,48 +651,58 @@ def update_master_formulas(folder_id, formulas_list):
     conn.commit()
     conn.close()
 
-def save_rule(phase, config, name=None, company_id=None, module_id=None, processing_type='both'):
+def save_rule(phase, config, name=None, company_id=None, module_id=None,
+              processing_type='both', validation_id=1):
+    """Save a rule row."""
     conn = get_db_connection()
     cursor = conn.execute(
-        'INSERT INTO rules (phase, config, name, company_id, module_id, processing_type) VALUES (?, ?, ?, ?, ?, ?)',
-        (phase, json.dumps(config), name, company_id, module_id, processing_type)
+        'INSERT INTO rules (phase, config, name, company_id, module_id, processing_type, validation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        (phase, json.dumps(config), name, company_id, module_id, processing_type, validation_id)
     )
     rule_id = cursor.lastrowid
     conn.commit()
     conn.close()
     return rule_id
 
-def get_rules_by_phase(phase, company_id=None, module_id=None):
+def get_rules_by_phase(phase, company_id=None, module_id=None, validation_id=1):
+    """Get rules for a given phase."""
     conn = get_db_connection()
     if company_id and module_id:
         rows = conn.execute(
-            'SELECT * FROM rules WHERE phase = ? AND company_id = ? AND module_id = ? ORDER BY created_at ASC',
-            (phase, company_id, module_id)
+            'SELECT * FROM rules WHERE phase = ? AND company_id = ? AND module_id = ? AND validation_id = ? ORDER BY created_at ASC',
+            (phase, company_id, module_id, validation_id)
         ).fetchall()
     elif company_id:
         rows = conn.execute(
-            'SELECT * FROM rules WHERE phase = ? AND company_id = ? ORDER BY created_at ASC',
-            (phase, company_id)
+            'SELECT * FROM rules WHERE phase = ? AND company_id = ? AND validation_id = ? ORDER BY created_at ASC',
+            (phase, company_id, validation_id)
         ).fetchall()
     else:
-        rows = conn.execute('SELECT * FROM rules WHERE phase = ? ORDER BY created_at ASC', (phase,)).fetchall()
+        rows = conn.execute(
+            'SELECT * FROM rules WHERE phase = ? AND validation_id = ? ORDER BY created_at ASC',
+            (phase, validation_id)
+        ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
-def get_all_rules(company_id=None, module_id=None):
+def get_all_rules(company_id=None, module_id=None, validation_id=1):
+    """Get all rules."""
     conn = get_db_connection()
     if company_id and module_id:
         rows = conn.execute(
-            'SELECT * FROM rules WHERE company_id = ? AND module_id = ? ORDER BY phase ASC, created_at ASC',
-            (company_id, module_id)
+            'SELECT * FROM rules WHERE company_id = ? AND module_id = ? AND validation_id = ? ORDER BY phase ASC, created_at ASC',
+            (company_id, module_id, validation_id)
         ).fetchall()
     elif company_id:
         rows = conn.execute(
-            'SELECT * FROM rules WHERE company_id = ? ORDER BY phase ASC, created_at ASC',
-            (company_id,)
+            'SELECT * FROM rules WHERE company_id = ? AND validation_id = ? ORDER BY phase ASC, created_at ASC',
+            (company_id, validation_id)
         ).fetchall()
     else:
-        rows = conn.execute('SELECT * FROM rules ORDER BY phase ASC, created_at ASC').fetchall()
+        rows = conn.execute(
+            'SELECT * FROM rules WHERE validation_id = ? ORDER BY phase ASC, created_at ASC',
+            (validation_id,)
+        ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
@@ -1618,23 +1636,23 @@ def migrate_rules(from_company_id, to_company_id, from_module_id=None, to_module
 
 # =================== PROCESSED FILES ===================
 
-def save_processed_file(filename, file_path, report_type=None, financial_year=None, month_name=None, month_number=None, year=None, source_primary_filename=None, total_rows=None, rules_used=None, sheets_data=None, file_size=None, processing_time=None, company_id=None, module_id=None):
+def save_processed_file(filename, file_path, report_type=None, financial_year=None, month_name=None, month_number=None, year=None, source_primary_filename=None, total_rows=None, rules_used=None, sheets_data=None, file_size=None, processing_time=None, company_id=None, module_id=None, validation_id=2):
     conn = get_db_connection()
     cursor = conn.execute('''
-        INSERT INTO processed_files (filename, file_path, report_type, financial_year, month_name, month_number, year, source_primary_filename, total_rows, rules_used, sheets_data, file_size, processing_time, company_id, module_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (filename, file_path, report_type, financial_year, month_name, month_number, year, source_primary_filename, total_rows, rules_used, sheets_data, file_size, processing_time, company_id, module_id))
+        INSERT INTO processed_files (filename, file_path, report_type, financial_year, month_name, month_number, year, source_primary_filename, total_rows, rules_used, sheets_data, file_size, processing_time, company_id, module_id, validation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (filename, file_path, report_type, financial_year, month_name, month_number, year, source_primary_filename, total_rows, rules_used, sheets_data, file_size, processing_time, company_id, module_id, validation_id))
     file_id = cursor.lastrowid
     conn.commit()
     conn.close()
     return file_id
 
 
-def get_processed_files(company_id=None, module_id=None, financial_year=None, report_type=None, month_name=None):
+def get_processed_files(company_id=None, module_id=None, financial_year=None, report_type=None, month_name=None, validation_id=None):
     conn = get_db_connection()
     query = 'SELECT * FROM processed_files WHERE 1=1'
     params = []
-    
+
     if company_id is not None:
         query += ' AND company_id = ?'
         params.append(company_id)
@@ -1648,7 +1666,7 @@ def get_processed_files(company_id=None, module_id=None, financial_year=None, re
         else:
             query += ' AND financial_year = ?'
             params.append(financial_year)
-            
+
     if report_type is not None:
         if report_type == 'Unknown':
             query += ' AND (report_type IS NULL OR report_type = ?)'
@@ -1656,7 +1674,7 @@ def get_processed_files(company_id=None, module_id=None, financial_year=None, re
         else:
             query += ' AND report_type = ?'
             params.append(report_type)
-            
+
     if month_name is not None:
         if month_name == 'Unknown':
             query += ' AND (month_name IS NULL OR month_name = ?)'
@@ -1664,9 +1682,13 @@ def get_processed_files(company_id=None, module_id=None, financial_year=None, re
         else:
             query += ' AND month_name = ?'
             params.append(month_name)
-    
+            
+    if validation_id is not None:
+        query += ' AND validation = ?'
+        params.append(validation_id)
+
     query += ' ORDER BY created_at DESC'
-    
+
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -1689,7 +1711,9 @@ def delete_processed_file(file_id):
 
 
 def get_processed_tree(company_id=None, module_id=None):
-    """Return processed files grouped by financial_year and month_name for tree view."""
+    """Return processed files grouped by validation, financial_year and month_name for tree view."""
+    from datetime import datetime
+    
     conn = get_db_connection()
     query = 'SELECT * FROM processed_files'
     params = []
@@ -1699,42 +1723,89 @@ def get_processed_tree(company_id=None, module_id=None):
     elif company_id is not None:
         query += ' WHERE company_id = ?'
         params = [company_id]
-    query += ' ORDER BY year DESC, month_number DESC, created_at DESC'
+    query += ' ORDER BY validation ASC, year DESC, month_number DESC, created_at DESC'
     rows = conn.execute(query, params).fetchall()
     conn.close()
 
-    fy_nodes = []
-    fy_map = {}
+    val_nodes = []
+    val_map = {}
     
     for row in rows:
         r = dict(row)
-        fy = r.get('financial_year') or str(r.get('year') or 'Unknown')
-        mn = r.get('month_name') or 'Unknown'
         
-        # 1. Get or create financial_year node
+        val_id = r.get('validation')
+        if val_id == 1:
+            val_name = "Validation 1 Report"
+        elif val_id == 2:
+            val_name = "Validation 2 Report"
+        elif val_id == 3:
+            val_name = "Validation 3 Report"
+        else:
+            val_name = f"Validation {val_id} Report" if val_id else "Other Reports"
+            
+        # Unconditionally derive year and month from the processed Date & Time (created_at)
+        created_at_str = r.get('created_at')
+        if created_at_str:
+            try:
+                # Parse timestamp "YYYY-MM-DD HH:MM:SS"
+                dt = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
+                fy = str(dt.year)
+                mn = dt.strftime("%B")
+            except Exception:
+                fy = "Unknown"
+                mn = "Unknown"
+        else:
+            fy = "Unknown"
+            mn = "Unknown"
+
+        # 1. Get or create validation node
+        if val_name not in val_map:
+            val_node = {
+                "validation_name": val_name,
+                "validation_id": val_id,
+                "years": []
+            }
+            val_nodes.append(val_node)
+            val_map[val_name] = (val_node, {})
+            
+        val_node, fy_map = val_map[val_name]
+
+        # 2. Get or create financial_year node
         if fy not in fy_map:
             fy_node = {
                 "financial_year": fy,
                 "months": []
             }
-            fy_nodes.append(fy_node)
+            val_node["years"].append(fy_node)
             fy_map[fy] = (fy_node, {})
             
         fy_node, mn_map = fy_map[fy]
         
-        # 2. Get or create month node
+        # 3. Get or create month node
         if mn not in mn_map:
             mn_node = {
                 "month_name": mn,
-                "file_count": 0
+                "file_count": 0,
+                "files": []
             }
             fy_node["months"].append(mn_node)
             mn_map[mn] = mn_node
             
         mn_node = mn_map[mn]
         mn_node["file_count"] += 1
+        mn_node["files"].append({
+            "id": r.get("id"),
+            "filename": r.get("filename"),
+            "file_path": r.get("file_path"),
+            "source_primary_filename": r.get("source_primary_filename"),
+            "total_rows": r.get("total_rows"),
+            "rules_used": r.get("rules_used"),
+            "file_size": r.get("file_size"),
+            "processing_time": r.get("processing_time"),
+            "created_at": r.get("created_at")
+        })
         
-    return fy_nodes
+    return val_nodes
 
 
 def get_processed_stats(company_id=None, module_id=None):
