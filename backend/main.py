@@ -1521,7 +1521,8 @@ async def merge_files(
                     else:
                         # Try exact-match first; if anything is missing, fall back to fuzzy match
                         # (handles Excel's auto-suffixed duplicates like FACILITY_1 vs FACILITY).
-                        desired = list(user_columns)
+                        ignored_sync_cols = {'__is_deleted', '__deleted_at', '__row_fp', 'GST MATCH'}
+                        desired = [c for c in user_columns if c not in ignored_sync_cols and c != 'Source_File_Name']
                         exact_matched = [c for c in desired if c in actual_columns]
                         missing_after_exact = [c for c in desired if c not in actual_columns]
                         fuzzy_matched, still_missing = resolve_columns_fuzzy(missing_after_exact, actual_columns)
@@ -2746,7 +2747,12 @@ async def export_master(
                 axis=1
             )
             result = result[mask]
-        
+        # Drop system columns for final extraction
+        system_cols = ['__is_deleted', '__deleted_at', '__row_fp']
+        cols_to_drop = [c for c in system_cols if c in result.columns]
+        if cols_to_drop:
+            result = result.drop(columns=cols_to_drop)
+            
         # Export to Excel
         import tempfile
         fd, temp_path = tempfile.mkstemp(suffix='.xlsx')
@@ -4166,11 +4172,11 @@ async def preview_master_formula(
             }
 
         # Regular formulas
+        if not source_columns or not source_columns.strip():
+            raise HTTPException(status_code=422, detail="No source columns provided")
         cols = [c.strip() for c in source_columns.split(',') if c.strip()]
         if not cols:
             raise HTTPException(status_code=422, detail="No source columns provided")
-        
-        # Validate columns
         existing_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
         missing = [c for c in cols if c not in existing_cols]
         if missing:

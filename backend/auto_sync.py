@@ -200,8 +200,9 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
                         if is_all_columns:
                             selected_columns = actual_columns.copy()
                         else:
-                            # Build the desired column list (excluding formula cols + Source_File_Name).
-                            desired_cols = [c for c in user_columns if c not in formula_cols and c != 'Source_File_Name']
+                            # Build the desired column list (excluding formula cols + Source_File_Name + system cols).
+                            ignored_sync_cols = {'__is_deleted', '__deleted_at', '__row_fp', 'GST MATCH'}
+                            desired_cols = [c for c in user_columns if c not in formula_cols and c not in ignored_sync_cols and c != 'Source_File_Name']
                             # First try exact-match; if any are missing, fall back to fuzzy match
                             # (handles Excel's auto-suffixed duplicates like FACILITY_1 vs FACILITY).
                             exact_matched = [c for c in desired_cols if c in actual_columns]

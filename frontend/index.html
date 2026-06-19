@@ -24,6 +24,7 @@
         })();
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/chart.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -253,7 +254,7 @@
             </div>
 
             <!-- Stats Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
                     <div class="flex items-center justify-between">
                         <div>
@@ -273,39 +274,6 @@
                         </div>
                         <div class="w-10 h-10 bg-teal-50 rounded-lg flex items-center justify-center">
                             <svg class="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-xs font-medium text-gray-500">Financial Years</p>
-                            <p class="text-2xl font-bold text-gray-900 mt-1" id="dash-financial-years">0</p>
-                        </div>
-                        <div class="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center">
-                            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-xs font-medium text-gray-500">Report Types</p>
-                            <p class="text-2xl font-bold text-gray-900 mt-1" id="dash-report-types">0</p>
-                        </div>
-                        <div class="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-xs font-medium text-gray-500">Months Covered</p>
-                            <p class="text-2xl font-bold text-gray-900 mt-1" id="dash-months-covered">0</p>
-                        </div>
-                        <div class="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center">
-                            <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         </div>
                     </div>
                 </div>
@@ -1360,6 +1328,21 @@
                     <p class="text-gray-600 mt-1">Restore or permanently delete items</p>
                 </div>
                 <div class="flex items-center space-x-3">
+                    <div id="recycle-bulk-actions" class="hidden flex items-center space-x-2 mr-2">
+                        <span id="recycle-selected-count" class="text-sm text-gray-600 mr-2 font-medium">0 selected</span>
+                        <button onclick="restoreSelectedRecycleItems()" class="flex items-center space-x-1 bg-green-50 text-green-700 text-sm font-medium py-1.5 px-3 rounded hover:bg-green-100 transition-colors border border-green-200" title="Restore Selected">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            <span>Restore Selected</span>
+                        </button>
+                        <button onclick="deleteSelectedRecycleItems()" class="flex items-center space-x-1 bg-red-50 text-red-700 text-sm font-medium py-1.5 px-3 rounded hover:bg-red-100 transition-colors border border-red-200" title="Delete Selected">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                            <span>Delete Selected</span>
+                        </button>
+                    </div>
                     <button onclick="loadRecycleBin()" class="flex items-center space-x-2 bg-blue-50 text-blue-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -1373,11 +1356,12 @@
                     <table class="min-w-full">
                         <thead class="bg-gray-50 border-b border-gray-200">
                             <tr>
+                                <th class="px-4 py-3 w-10">
+                                    <input type="checkbox" id="selectAllRecycle" onclick="toggleAllRecycleItems(this)" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer transition-colors hover:border-blue-400">
+                                </th>
                                 <th class="text-left text-xs font-semibold text-gray-500 uppercase px-4 py-3">Type</th>
                                 <th class="text-left text-xs font-semibold text-gray-500 uppercase px-4 py-3">Name</th>
                                 <th class="text-left text-xs font-semibold text-gray-500 uppercase px-4 py-3">Deleted At</th>
-                                <th class="text-left text-xs font-semibold text-gray-500 uppercase px-4 py-3">Deleted By</th>
-                                <th class="text-right text-xs font-semibold text-gray-500 uppercase px-4 py-3">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="recycle-bin-body">
@@ -1574,7 +1558,7 @@
     <div id="formula-modal" class="modal-overlay fixed inset-0 z-[60] hidden items-center justify-center" style="display:none;">
         <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Add Formula Column</h3>
+                <h3 id="formula-modal-title" class="text-lg font-semibold text-gray-900">Add Formula Column</h3>
                 <button onclick="closeFormulaModal()" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -1828,7 +1812,9 @@
         // ==================== GLOBAL STATE ====================
         const API_BASE = '';
         let currentFolderId = 1;
+        let hasUserManuallySelectedFolder = false;
         let selectedItems = new Set();
+        let selectedRecycleItems = new Set();
         let allFolders = [];
         let allFiles = [];
         let matchingRuleCounter = 1;
@@ -2130,9 +2116,6 @@
                         if (!n.is_read) {
                             unreadCount++;
                             if (!lastSeenNotificationIds.has(n.id)) {
-                                if (!window.isFirstNotificationPoll && !recentToastMessages.has(n.message)) {
-                                    showNotificationToast(n);
-                                }
                                 newUnreadFound = true;
                             }
                         }
@@ -2435,12 +2418,6 @@
                     if (file) {
                         if (file.sync_status !== sf.sync_status) {
                             uiNeedsUpdate = true;
-                            if (file.sync_status === 'in_processing' && sf.sync_status === 'synced') {
-                                showToast(`${file.original_name} synced successfully`, 'success');
-                            }
-                            if (file.sync_status === 'in_processing' && sf.sync_status === 'rejected') {
-                                showToast(`${file.original_name} sync rejected`, 'error');
-                            }
                             file.sync_status = sf.sync_status;
                             file.sync_error = sf.sync_error;
                         }
@@ -2452,7 +2429,10 @@
                 });
                 
                 if (uiNeedsUpdate) {
-                    renderFileList(allFiles);
+                    loadFiles(currentFolderId);
+                    if (typeof pollNotifications === 'function') {
+                        pollNotifications();
+                    }
                 }
                 
                 if (!hasProcessing) {
@@ -2838,9 +2818,6 @@
             };
             setText('dash-total-files', data.stats.total_files);
             setText('dash-processed-files', data.stats.processed_files); // mapped from backend
-            setText('dash-financial-years', data.stats.financial_years);
-            setText('dash-report-types', data.stats.report_types);
-            setText('dash-months-covered', data.stats.months);
             
             // Save to cache for instant render on next tab switch
             saveDashboardCache(null, data.stats);
@@ -3019,6 +2996,15 @@
             const data = await apiCall('/api/folders');
             if (data.success) {
                 allFolders = data.folders;
+                
+                if (!hasUserManuallySelectedFolder) {
+                    const firstPopulated = data.folders.find(f => f.file_count > 0);
+                    if (firstPopulated && currentFolderId !== firstPopulated.id) {
+                        currentFolderId = firstPopulated.id;
+                        loadFiles(currentFolderId);
+                    }
+                }
+                
                 renderFolderTree(data.folders);
                 updateFolderSelects();
             }
@@ -3073,6 +3059,7 @@
         }
 
         async function selectFolder(folderId) {
+            hasUserManuallySelectedFolder = true;
             currentFolderId = folderId;
             selectedItems.clear();
             updateSelectedCount();
@@ -3139,6 +3126,13 @@
             if (data.success) {
                 allFiles = data.files;
                 renderFileList(data.files);
+                
+                // Check if any file is syncing, if so start polling
+                if (data.files.some(f => f.sync_status === 'in_processing' || f.sync_status === 'pending')) {
+                    startSyncPolling();
+                } else {
+                    stopSyncPolling();
+                }
             }
         }
 
@@ -4190,9 +4184,19 @@
                 // Render headers (add a trailing Action column for the delete button)
                 const allCols = data.columns.slice();
                 const allColSet = new Set(allCols);
-                headEl.innerHTML = '<tr>' + allCols.map(col =>
-                    `<th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${col}</th>`
-                ).join('') + '<th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50">Action</th></tr>';
+                const systemCols = new Set(['__is_deleted', '__deleted_at', '__row_fp']);
+                
+                headEl.innerHTML = '<tr>' + allCols.map(col => {
+                    let classes = "px-3 py-2 text-left text-xs font-medium uppercase tracking-wider ";
+                    if (systemCols.has(col)) {
+                        classes += "bg-red-50 text-red-800";
+                    } else if (col === 'GST MATCH' || col.endsWith(' MATCH')) {
+                        classes += "bg-green-50 text-green-800 border-l-4 border-green-500";
+                    } else {
+                        classes += "text-gray-500";
+                    }
+                    return `<th class="${classes}">${col}</th>`;
+                }).join('') + '<th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50">Action</th></tr>';
 
                 // Render data rows - each row gets a delete (trash) button using _row_fp
                 if (data.data && data.data.length > 0) {
@@ -4203,7 +4207,16 @@
                             if (v === null || v === undefined) v = '';
                             v = String(v);
                             if (v.length > 200) v = v.substring(0, 200) + '…';
-                            return `<td class="px-3 py-2 text-sm text-gray-900 whitespace-nowrap">${escapeHtml(v)}</td>`;
+                            
+                            let cellClasses = "px-3 py-2 text-sm whitespace-nowrap ";
+                            if (systemCols.has(col)) {
+                                cellClasses += "bg-red-50 text-red-800";
+                            } else if (col === 'GST MATCH' || col.endsWith(' MATCH')) {
+                                cellClasses += "bg-green-50 text-green-800 border-l-4 border-green-500";
+                            } else {
+                                cellClasses += "text-gray-900";
+                            }
+                            return `<td class="${cellClasses}">${escapeHtml(v)}</td>`;
                         }).join('');
                         const actionCell = `<td class="px-3 py-2 text-center sticky right-0 bg-white">
                             <button onclick="confirmDeleteRow('${escapeHtml(fp)}')" class="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors" title="Delete this row">
@@ -8769,9 +8782,6 @@
                 if (el) el.textContent = val ?? 0;
             };
             setText('dash-processed-files', stats.processed_files ?? stats.total_files);
-            setText('dash-financial-years', stats.financial_years);
-            setText('dash-report-types', stats.report_types);
-            setText('dash-months-covered', stats.months);
         }
 
         function renderProcessedTree(tree) {
@@ -8783,36 +8793,60 @@
                 return;
             }
             
-            let html = '';
+            let html = `
+                <div class="flex justify-end space-x-2 mb-3 px-2">
+                    <button onclick="expandAllTree()" class="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded transition-colors">Expand All</button>
+                    <button onclick="collapseAllTree()" class="text-xs text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors">Collapse All</button>
+                </div>
+            `;
+            
             tree.forEach((valNode, valIdx) => {
                 const valName = valNode.validation_name;
+                
+                // Calculate total files for this Validation node
+                let totalValFiles = 0;
+                valNode.years.forEach(fy => {
+                    fy.months.forEach(mn => {
+                        if (mn.files) totalValFiles += mn.files.length;
+                    });
+                });
+                
                 html += `
-                    <div class="mb-3">
+                    <div class="mb-3 tree-node">
                         <div class="flex items-center space-x-2 px-2 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer" onclick="toggleVal(${valIdx})">
                             <svg id="val-icon-${valIdx}" class="w-4 h-4 text-gray-600 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                             </svg>
-                            <span class="text-sm font-bold text-gray-900">${valName}</span>
+                            <span class="text-sm font-bold text-gray-900 flex-1">${valName}</span>
+                            <span class="text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded-full">${totalValFiles}</span>
                         </div>
-                        <div id="val-children-${valIdx}" class="ml-4 mt-2 hidden border-l border-gray-200 pl-2">
+                        <div id="val-children-${valIdx}" class="val-children-container ml-4 mt-2 hidden border-l border-gray-200 pl-2">
                 `;
                 
                 valNode.years.forEach((fyNode, fyIdx) => {
                     const fy = fyNode.financial_year;
+                    
+                    // Calculate total files for this Financial Year node
+                    let totalFyFiles = 0;
+                    fyNode.months.forEach(mn => {
+                        if (mn.files) totalFyFiles += mn.files.length;
+                    });
+                    
                     html += `
-                        <div class="mb-2">
+                        <div class="mb-2 fy-node">
                             <div class="flex items-center space-x-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer" onclick="toggleFY(${valIdx}, ${fyIdx})">
                                 <svg id="fy-icon-${valIdx}-${fyIdx}" class="w-3.5 h-3.5 text-gray-500 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                                 </svg>
-                                <span class="text-sm font-semibold text-gray-800">${fy}</span>
+                                <span class="text-sm font-semibold text-gray-800 flex-1">${fy}</span>
+                                <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">${totalFyFiles}</span>
                             </div>
-                            <div id="fy-children-${valIdx}-${fyIdx}" class="ml-5 hidden border-l border-gray-100 pl-1 mt-1">
+                            <div id="fy-children-${valIdx}-${fyIdx}" class="fy-children-container ml-5 hidden border-l border-gray-100 pl-1 mt-1">
                     `;
                     
                     fyNode.months.forEach((monthNode, mnIdx) => {
                         const mn = monthNode.month_name;
-                        const count = monthNode.file_count;
+                        const count = monthNode.file_count || (monthNode.files ? monthNode.files.length : 0);
                         html += `
                             <div class="flex items-center space-x-2 px-2 py-1.5 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors" 
                                  onclick="selectMonth(${valIdx}, ${fyIdx}, ${mnIdx})"
@@ -8820,7 +8854,7 @@
                                 <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                 </svg>
-                                <span class="text-xs font-medium text-gray-700">${mn}</span>
+                                <span class="text-xs font-medium text-gray-700 flex-1">${mn}</span>
                                 <span class="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">${count}</span>
                             </div>
                         `;
@@ -8854,13 +8888,34 @@
             
             for (let i = 1; i <= 3; i++) {
                 let fileCount = 0;
+                let totalRows = 0;
+                let lastDateStr = 'Never';
+                let maxDate = 0;
                 let valName = `Validation ${i} Report`;
+                
                 const valNode = tree.find(n => n.validation_id === i || n.validation_name.includes(i.toString()));
                 if (valNode) {
                     valName = valNode.validation_name;
                     valNode.years.forEach(fy => {
                         fy.months.forEach(mn => {
-                            if(mn.files) fileCount += mn.files.length;
+                            if(mn.files) {
+                                fileCount += mn.files.length;
+                                mn.files.forEach(f => {
+                                    if (f.total_rows) totalRows += f.total_rows;
+                                    if (f.created_at) {
+                                        try {
+                                            const parts = f.created_at.split(' ');
+                                            const dParts = parts[0].split('-');
+                                            const tParts = parts[1].split(':');
+                                            const dateObj = new Date(dParts[0], dParts[1]-1, dParts[2], tParts[0], tParts[1], tParts[2]);
+                                            if (dateObj.getTime() > maxDate) {
+                                                maxDate = dateObj.getTime();
+                                                lastDateStr = `${dParts[2]}-${dParts[1]}-${dParts[0]}`;
+                                            }
+                                        } catch(e) {}
+                                    }
+                                });
+                            }
                         });
                     });
                 }
@@ -8877,19 +8932,160 @@
                 const color = i === 1 ? 'blue' : (i === 2 ? 'purple' : 'green');
 
                 html += `
-                    <div class="bg-white rounded-xl shadow border border-gray-200 p-6 flex flex-col items-center justify-center text-center">
-                        <div class="w-16 h-16 rounded-full bg-${color}-50 flex items-center justify-center mb-4">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col items-center justify-center text-center transition-all hover:shadow-md hover:border-${color}-300 relative overflow-hidden">
+                        <div class="absolute inset-0 bg-gradient-to-br from-transparent to-${color}-50 opacity-50 pointer-events-none"></div>
+                        <div class="w-16 h-16 rounded-full bg-${color}-50 flex items-center justify-center mb-4 z-10 shadow-sm border border-${color}-100">
                             ${icon}
                         </div>
-                        <h4 class="text-lg font-semibold text-gray-800 mb-2">${valName}</h4>
-                        <div class="text-3xl font-bold text-${color}-600 mb-1">${fileCount}</div>
-                        <p class="text-sm text-gray-500">Processed Files</p>
+                        <h4 class="text-lg font-semibold text-gray-800 mb-2 z-10">${valName}</h4>
+                        <div class="text-4xl font-bold text-${color}-600 mb-1 z-10 tracking-tight">${fileCount}</div>
+                        <p class="text-sm font-medium text-gray-500 mb-4 z-10">Total Processed Files</p>
+                        
+                        <div class="w-full pt-4 border-t border-gray-100 flex justify-between items-center z-10">
+                            <div class="flex flex-col items-start">
+                                <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Total Rows</span>
+                                <span class="text-sm font-semibold text-gray-700">${totalRows.toLocaleString()}</span>
+                            </div>
+                            <div class="flex flex-col items-end">
+                                <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Last Run</span>
+                                <span class="text-sm font-semibold text-gray-700">${lastDateStr}</span>
+                            </div>
+                        </div>
                     </div>
                 `;
             }
             
             html += '</div>';
+            
+            // Add charts container
+            html += `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 mt-2">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                        <h4 class="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Processing Trends</h4>
+                        <div class="h-64 w-full relative">
+                            <canvas id="dashboardTrendChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                        <h4 class="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Data Volume (Rows)</h4>
+                        <div class="h-64 w-full relative">
+                            <canvas id="dashboardVolumeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
             container.innerHTML = html;
+            
+            // Render charts after a short delay to ensure DOM is ready
+            setTimeout(() => renderDashboardCharts(tree), 50);
+        }
+        
+        let dashboardTrendChartInstance = null;
+        let dashboardVolumeChartInstance = null;
+
+        function renderDashboardCharts(tree) {
+            if (typeof Chart === 'undefined') return;
+            
+            const trendCtx = document.getElementById('dashboardTrendChart');
+            const volumeCtx = document.getElementById('dashboardVolumeChart');
+            if (!trendCtx || !volumeCtx) return;
+            
+            // Destroy existing instances if they exist
+            if (dashboardTrendChartInstance) dashboardTrendChartInstance.destroy();
+            if (dashboardVolumeChartInstance) dashboardVolumeChartInstance.destroy();
+            
+            // Extract data for charts
+            let monthsSet = new Set();
+            let trendData = { 1: {}, 2: {}, 3: {} };
+            let volumeData = { 1: 0, 2: 0, 3: 0 };
+            
+            tree.forEach(valNode => {
+                let vid = valNode.validation_id || 1;
+                if (valNode.validation_name.includes('2')) vid = 2;
+                if (valNode.validation_name.includes('3')) vid = 3;
+                
+                valNode.years.forEach(fy => {
+                    fy.months.forEach(mn => {
+                        const mName = mn.month_name.substring(0, 3) + ' ' + fy.financial_year.split('-')[0];
+                        monthsSet.add(mName);
+                        if (!trendData[vid][mName]) trendData[vid][mName] = 0;
+                        
+                        if (mn.files) {
+                            trendData[vid][mName] += mn.files.length;
+                            mn.files.forEach(f => {
+                                if (f.total_rows) volumeData[vid] += f.total_rows;
+                            });
+                        }
+                    });
+                });
+            });
+            
+            // Sort months loosely
+            let labels = Array.from(monthsSet).sort();
+            
+            const brandColors = {
+                1: { bg: 'rgba(59, 130, 246, 0.2)', border: 'rgba(59, 130, 246, 1)' }, // Blue
+                2: { bg: 'rgba(168, 85, 247, 0.2)', border: 'rgba(168, 85, 247, 1)' }, // Purple
+                3: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 1)' }    // Green
+            };
+
+            // Trend Chart (Line)
+            dashboardTrendChartInstance = new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Validation 1',
+                            data: labels.map(l => trendData[1][l] || 0),
+                            borderColor: brandColors[1].border,
+                            backgroundColor: brandColors[1].bg,
+                            tension: 0.3, fill: true
+                        },
+                        {
+                            label: 'Validation 2',
+                            data: labels.map(l => trendData[2][l] || 0),
+                            borderColor: brandColors[2].border,
+                            backgroundColor: brandColors[2].bg,
+                            tension: 0.3, fill: true
+                        },
+                        {
+                            label: 'Validation 3',
+                            data: labels.map(l => trendData[3][l] || 0),
+                            borderColor: brandColors[3].border,
+                            backgroundColor: brandColors[3].bg,
+                            tension: 0.3, fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
+
+            // Volume Chart (Bar)
+            dashboardVolumeChartInstance = new Chart(volumeCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Validation 1', 'Validation 2', 'Validation 3'],
+                    datasets: [{
+                        label: 'Total Rows Processed',
+                        data: [volumeData[1], volumeData[2], volumeData[3]],
+                        backgroundColor: [brandColors[1].border, brandColors[2].border, brandColors[3].border],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
         }
 
         function toggleVal(valIdx) {
@@ -8914,6 +9110,16 @@
                 children.classList.add('hidden');
                 icon.classList.remove('rotate-90');
             }
+        }
+
+        function expandAllTree() {
+            document.querySelectorAll('.val-children-container, .fy-children-container').forEach(el => el.classList.remove('hidden'));
+            document.querySelectorAll('svg[id^="val-icon-"], svg[id^="fy-icon-"]').forEach(el => el.classList.add('rotate-90'));
+        }
+
+        function collapseAllTree() {
+            document.querySelectorAll('.val-children-container, .fy-children-container').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('svg[id^="val-icon-"], svg[id^="fy-icon-"]').forEach(el => el.classList.remove('rotate-90'));
         }
 
         function selectMonth(valIdx, fyIdx, mnIdx) {
@@ -9857,6 +10063,116 @@
             resetFormulaForm();
         }
 
+        window.editingFormulaActivityId = null;
+
+        async function openFormulaModalForEdit(activity) {
+            const fid = activity.folder_id || currentFolderId;
+            if (!fid) {
+                showToast('Please select a folder first', 'warning');
+                return;
+            }
+            currentFolderId = fid;
+            window.editingFormulaActivityId = activity.id;
+
+            const modalEl = document.getElementById('formula-modal');
+            modalEl.classList.remove('hidden');
+            modalEl.style.display = 'flex';
+            modalEl.style.position = 'fixed';
+            modalEl.style.top = '0';
+            modalEl.style.left = '0';
+            modalEl.style.right = '0';
+            modalEl.style.bottom = '0';
+            modalEl.style.zIndex = '99999';
+            modalEl.style.alignItems = 'center';
+            modalEl.style.justifyContent = 'center';
+            modalEl.style.backgroundColor = 'rgba(0,0,0,0.5)';
+
+            // Wait for standard columns to be ready
+            await loadFormulaColumns();
+            resetFormulaForm();
+
+            const p = activity.payload || {};
+            const ftype = activity.formula_type || p.formula_type || (activity.activity_type === 'IF_CONDITION' || activity.type === 'IF_CONDITION' || Array.isArray(p.groups) ? 'IF_CONDITION' : 'SUM');
+
+            document.getElementById('formula-type').value = ftype;
+            document.getElementById('formula-column-name').value = activity.target_column || '';
+
+            const btn = document.getElementById('formula-apply-btn');
+            btn.innerHTML = `
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                <span>Update Formula</span>
+            `;
+            
+            const titleEl = document.getElementById('formula-modal-title');
+            if (titleEl) titleEl.textContent = 'Edit Formula / Condition';
+
+            updateFormulaUI(); // This shows/hides the right containers
+
+            if (ftype === 'IF_CONDITION') {
+                // Phase 2 multi-group IF_CONDITION restoration
+                const container = document.getElementById('if-groups-container');
+                if (container) {
+                    container.innerHTML = '';
+                    if (typeof window.ifGroupCounter !== 'undefined') window.ifGroupCounter = 1;
+                        
+                        const groups = p.groups || [{
+                            logic: p.logic || 'AND',
+                            conditions: p.conditions || [],
+                            value: p.true_value || { type: 'value', value: '' }
+                        }];
+                        
+                        groups.forEach(g => {
+                            if (typeof addIfGroup === 'function') {
+                                addIfGroup({
+                                    logic: g.logic,
+                                    conditions: g.conditions,
+                                    value_type: g.value?.type || 'value',
+                                    value: g.value?.value || ''
+                                });
+                            }
+                        });
+                    }
+                    
+                    if (document.getElementById('if-false-value')) {
+                        document.getElementById('if-false-value').value = p.false_value?.value !== undefined ? p.false_value.value : '';
+                        const falseCol = p.false_value?.type === 'column' ? p.false_value.value : '';
+                        if (document.getElementById('if-false-column')) document.getElementById('if-false-column').value = falseCol;
+                        if (document.getElementById('if-false-type')) document.getElementById('if-false-type').value = p.false_value?.type || 'value';
+                        if (typeof updateIfBranchInputs === 'function') updateIfBranchInputs('false');
+                    }
+                } else if (ftype === 'SUMIF' || ftype === 'COUNTIF' || ftype === 'VLOOKUP' || ftype === 'HLOOKUP') {
+                    // Async population for cross-file formulas
+                document.getElementById('formula-primary-column').value = p.primary_column || '';
+                await populateFormulaSecondaryFiles();
+                document.getElementById('formula-secondary-file').value = p.secondary_file || '';
+                
+                await loadFormulaSecondarySheets();
+                if (p.secondary_sheet) {
+                    document.getElementById('formula-secondary-sheet').value = p.secondary_sheet;
+                }
+                
+                await loadFormulaSecondaryColumns();
+                if (p.secondary_match_column) {
+                    document.getElementById('formula-secondary-match-column').value = p.secondary_match_column;
+                }
+                if (ftype === 'COUNTIF' && p.count_column) {
+                    document.getElementById('formula-count-column').value = p.count_column;
+                } else if (p.secondary_value_column) {
+                    document.getElementById('formula-secondary-value-column').value = p.secondary_value_column;
+                }
+            } else {
+                // Standard math
+                if (p.source_columns) {
+                    document.getElementById('formula-columns-input').value = p.source_columns;
+                }
+                if (p.constant_value !== undefined) {
+                    document.getElementById('formula-constant').value = p.constant_value;
+                }
+                // Try previewing standard math immediately
+                setTimeout(previewFormula, 500);
+            }
+        }
+
         function closeFormulaModal() {
             const modalEl = document.getElementById('formula-modal');
             modalEl.classList.add('hidden');
@@ -10725,6 +11041,11 @@
             const input = document.getElementById('formula-columns-input');
             const errorEl = document.getElementById('formula-error');
             const cols = input.value.split(',').map(s => s.trim()).filter(s => s);
+            if (cols.length === 0 && input.closest('.hidden') === null && document.getElementById('formula-type').value !== 'IF_CONDITION') {
+                errorEl.textContent = `Please enter at least one column.`;
+                errorEl.classList.remove('hidden');
+                return null;
+            }
             const invalid = cols.filter(c => !formulaColumnsList.includes(c));
             if (invalid.length > 0) {
                 errorEl.textContent = `Invalid column(s): ${invalid.join(', ')}`;
@@ -10929,32 +11250,58 @@
                 }
                 document.getElementById('formula-error').classList.add('hidden');
                 document.getElementById('formula-apply-btn').disabled = true;
-                showFormulaProgress('Applying IF formula, please wait...');
+                showFormulaProgress(window.editingFormulaActivityId ? 'Updating IF formula, please wait...' : 'Applying IF formula, please wait...');
                 try {
                     const formData = new FormData();
-                    formData.append('formula_type', 'IF_CONDITION');
-                    formData.append('source_columns', '');
-                    formData.append('column_name', columnName);
-                    formData.append('if_payload', JSON.stringify(payload));
-                    const data = await apiCall(`/api/master/${currentFolderId}/formula`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    hideFormulaProgress();
-                    document.getElementById('formula-apply-btn').disabled = false;
-                    if (data.success) {
-                        const actIdPart = data.activity_id ? ` · Activity #${data.activity_id} saved` : '';
-                        showToast(`IF formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}'${actIdPart}`, 'success', 4500);
-                        closeFormulaModal();
-                        await Promise.all([
-                            loadMasterPreview(),
-                            loadMasterStats(),
-                            loadMasterSummary(),
-                            loadMasterValidation(),
-                            typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
-                        ]);
+                    if (window.editingFormulaActivityId) {
+                        formData.append('payload', JSON.stringify(payload));
+                        formData.append('target_column', columnName);
+                        const data = await apiCall(`/api/master/${currentFolderId}/activities/${window.editingFormulaActivityId}`, {
+                            method: 'PATCH',
+                            body: formData
+                        });
+                        hideFormulaProgress();
+                        document.getElementById('formula-apply-btn').disabled = false;
+                        if (data.success) {
+                            showToast(`IF formula updated! Syncing master file...`, 'success', 4500);
+                            closeFormulaModal();
+                            apiCall(`/api/folders/${currentFolderId}/sync`, { method: 'POST' }).then(() => {
+                                Promise.all([
+                                    loadMasterPreview(),
+                                    loadMasterStats(),
+                                    loadMasterSummary(),
+                                    loadMasterValidation(),
+                                    typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                                ]);
+                            });
+                        } else {
+                            showToast(data.message || 'Update failed', 'error');
+                        }
                     } else {
-                        showToast(data.message || data.detail || 'Apply failed', 'error');
+                        formData.append('formula_type', 'IF_CONDITION');
+                        formData.append('source_columns', '');
+                        formData.append('column_name', columnName);
+                        formData.append('if_payload', JSON.stringify(payload));
+                        const data = await apiCall(`/api/master/${currentFolderId}/formula`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        hideFormulaProgress();
+                        document.getElementById('formula-apply-btn').disabled = false;
+                        if (data.success) {
+                            const actIdPart = data.activity_id ? ` · Activity #${data.activity_id} saved` : '';
+                            showToast(`IF formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}'${actIdPart}`, 'success', 4500);
+                            closeFormulaModal();
+                            await Promise.all([
+                                loadMasterPreview(),
+                                loadMasterStats(),
+                                loadMasterSummary(),
+                                loadMasterValidation(),
+                                typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                            ]);
+                        } else {
+                            showToast(data.message || data.detail || 'Apply failed', 'error');
+                        }
                     }
                 } catch (error) {
                     hideFormulaProgress();
@@ -11009,35 +11356,75 @@
                 showFormulaProgress('Applying formula, please wait...');
                 try {
                     const formData = new FormData();
-                    formData.append('formula_type', type);
-                    formData.append('column_name', columnName);
-                    formData.append('source_columns', ''); // Required but not used for SUMIF/COUNTIF
-                    formData.append('primary_column', primaryCol);
-                    formData.append('secondary_file', secFile);
-                    formData.append('secondary_sheet', secSheet);
-                    formData.append('secondary_match_column', secMatchCol);
-                    if (secValueCol) formData.append('secondary_value_column', secValueCol);
-                    if (countCol) formData.append('count_column', countCol);
-                    formData.append('match_type', document.getElementById('formula-match-type').value);
-                    
-                    const data = await apiCall(`/api/master/${currentFolderId}/formula`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    hideFormulaProgress();
-                    document.getElementById('formula-apply-btn').disabled = false;
-                    if (data.success) {
-                        showToast(`Formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}' · Activity #${data.activity_id || '?'} saved`, 'success', 4500);
-                        closeFormulaModal();
-                        await Promise.all([
-                            loadMasterPreview(),
-                            loadMasterStats(),
-                            loadMasterSummary(),
-                            loadMasterValidation(),
-                            typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
-                        ]);
+                    if (window.editingFormulaActivityId) {
+                        const payload = {
+                            formula_type: type,
+                            primary_column: primaryCol,
+                            secondary_file: secFile,
+                            secondary_sheet: secSheet,
+                            secondary_match_column: secMatchCol,
+                            match_type: document.getElementById('formula-match-type').value
+                        };
+                        if (secValueCol) payload.secondary_value_column = secValueCol;
+                        if (countCol) payload.count_column = countCol;
+                        
+                        formData.append('payload', JSON.stringify(payload));
+                        formData.append('target_column', columnName);
+                        
+                        const data = await apiCall(`/api/master/${currentFolderId}/activities/${window.editingFormulaActivityId}`, {
+                            method: 'PATCH',
+                            body: formData
+                        });
+                        
+                        hideFormulaProgress();
+                        document.getElementById('formula-apply-btn').disabled = false;
+                        
+                        if (data.success) {
+                            showToast(`Formula updated! Syncing master file...`, 'success', 4500);
+                            closeFormulaModal();
+                            apiCall(`/api/folders/${currentFolderId}/sync`, { method: 'POST' }).then(() => {
+                                Promise.all([
+                                    loadMasterPreview(),
+                                    loadMasterStats(),
+                                    loadMasterSummary(),
+                                    loadMasterValidation(),
+                                    typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                                ]);
+                            });
+                        } else {
+                            showToast(data.message || 'Update failed', 'error');
+                        }
                     } else {
-                        showToast(data.message || 'Apply failed', 'error');
+                        formData.append('formula_type', type);
+                        formData.append('column_name', columnName);
+                        formData.append('source_columns', ''); // Required but not used for SUMIF/COUNTIF
+                        formData.append('primary_column', primaryCol);
+                        formData.append('secondary_file', secFile);
+                        formData.append('secondary_sheet', secSheet);
+                        formData.append('secondary_match_column', secMatchCol);
+                        if (secValueCol) formData.append('secondary_value_column', secValueCol);
+                        if (countCol) formData.append('count_column', countCol);
+                        formData.append('match_type', document.getElementById('formula-match-type').value);
+                        
+                        const data = await apiCall(`/api/master/${currentFolderId}/formula`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        hideFormulaProgress();
+                        document.getElementById('formula-apply-btn').disabled = false;
+                        if (data.success) {
+                            showToast(`Formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}' · Activity #${data.activity_id || '?'} saved`, 'success', 4500);
+                            closeFormulaModal();
+                            await Promise.all([
+                                loadMasterPreview(),
+                                loadMasterStats(),
+                                loadMasterSummary(),
+                                loadMasterValidation(),
+                                typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                            ]);
+                        } else {
+                            showToast(data.message || 'Apply failed', 'error');
+                        }
                     }
                 } catch (error) {
                     hideFormulaProgress();
@@ -11058,32 +11445,70 @@
             }
             document.getElementById('formula-error').classList.add('hidden');
             document.getElementById('formula-apply-btn').disabled = true;
-            showFormulaProgress('Applying formula, please wait...');
+            showFormulaProgress(window.editingFormulaActivityId ? 'Updating formula, please wait...' : 'Applying formula, please wait...');
             try {
                 const formData = new FormData();
-                formData.append('formula_type', type);
-                formData.append('column_name', columnName);
-                formData.append('source_columns', cols.join(','));
-                const constant = document.getElementById('formula-constant').value;
-                if (constant) formData.append('constant_value', constant);
-                const data = await apiCall(`/api/master/${currentFolderId}/formula`, {
-                    method: 'POST',
-                    body: formData
-                });
-                hideFormulaProgress();
-                document.getElementById('formula-apply-btn').disabled = false;
-                if (data.success) {
-                    showToast(`Formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}' · Activity #${data.activity_id || '?'} saved`, 'success', 4500);
-                    closeFormulaModal();
-                    await Promise.all([
-                        loadMasterPreview(),
-                        loadMasterStats(),
-                        loadMasterSummary(),
-                        loadMasterValidation(),
-                        typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
-                    ]);
+                if (window.editingFormulaActivityId) {
+                    const payload = { formula_type: type, source_columns: cols.join(',') };
+                    const constant = document.getElementById('formula-constant').value;
+                    if (constant) payload.constant_value = constant;
+                    
+                    formData.append('payload', JSON.stringify(payload));
+                    formData.append('target_column', columnName);
+                    
+                    const data = await apiCall(`/api/master/${currentFolderId}/activities/${window.editingFormulaActivityId}`, {
+                        method: 'PATCH',
+                        body: formData
+                    });
+                    
+                    hideFormulaProgress();
+                    document.getElementById('formula-apply-btn').disabled = false;
+                    
+                    if (data.success) {
+                        showToast(`Formula updated! Syncing master file...`, 'success', 4500);
+                        closeFormulaModal();
+                        
+                        // Trigger background sync to apply changes
+                        apiCall(`/api/folders/${currentFolderId}/sync`, { method: 'POST' }).then(() => {
+                            Promise.all([
+                                loadMasterPreview(),
+                                loadMasterStats(),
+                                loadMasterSummary(),
+                                loadMasterValidation(),
+                                typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                            ]);
+                        });
+                    } else {
+                        showToast(data.message || 'Update failed', 'error');
+                    }
                 } else {
-                    showToast(data.message || 'Apply failed', 'error');
+                    formData.append('formula_type', type);
+                    formData.append('column_name', columnName);
+                    formData.append('source_columns', cols.join(','));
+                    const constant = document.getElementById('formula-constant').value;
+                    if (constant) formData.append('constant_value', constant);
+                    
+                    const data = await apiCall(`/api/master/${currentFolderId}/formula`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    hideFormulaProgress();
+                    document.getElementById('formula-apply-btn').disabled = false;
+                    
+                    if (data.success) {
+                        showToast(`Formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}' · Activity #${data.activity_id || '?'} saved`, 'success', 4500);
+                        closeFormulaModal();
+                        await Promise.all([
+                            loadMasterPreview(),
+                            loadMasterStats(),
+                            loadMasterSummary(),
+                            loadMasterValidation(),
+                            typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                        ]);
+                    } else {
+                        showToast(data.message || 'Apply failed', 'error');
+                    }
                 }
             } catch (error) {
                 hideFormulaProgress();
@@ -11283,10 +11708,16 @@
         
         async function loadRecycleBin() {
             try {
+                // Clear selection state when reloading
+                selectedRecycleItems.clear();
+                updateRecycleSelectedCount();
+                const selectAllCheckbox = document.getElementById('selectAllRecycle');
+                if (selectAllCheckbox) selectAllCheckbox.checked = false;
+
                 const data = await apiCall('/api/recycle-bin');
                 const tbody = document.getElementById('recycle-bin-body');
                 if (!data.success || !data.items || data.items.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">Recycle bin is empty</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">Recycle bin is empty</td></tr>';
                     return;
                 }
                 
@@ -11305,30 +11736,22 @@
                     const type = item.entity_type || 'unknown';
                     const label = typeLabels[type] || type;
                     const badgeColor = typeBadgeColors[type] || 'bg-gray-100 text-gray-700';
-                    const deletedAt = item.deleted_at ? new Date(item.deleted_at).toLocaleString() : 'Unknown';
+                    let parsedDateStr = item.deleted_at;
+                    if (parsedDateStr && !parsedDateStr.endsWith('Z') && !parsedDateStr.includes('T')) {
+                        parsedDateStr = parsedDateStr.replace(' ', 'T') + 'Z';
+                    }
+                    const deletedAt = parsedDateStr ? new Date(parsedDateStr).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) : 'Unknown';
                     
                     return `
-                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onclick="toggleRecycleItemSelection(${item.id})">
+                            <td class="px-4 py-3 w-10" onclick="event.stopPropagation()">
+                                <input type="checkbox" id="recycle-item-${item.id}" value="${item.id}" onchange="toggleRecycleItemSelection(${item.id})" class="recycle-item-checkbox w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer transition-colors hover:border-blue-400">
+                            </td>
                             <td class="px-4 py-3">
                                 <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full ${badgeColor}">${label}</span>
                             </td>
                             <td class="px-4 py-3 text-sm text-gray-900 font-medium">${escapeHtml(item.entity_name || 'Unknown')}</td>
                             <td class="px-4 py-3 text-sm text-gray-500">${deletedAt}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">${item.deleted_by || 'System'}</td>
-                            <td class="px-4 py-3 text-right">
-                                <button onclick="restoreRecycleBinItem(${item.id})" class="inline-flex items-center px-3 py-1 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors mr-2" title="Restore">
-                                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                    </svg>
-                                    Restore
-                                </button>
-                                <button onclick="permanentDeleteRecycleBinItem(${item.id})" class="inline-flex items-center px-3 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors" title="Permanently Delete">
-                                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                    </svg>
-                                    Permanent Delete
-                                </button>
-                            </td>
                         </tr>
                     `;
                 }).join('');
@@ -11369,6 +11792,144 @@
             } catch (error) {
                 showToast('Permanent delete failed: ' + error.message, 'error');
             }
+        }
+
+        // --- Bulk Actions for Recycle Bin ---
+        function toggleRecycleItemSelection(id) {
+            if (selectedRecycleItems.has(id)) {
+                selectedRecycleItems.delete(id);
+            } else {
+                selectedRecycleItems.add(id);
+            }
+            updateRecycleSelectedCount();
+            
+            // Check/uncheck individual checkbox
+            const checkbox = document.getElementById(`recycle-item-${id}`);
+            if (checkbox) checkbox.checked = selectedRecycleItems.has(id);
+            
+            // Update Select All checkbox
+            const selectAll = document.getElementById('selectAllRecycle');
+            const allCheckboxes = document.querySelectorAll('.recycle-item-checkbox');
+            if (selectAll && allCheckboxes.length > 0) {
+                selectAll.checked = selectedRecycleItems.size === allCheckboxes.length;
+            }
+        }
+
+        function toggleAllRecycleItems(checkbox) {
+            const checkboxes = document.querySelectorAll('.recycle-item-checkbox');
+            selectedRecycleItems.clear();
+            
+            if (checkbox.checked) {
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                    selectedRecycleItems.add(parseInt(cb.value));
+                });
+            } else {
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                });
+            }
+            updateRecycleSelectedCount();
+        }
+
+        function updateRecycleSelectedCount() {
+            const count = selectedRecycleItems.size;
+            const textSpan = document.getElementById('recycle-selected-count');
+            const actionDiv = document.getElementById('recycle-bulk-actions');
+            
+            if (textSpan) {
+                textSpan.textContent = `${count} item${count !== 1 ? 's' : ''} selected`;
+            }
+            
+            if (actionDiv) {
+                if (count > 0) {
+                    actionDiv.classList.remove('hidden');
+                } else {
+                    actionDiv.classList.add('hidden');
+                }
+            }
+        }
+
+        async function restoreSelectedRecycleItems() {
+            if (selectedRecycleItems.size === 0) {
+                showToast('Please select items to restore', 'warning');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to restore the selected items?')) return;
+
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const recycleId of selectedRecycleItems) {
+                try {
+                    const data = await apiCall(`/api/recycle-bin/${recycleId}/restore`, { method: 'POST' });
+                    if (data.success) {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                    }
+                } catch (error) {
+                    errorCount++;
+                }
+            }
+
+            if (successCount > 0) {
+                showToast(`Restored ${successCount} item(s) successfully`, 'success');
+            }
+            if (errorCount > 0) {
+                showToast(`Failed to restore ${errorCount} item(s)`, 'error');
+            }
+
+            selectedRecycleItems.clear();
+            updateRecycleSelectedCount();
+            const selectAll = document.getElementById('selectAllRecycle');
+            if (selectAll) selectAll.checked = false;
+            
+            loadRecycleBin();
+            loadFolders();
+            loadDashboardStats();
+        }
+
+        async function deleteSelectedRecycleItems() {
+            if (selectedRecycleItems.size === 0) {
+                showToast('Please select items to delete', 'warning');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to permanently delete the selected items? This cannot be undone!')) return;
+
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const recycleId of selectedRecycleItems) {
+                try {
+                    const data = await apiCall(`/api/recycle-bin/${recycleId}/permanent-delete`, { method: 'DELETE' });
+                    if (data.success) {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                    }
+                } catch (error) {
+                    errorCount++;
+                }
+            }
+
+            if (successCount > 0) {
+                showToast(`Permanently deleted ${successCount} item(s)`, 'success');
+            }
+            if (errorCount > 0) {
+                showToast(`Failed to delete ${errorCount} item(s)`, 'error');
+            }
+
+            selectedRecycleItems.clear();
+            updateRecycleSelectedCount();
+            const selectAll = document.getElementById('selectAllRecycle');
+            if (selectAll) selectAll.checked = false;
+            
+            loadRecycleBin();
+            loadFolders();
+            loadDashboardStats();
         }
 
         async function openFindReplaceModal(folderId) {

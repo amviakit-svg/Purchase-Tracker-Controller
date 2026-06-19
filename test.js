@@ -6982,36 +6982,60 @@
                 return;
             }
             
-            let html = '';
+            let html = `
+                <div class="flex justify-end space-x-2 mb-3 px-2">
+                    <button onclick="expandAllTree()" class="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded transition-colors">Expand All</button>
+                    <button onclick="collapseAllTree()" class="text-xs text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors">Collapse All</button>
+                </div>
+            `;
+            
             tree.forEach((valNode, valIdx) => {
                 const valName = valNode.validation_name;
+                
+                // Calculate total files for this Validation node
+                let totalValFiles = 0;
+                valNode.years.forEach(fy => {
+                    fy.months.forEach(mn => {
+                        if (mn.files) totalValFiles += mn.files.length;
+                    });
+                });
+                
                 html += `
-                    <div class="mb-3">
+                    <div class="mb-3 tree-node">
                         <div class="flex items-center space-x-2 px-2 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 cursor-pointer" onclick="toggleVal(${valIdx})">
                             <svg id="val-icon-${valIdx}" class="w-4 h-4 text-gray-600 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                             </svg>
-                            <span class="text-sm font-bold text-gray-900">${valName}</span>
+                            <span class="text-sm font-bold text-gray-900 flex-1">${valName}</span>
+                            <span class="text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded-full">${totalValFiles}</span>
                         </div>
-                        <div id="val-children-${valIdx}" class="ml-4 mt-2 hidden border-l border-gray-200 pl-2">
+                        <div id="val-children-${valIdx}" class="val-children-container ml-4 mt-2 hidden border-l border-gray-200 pl-2">
                 `;
                 
                 valNode.years.forEach((fyNode, fyIdx) => {
                     const fy = fyNode.financial_year;
+                    
+                    // Calculate total files for this Financial Year node
+                    let totalFyFiles = 0;
+                    fyNode.months.forEach(mn => {
+                        if (mn.files) totalFyFiles += mn.files.length;
+                    });
+                    
                     html += `
-                        <div class="mb-2">
+                        <div class="mb-2 fy-node">
                             <div class="flex items-center space-x-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer" onclick="toggleFY(${valIdx}, ${fyIdx})">
                                 <svg id="fy-icon-${valIdx}-${fyIdx}" class="w-3.5 h-3.5 text-gray-500 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                                 </svg>
-                                <span class="text-sm font-semibold text-gray-800">${fy}</span>
+                                <span class="text-sm font-semibold text-gray-800 flex-1">${fy}</span>
+                                <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">${totalFyFiles}</span>
                             </div>
-                            <div id="fy-children-${valIdx}-${fyIdx}" class="ml-5 hidden border-l border-gray-100 pl-1 mt-1">
+                            <div id="fy-children-${valIdx}-${fyIdx}" class="fy-children-container ml-5 hidden border-l border-gray-100 pl-1 mt-1">
                     `;
                     
                     fyNode.months.forEach((monthNode, mnIdx) => {
                         const mn = monthNode.month_name;
-                        const count = monthNode.file_count;
+                        const count = monthNode.file_count || (monthNode.files ? monthNode.files.length : 0);
                         html += `
                             <div class="flex items-center space-x-2 px-2 py-1.5 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors" 
                                  onclick="selectMonth(${valIdx}, ${fyIdx}, ${mnIdx})"
@@ -7019,7 +7043,7 @@
                                 <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                 </svg>
-                                <span class="text-xs font-medium text-gray-700">${mn}</span>
+                                <span class="text-xs font-medium text-gray-700 flex-1">${mn}</span>
                                 <span class="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">${count}</span>
                             </div>
                         `;
@@ -7053,13 +7077,34 @@
             
             for (let i = 1; i <= 3; i++) {
                 let fileCount = 0;
+                let totalRows = 0;
+                let lastDateStr = 'Never';
+                let maxDate = 0;
                 let valName = `Validation ${i} Report`;
+                
                 const valNode = tree.find(n => n.validation_id === i || n.validation_name.includes(i.toString()));
                 if (valNode) {
                     valName = valNode.validation_name;
                     valNode.years.forEach(fy => {
                         fy.months.forEach(mn => {
-                            if(mn.files) fileCount += mn.files.length;
+                            if(mn.files) {
+                                fileCount += mn.files.length;
+                                mn.files.forEach(f => {
+                                    if (f.total_rows) totalRows += f.total_rows;
+                                    if (f.created_at) {
+                                        try {
+                                            const parts = f.created_at.split(' ');
+                                            const dParts = parts[0].split('-');
+                                            const tParts = parts[1].split(':');
+                                            const dateObj = new Date(dParts[0], dParts[1]-1, dParts[2], tParts[0], tParts[1], tParts[2]);
+                                            if (dateObj.getTime() > maxDate) {
+                                                maxDate = dateObj.getTime();
+                                                lastDateStr = `${dParts[2]}-${dParts[1]}-${dParts[0]}`;
+                                            }
+                                        } catch(e) {}
+                                    }
+                                });
+                            }
                         });
                     });
                 }
@@ -7076,19 +7121,160 @@
                 const color = i === 1 ? 'blue' : (i === 2 ? 'purple' : 'green');
 
                 html += `
-                    <div class="bg-white rounded-xl shadow border border-gray-200 p-6 flex flex-col items-center justify-center text-center">
-                        <div class="w-16 h-16 rounded-full bg-${color}-50 flex items-center justify-center mb-4">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col items-center justify-center text-center transition-all hover:shadow-md hover:border-${color}-300 relative overflow-hidden">
+                        <div class="absolute inset-0 bg-gradient-to-br from-transparent to-${color}-50 opacity-50 pointer-events-none"></div>
+                        <div class="w-16 h-16 rounded-full bg-${color}-50 flex items-center justify-center mb-4 z-10 shadow-sm border border-${color}-100">
                             ${icon}
                         </div>
-                        <h4 class="text-lg font-semibold text-gray-800 mb-2">${valName}</h4>
-                        <div class="text-3xl font-bold text-${color}-600 mb-1">${fileCount}</div>
-                        <p class="text-sm text-gray-500">Processed Files</p>
+                        <h4 class="text-lg font-semibold text-gray-800 mb-2 z-10">${valName}</h4>
+                        <div class="text-4xl font-bold text-${color}-600 mb-1 z-10 tracking-tight">${fileCount}</div>
+                        <p class="text-sm font-medium text-gray-500 mb-4 z-10">Total Processed Files</p>
+                        
+                        <div class="w-full pt-4 border-t border-gray-100 flex justify-between items-center z-10">
+                            <div class="flex flex-col items-start">
+                                <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Total Rows</span>
+                                <span class="text-sm font-semibold text-gray-700">${totalRows.toLocaleString()}</span>
+                            </div>
+                            <div class="flex flex-col items-end">
+                                <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Last Run</span>
+                                <span class="text-sm font-semibold text-gray-700">${lastDateStr}</span>
+                            </div>
+                        </div>
                     </div>
                 `;
             }
             
             html += '</div>';
+            
+            // Add charts container
+            html += `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 mt-2">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                        <h4 class="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Processing Trends</h4>
+                        <div class="h-64 w-full relative">
+                            <canvas id="dashboardTrendChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                        <h4 class="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Data Volume (Rows)</h4>
+                        <div class="h-64 w-full relative">
+                            <canvas id="dashboardVolumeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
             container.innerHTML = html;
+            
+            // Render charts after a short delay to ensure DOM is ready
+            setTimeout(() => renderDashboardCharts(tree), 50);
+        }
+        
+        let dashboardTrendChartInstance = null;
+        let dashboardVolumeChartInstance = null;
+
+        function renderDashboardCharts(tree) {
+            if (typeof Chart === 'undefined') return;
+            
+            const trendCtx = document.getElementById('dashboardTrendChart');
+            const volumeCtx = document.getElementById('dashboardVolumeChart');
+            if (!trendCtx || !volumeCtx) return;
+            
+            // Destroy existing instances if they exist
+            if (dashboardTrendChartInstance) dashboardTrendChartInstance.destroy();
+            if (dashboardVolumeChartInstance) dashboardVolumeChartInstance.destroy();
+            
+            // Extract data for charts
+            let monthsSet = new Set();
+            let trendData = { 1: {}, 2: {}, 3: {} };
+            let volumeData = { 1: 0, 2: 0, 3: 0 };
+            
+            tree.forEach(valNode => {
+                let vid = valNode.validation_id || 1;
+                if (valNode.validation_name.includes('2')) vid = 2;
+                if (valNode.validation_name.includes('3')) vid = 3;
+                
+                valNode.years.forEach(fy => {
+                    fy.months.forEach(mn => {
+                        const mName = mn.month_name.substring(0, 3) + ' ' + fy.financial_year.split('-')[0];
+                        monthsSet.add(mName);
+                        if (!trendData[vid][mName]) trendData[vid][mName] = 0;
+                        
+                        if (mn.files) {
+                            trendData[vid][mName] += mn.files.length;
+                            mn.files.forEach(f => {
+                                if (f.total_rows) volumeData[vid] += f.total_rows;
+                            });
+                        }
+                    });
+                });
+            });
+            
+            // Sort months loosely
+            let labels = Array.from(monthsSet).sort();
+            
+            const brandColors = {
+                1: { bg: 'rgba(59, 130, 246, 0.2)', border: 'rgba(59, 130, 246, 1)' }, // Blue
+                2: { bg: 'rgba(168, 85, 247, 0.2)', border: 'rgba(168, 85, 247, 1)' }, // Purple
+                3: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 1)' }    // Green
+            };
+
+            // Trend Chart (Line)
+            dashboardTrendChartInstance = new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Validation 1',
+                            data: labels.map(l => trendData[1][l] || 0),
+                            borderColor: brandColors[1].border,
+                            backgroundColor: brandColors[1].bg,
+                            tension: 0.3, fill: true
+                        },
+                        {
+                            label: 'Validation 2',
+                            data: labels.map(l => trendData[2][l] || 0),
+                            borderColor: brandColors[2].border,
+                            backgroundColor: brandColors[2].bg,
+                            tension: 0.3, fill: true
+                        },
+                        {
+                            label: 'Validation 3',
+                            data: labels.map(l => trendData[3][l] || 0),
+                            borderColor: brandColors[3].border,
+                            backgroundColor: brandColors[3].bg,
+                            tension: 0.3, fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
+
+            // Volume Chart (Bar)
+            dashboardVolumeChartInstance = new Chart(volumeCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Validation 1', 'Validation 2', 'Validation 3'],
+                    datasets: [{
+                        label: 'Total Rows Processed',
+                        data: [volumeData[1], volumeData[2], volumeData[3]],
+                        backgroundColor: [brandColors[1].border, brandColors[2].border, brandColors[3].border],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
         }
 
         function toggleVal(valIdx) {
@@ -7113,6 +7299,16 @@
                 children.classList.add('hidden');
                 icon.classList.remove('rotate-90');
             }
+        }
+
+        function expandAllTree() {
+            document.querySelectorAll('.val-children-container, .fy-children-container').forEach(el => el.classList.remove('hidden'));
+            document.querySelectorAll('svg[id^="val-icon-"], svg[id^="fy-icon-"]').forEach(el => el.classList.add('rotate-90'));
+        }
+
+        function collapseAllTree() {
+            document.querySelectorAll('.val-children-container, .fy-children-container').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('svg[id^="val-icon-"], svg[id^="fy-icon-"]').forEach(el => el.classList.remove('rotate-90'));
         }
 
         function selectMonth(valIdx, fyIdx, mnIdx) {

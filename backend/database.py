@@ -497,22 +497,29 @@ def get_folders(company_id=None, module_id=None):
     
     if company_id and module_id:
         rows = conn.execute(
-            'SELECT * FROM folders WHERE company_id = ? AND module_id = ? ORDER BY created_at DESC',
+            '''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
+               FROM folders f WHERE f.company_id = ? AND f.module_id = ? 
+               ORDER BY f.created_at DESC''',
             (company_id, module_id)
         ).fetchall()
     elif module_id:
         # Fallback if no company_id but module_id is provided
         rows = conn.execute(
-            'SELECT * FROM folders WHERE module_id = ? ORDER BY created_at DESC',
+            '''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
+               FROM folders f WHERE f.module_id = ? 
+               ORDER BY f.created_at DESC''',
             (module_id,)
         ).fetchall()
     elif company_id:
         rows = conn.execute(
-            'SELECT * FROM folders WHERE company_id = ? ORDER BY created_at DESC',
+            '''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
+               FROM folders f WHERE f.company_id = ? 
+               ORDER BY f.created_at DESC''',
             (company_id,)
         ).fetchall()
     else:
-        rows = conn.execute('SELECT * FROM folders ORDER BY created_at DESC').fetchall()
+        rows = conn.execute('''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
+                               FROM folders f ORDER BY f.created_at DESC''').fetchall()
     conn.close()
     return [dict(row) for row in rows]
 

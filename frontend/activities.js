@@ -116,6 +116,8 @@ function renderMasterActivities() {
         const lastApplied = a.last_applied_at ? new Date(a.last_applied_at).toLocaleString() : 'never';
         const lastErr = a.last_error ? `<div class="text-[10px] text-red-600 mt-1" title="${escapeHtml(a.last_error)}">${escapeHtml(a.last_error.substring(0, 60))}${a.last_error.length > 60 ? '…' : ''}</div>` : '';
         const displayName = buildActivityDisplayName(a);
+        const targetCol = a.target_column ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200" title="Target Column">Col: ${escapeHtml(a.target_column)}</span>` : '';
+        
         return `
         <div class="activity-row flex items-start space-x-2 p-2 bg-white border border-gray-200 rounded-lg" draggable="true" data-activity-id="${a.id}">
             <div class="flex flex-col items-center pt-1 text-gray-400 cursor-move select-none" title="Drag to reorder">
@@ -128,6 +130,7 @@ function renderMasterActivities() {
             <div class="flex-1 min-w-0">
                 <div class="flex items-center space-x-1.5 flex-wrap">
                     <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold ${colorClass}">${escapeHtml(label)}</span>
+                    ${targetCol}
                     <span class="text-xs font-medium text-gray-900 truncate" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>
                     ${statusBadge}
                 </div>
@@ -137,6 +140,9 @@ function renderMasterActivities() {
             <div class="flex items-center space-x-1">
                 <button onclick="testActivity(${a.id})" class="p-1 text-blue-500 hover:text-blue-700 rounded hover:bg-blue-50" title="Dry-run / test">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </button>
+                <button onclick="editActivity(${a.id})" class="p-1 text-gray-500 hover:text-gray-700 rounded hover:bg-gray-50" title="Edit this activity">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                 </button>
                 <button onclick="deleteActivity(${a.id})" class="p-1 text-red-500 hover:text-red-700 rounded hover:bg-red-50" title="Delete this activity">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></path></svg>
@@ -159,6 +165,75 @@ async function toggleActivityEnabled(id, enabled) {
     } catch (e) {
         showToast('Failed to toggle activity: ' + e.message, 'error');
         await loadMasterActivities();
+    }
+}
+
+function editActivity(id) {
+    const a = __masterActivities.find(act => act.id === id);
+    if (!a) return;
+
+    if (a.activity_type === 'COLUMN_RENAME') {
+        const p = a.payload || {};
+        const newTo = prompt(`Rename from "${p.from}" to:`, p.to);
+        if (newTo !== null && newTo.trim() !== '' && newTo.trim() !== p.to) {
+            updateActivity(id, { ...p, to: newTo.trim() }, a.target_column);
+        }
+    } else if (a.activity_type === 'FIND_REPLACE') {
+        const p = a.payload || {};
+        const find = p.find_text || p.find || '';
+        const repl = p.replace_text || p.replace || '';
+        const newFind = prompt(`Find text (currently "${find}"):`, find);
+        if (newFind !== null) {
+            const newReplace = prompt(`Replace with (currently "${repl}"):`, repl);
+            if (newReplace !== null) {
+                updateActivity(id, { ...p, find_text: newFind, replace_text: newReplace }, a.target_column);
+            }
+        }
+    } else if (a.activity_type === 'COLUMN_DELETE') {
+        const newCol = prompt(`Delete column named:`, a.target_column || '');
+        if (newCol !== null && newCol.trim() !== '' && newCol.trim() !== a.target_column) {
+            updateActivity(id, a.payload, newCol.trim());
+        }
+    } else if (a.activity_type === 'FORMULA_ADD' || a.activity_type === 'ADD_FORMULA' || a.activity_type === 'FORMULA_UPDATE' || a.activity_type === 'IF_CONDITION') {
+        if (typeof window.openFormulaModalForEdit === 'function') {
+            window.openFormulaModalForEdit(a);
+        } else {
+            alert(`Editing is not supported for ${a.activity_type}. Please delete and re-create it.`);
+        }
+    } else {
+        if (typeof window.openFormulaModalForEdit === 'function') {
+            // Some other formula types might not explicitly have FORMULA_ADD. Try to edit it anyway if it has a formula type.
+            const p = a.payload || {};
+            if (p.formula_type) {
+                window.openFormulaModalForEdit(a);
+                return;
+            }
+        }
+        alert(`Editing is not supported for ${a.activity_type}. Please delete and re-create it.`);
+    }
+}
+
+async function updateActivity(id, payload, targetColumn) {
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(payload || {}));
+    if (targetColumn) {
+        formData.append('target_column', targetColumn);
+    }
+    
+    try {
+        const res = await apiCall(`/api/master/${currentFolderId}/activities/${id}`, {
+            method: 'PATCH',
+            body: formData
+        });
+        if (res.success) {
+            showToast('Activity updated successfully', 'success');
+            await Promise.all([loadMasterPreview(), loadMasterStats(), loadMasterSummary()]);
+            await loadMasterActivities();
+        } else {
+            showToast(res.message || 'Failed to update activity', 'error');
+        }
+    } catch (e) {
+        showToast('Update failed: ' + e.message, 'error');
     }
 }
 
