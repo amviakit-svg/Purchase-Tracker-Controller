@@ -144,8 +144,11 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
                         files_to_add.append(f)
                     
             if not files_to_remove and not files_to_add:
-                logger.info(f"Folder {folder_id} is fully in sync.")
-                return
+                if not force_sync:
+                    logger.info(f"Folder {folder_id} is fully in sync.")
+                    return
+                else:
+                    logger.info(f"Folder {folder_id} is fully in sync, but force_sync=True. Reapplying formulas and activities.")
                 
             logger.info(f"Folder {folder_id} Sync: Removing {len(files_to_remove)} files, Adding {len(files_to_add)} files.")
             
@@ -374,14 +377,14 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
             # 3. RE-APPLY FORMULAS
             # Even if we just appended, we need to calculate the formula values for the new rows.
             # Running UPDATE on the whole table in DuckDB is lightning fast, so we just run it on all rows to be safe.
-            if files_to_add:
+            if files_to_add or force_sync:
                 reapply_formulas(duck_conn, folder_id, company_id, module_id)
 
             # 4. RE-APPLY ALL SAVED ACTIVITIES
             # Run the full apply_activities() engine so Formula, Find & Replace, Column Rename,
             # and Column Delete activities (stored in master_activities) survive incremental sync
             # (file add OR delete). Wrapped in try/except so a single bad activity doesn't break sync.
-            if files_to_add or files_to_remove:
+            if files_to_add or files_to_remove or force_sync:
                 try:
                     apply_activities(duck_conn, folder_id, company_id, module_id)
                 except Exception as act_e:
@@ -621,31 +624,31 @@ def _apply_formula_activity(duck_conn, act, company_id=None, module_id=None):
         cols = payload.get('source_columns') or []
         if formula_type == 'SUM':
             if len(cols) < 1: raise ValueError("SUM requires at least 1 column")
-            expr = ' + '.join(f'TRY_CAST({_safe_sql_ident(c)} AS DOUBLE)' for c in cols)
+            expr = f"ROUND({' + '.join(f'TRY_CAST({_safe_sql_ident(c)} AS DOUBLE)' for c in cols)}, 2)"
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == '-SUM':
             if len(cols) < 1: raise ValueError("-SUM requires at least 1 column")
-            expr = '-(' + ' + '.join(f'TRY_CAST({_safe_sql_ident(c)} AS DOUBLE)' for c in cols) + ')'
+            expr = f"ROUND(-({' + '.join(f'TRY_CAST({_safe_sql_ident(c)} AS DOUBLE)' for c in cols)}), 2)"
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'SUBTRACT':
             if len(cols) != 2: raise ValueError("SUBTRACT requires exactly 2 columns")
-            expr = f'TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) - TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE)'
+            expr = f'ROUND(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) - TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE), 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'MULTIPLY':
             if len(cols) != 2: raise ValueError("MULTIPLY requires exactly 2 columns")
-            expr = f'TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) * TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE)'
+            expr = f'ROUND(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) * TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE), 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'DIVIDE':
             if len(cols) != 2: raise ValueError("DIVIDE requires exactly 2 columns")
-            expr = f'CASE WHEN TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) = 0 OR TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) IS NULL THEN 0 ELSE TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) / TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) END'
+            expr = f'ROUND(CASE WHEN TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) = 0 OR TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) IS NULL THEN 0 ELSE TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) / TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) END, 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'PERCENTAGE':
             if len(cols) != 2: raise ValueError("PERCENTAGE requires exactly 2 columns")
-            expr = f'CASE WHEN TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) = 0 OR TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) IS NULL THEN 0 ELSE (TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) / TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE)) * 100 END'
+            expr = f'ROUND(CASE WHEN TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) = 0 OR TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) IS NULL THEN 0 ELSE (TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) / TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE)) * 100 END, 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'ABS':
             if len(cols) != 1: raise ValueError("ABS requires exactly 1 column")
-            expr = f'ABS(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE))'
+            expr = f'ROUND(ABS(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE)), 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'CONCAT':
             if len(cols) < 2: raise ValueError("CONCAT requires at least 2 columns")
@@ -691,7 +694,7 @@ def _apply_formula_activity(duck_conn, act, company_id=None, module_id=None):
             query = f'''
                 UPDATE master_data 
                 SET {col_ident} = (
-                    SELECT COALESCE(SUM(TRY_CAST(s.{_safe_sql_ident(sec_val)} AS DOUBLE)), 0)
+                    SELECT ROUND(COALESCE(SUM(TRY_CAST(s.{_safe_sql_ident(sec_val)} AS DOUBLE)), 0), 2)
                     FROM {sec_table} AS s
                     WHERE {join_cond}
                 )
@@ -732,10 +735,10 @@ def _apply_formula_activity(duck_conn, act, company_id=None, module_id=None):
     
     _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
     try:
-        duck_conn.execute(f"UPDATE master_data SET {col_ident} = ({expression})")
+        duck_conn.execute(f"UPDATE master_data SET {col_ident} = ROUND(({expression}), 2)")
     except Exception:
         # If a plain SQL expression fails (e.g. legacy CSV) try TRY_CAST wrapping
-        duck_conn.execute(f"UPDATE master_data SET {col_ident} = TRY_CAST(({expression}) AS DOUBLE)")
+        duck_conn.execute(f"UPDATE master_data SET {col_ident} = ROUND(TRY_CAST(({expression}) AS DOUBLE), 2)")
 
 
 def _apply_formula_update_activity(duck_conn, act, company_id=None, module_id=None):

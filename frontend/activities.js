@@ -119,7 +119,14 @@ function renderMasterActivities() {
         const targetCol = a.target_column ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200" title="Target Column">Col: ${escapeHtml(a.target_column)}</span>` : '';
         
         return `
-        <div class="activity-row flex items-start space-x-2 p-2 bg-white border border-gray-200 rounded-lg" draggable="true" data-activity-id="${a.id}">
+        <div class="activity-row flex items-start space-x-2 p-2 bg-white border border-gray-200 rounded-lg transition-all" 
+             draggable="true" 
+             data-activity-id="${a.id}"
+             ondragstart="handleActivityDragStart(event, ${a.id})"
+             ondragover="handleActivityDragOver(event)"
+             ondragleave="handleActivityDragLeave(event)"
+             ondrop="handleActivityDrop(event, ${a.id})"
+             ondragend="handleActivityDragEnd(event)">
             <div class="flex flex-col items-center pt-1 text-gray-400 cursor-move select-none" title="Drag to reorder">
                 <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><circle cx="7" cy="5" r="1"/><circle cx="7" cy="10" r="1"/><circle cx="7" cy="15" r="1"/><circle cx="13" cy="5" r="1"/><circle cx="13" cy="10" r="1"/><circle cx="13" cy="15" r="1"/></svg>
                 <span class="text-[10px] text-gray-500">#${a.step_order}</span>
@@ -263,14 +270,108 @@ async function testActivity(id) {
     }
 }
 
-async function reorderActivity(activityId, newIndex) {
+let draggedActivityId = null;
+
+function handleActivityDragStart(e, id) {
+    draggedActivityId = id;
+    e.currentTarget.classList.add('opacity-50', 'ring-2', 'ring-purple-500');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+}
+
+function handleActivityDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const row = e.currentTarget;
+    
+    // Add visual indicator (a simple top or bottom border depending on mouse position)
+    const rect = row.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    if (relY < rect.height / 2) {
+        row.style.borderTop = '2px solid #8b5cf6'; // purple-500
+        row.style.borderBottom = '';
+    } else {
+        row.style.borderTop = '';
+        row.style.borderBottom = '2px solid #8b5cf6';
+    }
+}
+
+function handleActivityDragLeave(e) {
+    e.currentTarget.style.borderTop = '';
+    e.currentTarget.style.borderBottom = '';
+}
+
+function handleActivityDragEnd(e) {
+    e.currentTarget.classList.remove('opacity-50', 'ring-2', 'ring-purple-500');
+    draggedActivityId = null;
+    
+    // Clean up all borders just in case
+    document.querySelectorAll('.activity-row').forEach(row => {
+        row.style.borderTop = '';
+        row.style.borderBottom = '';
+    });
+}
+
+function handleActivityDrop(e, dropTargetId) {
+    e.preventDefault();
+    e.currentTarget.style.borderTop = '';
+    e.currentTarget.style.borderBottom = '';
+    
+    if (draggedActivityId === null || draggedActivityId === dropTargetId) return;
+
+    const draggedIndex = __masterActivities.findIndex(a => a.id === draggedActivityId);
+    const dropTargetIndex = __masterActivities.findIndex(a => a.id === dropTargetId);
+    
+    if (draggedIndex === -1 || dropTargetIndex === -1) return;
+
+    // Determine insertion based on where the mouse was
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    let insertIndex = dropTargetIndex;
+    
+    if (relY > rect.height / 2) {
+        insertIndex++;
+    }
+    
+    if (draggedIndex < insertIndex) {
+        insertIndex--;
+    }
+
+    // Rearrange array
+    const [draggedItem] = __masterActivities.splice(draggedIndex, 1);
+    __masterActivities.splice(insertIndex, 0, draggedItem);
+    
+    // Optimistically re-render
+    renderMasterActivities();
+    
+    // Send to backend
+    reorderActivity();
+}
+
+async function reorderActivity() {
+    showToast('Reordering activities...', 'info');
+    const list = document.getElementById('master-activities-list');
+    if(list) list.style.opacity = '0.5';
     try {
-        await apiCall(`/api/master/${currentFolderId}/activities/reorder`, {
+        const res = await apiCall(`/api/master/${currentFolderId}/activities/reorder`, {
             method: 'POST',
             body: (() => { const f = new FormData(); f.append('ordered_ids', JSON.stringify(__masterActivities.map(a => a.id))); return f; })()
         });
+        if (res.success) {
+            // Re-render preview and stats to reflect the new visual column order
+            await Promise.all([
+                loadMasterPreview(), 
+                loadMasterStats(), 
+                loadMasterSummary(), 
+                loadMasterActivities()
+            ]);
+            showToast('Columns reordered visually', 'success');
+        }
     } catch (e) {
         showToast('Reorder failed: ' + e.message, 'error');
+        await loadMasterActivities();
+    } finally {
+        if(list) list.style.opacity = '1';
     }
 }
 

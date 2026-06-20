@@ -3718,7 +3718,7 @@ async def apply_master_formula(
                 update_sql = f'''
                 UPDATE master_data 
                 SET "{column_name}" = (
-                    SELECT COALESCE(SUM(TRY_CAST(secondary."{secondary_value_column}" AS DOUBLE)), 0)
+                    SELECT ROUND(COALESCE(SUM(TRY_CAST(secondary."{secondary_value_column}" AS DOUBLE)), 0), 2)
                     FROM temp_secondary AS secondary
                     WHERE {join_condition}
                 )
@@ -3832,7 +3832,7 @@ async def apply_master_formula(
                 conn.close()
                 raise HTTPException(status_code=422, detail="SUM requires at least 1 column")
             # Build: TRY_CAST("col1" AS DOUBLE) + TRY_CAST("col2" AS DOUBLE) + ...
-            expr = ' + '.join(f'TRY_CAST("{c}" AS DOUBLE)' for c in cols)
+            expr = f"ROUND({' + '.join(f'TRY_CAST(\"{c}\" AS DOUBLE)' for c in cols)}, 2)"
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -3843,7 +3843,7 @@ async def apply_master_formula(
                 conn.close()
                 raise HTTPException(status_code=422, detail="-SUM requires at least 1 column")
             # Build: -(TRY_CAST("col1" AS DOUBLE) + ... )
-            expr = '-(' + ' + '.join(f'TRY_CAST("{c}" AS DOUBLE)' for c in cols) + ')'
+            expr = f"ROUND(-({' + '.join(f'TRY_CAST(\"{c}\" AS DOUBLE)' for c in cols)}), 2)"
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -3853,7 +3853,7 @@ async def apply_master_formula(
             if len(cols) != 2:
                 conn.close()
                 raise HTTPException(status_code=422, detail="SUBTRACT requires exactly 2 columns")
-            expr = f'TRY_CAST("{cols[0]}" AS DOUBLE) - TRY_CAST("{cols[1]}" AS DOUBLE)'
+            expr = f'ROUND(TRY_CAST("{cols[0]}" AS DOUBLE) - TRY_CAST("{cols[1]}" AS DOUBLE), 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -3863,7 +3863,7 @@ async def apply_master_formula(
             if len(cols) != 2:
                 conn.close()
                 raise HTTPException(status_code=422, detail="MULTIPLY requires exactly 2 columns")
-            expr = f'TRY_CAST("{cols[0]}" AS DOUBLE) * TRY_CAST("{cols[1]}" AS DOUBLE)'
+            expr = f'ROUND(TRY_CAST("{cols[0]}" AS DOUBLE) * TRY_CAST("{cols[1]}" AS DOUBLE), 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -3874,7 +3874,7 @@ async def apply_master_formula(
                 conn.close()
                 raise HTTPException(status_code=422, detail="DIVIDE requires exactly 2 columns")
             # Handle div-by-zero: CASE WHEN denominator = 0 OR NULL THEN 0 ELSE numerator/denominator END
-            expr = f'CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE) END'
+            expr = f'ROUND(CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE) END, 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -3884,7 +3884,7 @@ async def apply_master_formula(
             if len(cols) != 2:
                 conn.close()
                 raise HTTPException(status_code=422, detail="PERCENTAGE requires exactly 2 columns (part, whole)")
-            expr = f'CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE (TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE)) * 100 END'
+            expr = f'ROUND(CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE (TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE)) * 100 END, 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -3894,7 +3894,7 @@ async def apply_master_formula(
             if len(cols) != 1:
                 conn.close()
                 raise HTTPException(status_code=422, detail="ABS requires exactly 1 column")
-            expr = f'ABS(TRY_CAST("{cols[0]}" AS DOUBLE))'
+            expr = f'ROUND(ABS(TRY_CAST("{cols[0]}" AS DOUBLE)), 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -4207,7 +4207,7 @@ async def preview_master_formula(
             if formula_type == 'SUMIF':
                 query = f'''
                 SELECT (
-                    SELECT COALESCE(SUM(TRY_CAST(secondary."{secondary_value_column}" AS DOUBLE)), 0)
+                    SELECT ROUND(COALESCE(SUM(TRY_CAST(secondary."{secondary_value_column}" AS DOUBLE)), 0), 2)
                     FROM temp_secondary AS secondary
                     WHERE {join_condition}
                 ) as result
@@ -4275,22 +4275,22 @@ async def preview_master_formula(
             raise HTTPException(status_code=422, detail=f"Column(s) not found: {', '.join(missing)}")
         
         if formula_type == 'SUM':
-            expr = ' + '.join(f'TRY_CAST("{c}" AS DOUBLE)' for c in cols)
+            expr = f"ROUND({' + '.join(f'TRY_CAST(\"{c}\" AS DOUBLE)' for c in cols)}, 2)"
             query = f'SELECT {expr} as result FROM master_data LIMIT 5'
         elif formula_type == '-SUM':
-            expr = '-(' + ' + '.join(f'TRY_CAST("{c}" AS DOUBLE)' for c in cols) + ')'
+            expr = f"ROUND(-({' + '.join(f'TRY_CAST(\"{c}\" AS DOUBLE)' for c in cols)}), 2)"
             query = f'SELECT {expr} as result FROM master_data LIMIT 5'
         elif formula_type == 'SUBTRACT':
-            expr = f'TRY_CAST("{cols[0]}" AS DOUBLE) - TRY_CAST("{cols[1]}" AS DOUBLE)'
+            expr = f'ROUND(TRY_CAST("{cols[0]}" AS DOUBLE) - TRY_CAST("{cols[1]}" AS DOUBLE), 2)'
             query = f'SELECT {expr} as result FROM master_data LIMIT 5'
         elif formula_type == 'MULTIPLY':
-            expr = f'TRY_CAST("{cols[0]}" AS DOUBLE) * TRY_CAST("{cols[1]}" AS DOUBLE)'
+            expr = f'ROUND(TRY_CAST("{cols[0]}" AS DOUBLE) * TRY_CAST("{cols[1]}" AS DOUBLE), 2)'
             query = f'SELECT {expr} as result FROM master_data LIMIT 5'
         elif formula_type == 'DIVIDE':
-            expr = f'CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE) END'
+            expr = f'ROUND(CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE) END, 2)'
             query = f'SELECT {expr} as result FROM master_data LIMIT 5'
         elif formula_type == 'PERCENTAGE':
-            expr = f'CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE (TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE)) * 100 END'
+            expr = f'ROUND(CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE (TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE)) * 100 END, 2)'
             query = f'SELECT {expr} as result FROM master_data LIMIT 5'
         elif formula_type == 'CONCAT':
             separator = constant_value if constant_value else ' '
@@ -4300,7 +4300,7 @@ async def preview_master_formula(
             if len(cols) != 1:
                 conn.close()
                 raise HTTPException(status_code=422, detail="ABS requires exactly 1 column")
-            expr = f'ABS(TRY_CAST("{cols[0]}" AS DOUBLE))'
+            expr = f'ROUND(ABS(TRY_CAST("{cols[0]}" AS DOUBLE)), 2)'
             query = f'SELECT {expr} as result FROM master_data LIMIT 5'
         else:
             conn.close()
@@ -8157,9 +8157,9 @@ from backend.auto_sync import trigger_folder_sync
 from backend.database import get_files_with_sync_status
 
 @app.post("/api/folders/{folder_id}/sync")
-async def trigger_manual_sync(folder_id: int, background_tasks: BackgroundTasks, current_user: Optional[dict] = Depends(get_optional_user)):
+async def trigger_manual_sync(folder_id: int, background_tasks: BackgroundTasks, force: bool = False, current_user: Optional[dict] = Depends(get_optional_user)):
     # This endpoint is called when the user clicks 'Sync Now' in the UI
-    background_tasks.add_task(trigger_folder_sync, folder_id, False, current_user.get('user_id') if current_user else None)
+    background_tasks.add_task(trigger_folder_sync, folder_id, force, current_user.get('user_id') if current_user else None)
     return {"success": True, "message": "Sync started in the background."}
 
 @app.get("/api/folders/{folder_id}/sync-status")

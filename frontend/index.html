@@ -1634,8 +1634,8 @@
 
     <!-- Formula Modal -->
     <div id="formula-modal" class="modal-overlay fixed inset-0 z-[60] hidden items-center justify-center" style="display:none;">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
-            <div class="flex items-center justify-between mb-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-4 p-6 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between mb-4 shrink-0">
                 <h3 id="formula-modal-title" class="text-lg font-semibold text-gray-900">Add Formula Column</h3>
                 <button onclick="closeFormulaModal()" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1644,7 +1644,9 @@
                 </button>
             </div>
 
-            <div class="space-y-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
+                <!-- Left side: Form -->
+                <div class="col-span-2 overflow-y-auto pr-2 pb-6 space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Formula Type</label>
                     <select id="formula-type" onchange="updateFormulaUI()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
@@ -1667,10 +1669,10 @@
                 <div id="formula-columns-container">
                     <label id="formula-columns-label" class="block text-sm font-medium text-gray-700 mb-2">Columns to Sum</label>
                     <div class="relative">
-                        <input type="text" id="formula-columns-input" oninput="updateFormulaHints()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500" placeholder="e.g., Amount, Tax, Discount">
+                        <input type="text" id="formula-columns-input" oninput="updateFormulaHints()" onfocus="updateFormulaHints()" onclick="updateFormulaHints()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500" placeholder="e.g., Amount, Tax, Discount">
                         <div id="formula-hints" class="hidden absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
                     </div>
-                    <p class="text-xs text-gray-500 mt-1">Type column names separated by commas. Dropdown will suggest matching columns.</p>
+                    <p class="text-xs text-gray-500 mt-1">Click to select column names or type manually separated by commas.</p>
                 </div>
 
                 <!-- SUMIF / COUNTIF Fields -->
@@ -1777,13 +1779,28 @@
                     <span>Processing...</span>
                 </div>
                 <div id="formula-preview-result" class="hidden bg-gray-50 border border-gray-200 rounded-lg p-3"></div>
-            </div>
+            </div> <!-- End Left side form -->
 
-            <div class="flex justify-end space-x-3">
-                <button onclick="closeFormulaModal()" class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-                <button onclick="previewFormula()" class="px-4 py-2 text-sm font-medium bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors">Preview</button>
-                <button onclick="applyFormula()" id="formula-apply-btn" class="px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2">
-                    <span>Apply Formula</span>
+                <!-- Right side: Master File Columns Reference -->
+                <div class="col-span-1 border-l border-gray-200 pl-4 flex flex-col h-full max-h-[75vh]">
+                    <h4 class="text-sm font-semibold text-gray-900 mb-2">Available Master File Columns</h4>
+                    <p class="text-xs text-gray-500 mb-3">Click any column name to copy it to your clipboard.</p>
+                    <div id="formula-master-columns-list" class="flex-1 overflow-y-auto space-y-1.5 pr-2">
+                        <div class="text-sm text-gray-400 text-center mt-4">Loading columns...</div>
+                    </div>
+                </div>
+            </div> <!-- End Grid -->
+
+            <!-- Actions row at the bottom -->
+            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200 mt-4 shrink-0">
+                <button type="button" onclick="closeFormulaModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200">
+                    Cancel
+                </button>
+                <button type="button" onclick="previewFormula()" class="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    Test Formula
+                </button>
+                <button type="button" onclick="applyFormula()" class="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    Save Formula
                 </button>
             </div>
         </div>
@@ -3999,15 +4016,18 @@
             panel.classList.remove('hidden');
             masterViewOpen = true;
             
-            // Load all data in parallel
+            // Load activities FIRST so we can use them to visually sort columns!
+            if (typeof loadMasterActivities === 'function') {
+                await loadMasterActivities();
+            }
+            
+            // Load all other data in parallel
             await Promise.all([
                 loadMasterSummary(),
                 loadSourceFilesDropdown(),
                 loadMasterPreview(),
                 loadMasterStats(),
-                loadMasterValidation(),
-                // Auto-captured activity steps (Formula / Find & Replace / Rename / Delete / Filter)
-                typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                loadMasterValidation()
             ]);
         }
 
@@ -4169,15 +4189,58 @@
 
                 // Render headers (add a trailing Action column for the delete button)
                 const allCols = data.columns.slice();
+                
+                // Reorder columns visually based on the activities step order
+                let activityCols = [];
+                if (typeof __masterActivities !== 'undefined' && Array.isArray(__masterActivities)) {
+                    __masterActivities.forEach(a => {
+                        if (a.activity_type === 'FORMULA_ADD' || a.activity_type === 'IF_CONDITION') {
+                            let col = a.target_column || (a.payload && (a.payload.output_column || a.payload.column_name));
+                            if (col && !activityCols.includes(col)) {
+                                activityCols.push(col);
+                            }
+                        } else if (a.activity_type === 'COLUMN_RENAME') {
+                            let oldName = a.payload && a.payload.from;
+                            let newName = a.payload && (a.payload.to || a.payload.to_column);
+                            let idx = activityCols.indexOf(oldName);
+                            if (idx !== -1 && newName) {
+                                activityCols[idx] = newName;
+                            }
+                        } else if (a.activity_type === 'COLUMN_DELETE') {
+                            let col = a.payload && a.payload.column_name;
+                            let idx = activityCols.indexOf(col);
+                            if (idx !== -1) {
+                                activityCols.splice(idx, 1);
+                            }
+                        }
+                    });
+                    
+                    allCols.sort((a, b) => {
+                        const idxA = activityCols.indexOf(a);
+                        const idxB = activityCols.indexOf(b);
+                        
+                        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                        if (idxA !== -1) return 1;
+                        if (idxB !== -1) return -1;
+                        return 0;
+                    });
+                }
+                
+                let firstFormulaColIdx = allCols.findIndex(col => activityCols.includes(col));
+                if (firstFormulaColIdx === -1) {
+                    firstFormulaColIdx = allCols.findIndex(col => col === 'GST MATCH' || col.endsWith(' MATCH'));
+                }
+
                 const allColSet = new Set(allCols);
                 const systemCols = new Set(['__is_deleted', '__deleted_at', '__row_fp']);
                 
-                headEl.innerHTML = '<tr>' + allCols.map(col => {
+                headEl.innerHTML = '<tr>' + allCols.map((col, idx) => {
                     let classes = "px-3 py-2 text-left text-xs font-medium uppercase tracking-wider ";
                     if (systemCols.has(col)) {
                         classes += "bg-red-50 text-red-800";
-                    } else if (col === 'GST MATCH' || col.endsWith(' MATCH')) {
-                        classes += "bg-green-50 text-green-800 border-l-4 border-green-500";
+                    } else if (activityCols.includes(col) || col === 'GST MATCH' || col.endsWith(' MATCH')) {
+                        classes += "bg-green-50 text-green-800";
+                        if (idx === firstFormulaColIdx) classes += " border-l-4 border-green-500";
                     } else {
                         classes += "text-gray-500";
                     }
@@ -4188,7 +4251,7 @@
                 if (data.data && data.data.length > 0) {
                     bodyEl.innerHTML = data.data.map(row => {
                         const fp = row._row_fp || '';
-                        const cells = allCols.map(col => {
+                        const cells = allCols.map((col, idx) => {
                             let v = row[col];
                             if (v === null || v === undefined) v = '';
                             v = String(v);
@@ -4197,8 +4260,9 @@
                             let cellClasses = "px-3 py-2 text-sm whitespace-nowrap ";
                             if (systemCols.has(col)) {
                                 cellClasses += "bg-red-50 text-red-800";
-                            } else if (col === 'GST MATCH' || col.endsWith(' MATCH')) {
-                                cellClasses += "bg-green-50 text-green-800 border-l-4 border-green-500";
+                            } else if (activityCols.includes(col) || col === 'GST MATCH' || col.endsWith(' MATCH')) {
+                                cellClasses += "bg-green-50 text-green-800";
+                                if (idx === firstFormulaColIdx) cellClasses += " border-l-4 border-green-500";
                             } else {
                                 cellClasses += "text-gray-900";
                             }
@@ -4239,7 +4303,46 @@
                     return;
                 }
                 
-                bodyEl.innerHTML = data.columns.map(col => {
+                let statsCols = data.columns.slice();
+                
+                if (typeof __masterActivities !== 'undefined' && Array.isArray(__masterActivities)) {
+                    let activityCols = [];
+                    __masterActivities.forEach(a => {
+                        if (a.activity_type === 'FORMULA_ADD' || a.activity_type === 'IF_CONDITION') {
+                            let col = a.target_column || (a.payload && (a.payload.output_column || a.payload.column_name));
+                            if (col && !activityCols.includes(col)) {
+                                activityCols.push(col);
+                            }
+                        } else if (a.activity_type === 'COLUMN_RENAME') {
+                            let oldName = a.payload && a.payload.from;
+                            let newName = a.payload && (a.payload.to || a.payload.to_column);
+                            let idx = activityCols.indexOf(oldName);
+                            if (idx !== -1 && newName) {
+                                activityCols[idx] = newName;
+                            }
+                        } else if (a.activity_type === 'COLUMN_DELETE') {
+                            let col = a.payload && a.payload.column_name;
+                            let idx = activityCols.indexOf(col);
+                            if (idx !== -1) {
+                                activityCols.splice(idx, 1);
+                            }
+                        }
+                    });
+                    
+                    statsCols.sort((aObj, bObj) => {
+                        const a = aObj.column;
+                        const b = bObj.column;
+                        const idxA = activityCols.indexOf(a);
+                        const idxB = activityCols.indexOf(b);
+                        
+                        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                        if (idxA !== -1) return 1;
+                        if (idxB !== -1) return -1;
+                        return 0;
+                    });
+                }
+
+                bodyEl.innerHTML = statsCols.map(col => {
                     const isProtected = col.column === 'Source_File_Name';
                     const rowClass = col.hidden ? 'opacity-50 bg-gray-50' : '';
                     return `
@@ -10227,6 +10330,7 @@
 
         function resetFormulaForm() {
             document.getElementById('formula-type').value = 'SUM';
+            document.getElementById('formula-columns-input').value = '';
             document.getElementById('formula-column-name').value = '';
             document.getElementById('formula-constant').value = '';
             document.getElementById('formula-preview-result').classList.add('hidden');
@@ -10866,6 +10970,27 @@
             } catch (e) {
                 formulaColumnsList = [];
             }
+            
+            // Populate the right-side reference list
+            const listEl = document.getElementById('formula-master-columns-list');
+            if (listEl) {
+                if (formulaColumnsList.length === 0) {
+                    listEl.innerHTML = '<div class="text-sm text-gray-400 text-center mt-4">No columns available.</div>';
+                } else {
+                    // Filter out system columns like __is_deleted
+                    const visibleCols = formulaColumnsList.filter(c => !String(c).startsWith('__'));
+                    listEl.innerHTML = visibleCols.map(c => {
+                        const safeC = c.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        return `<div onclick="navigator.clipboard.writeText('${safeC}').then(() => { const s = this.querySelector('span'); s.textContent = 'Copied!'; setTimeout(() => s.textContent = 'Copy', 2000); })" 
+                              class="px-3 py-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded hover:bg-purple-50 hover:border-purple-200 cursor-pointer transition-colors relative group">
+                            ${escapeHtml(c)}
+                            <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium text-purple-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                Copy
+                            </span>
+                        </div>`;
+                    }).join('');
+                }
+            }
             // After the async load completes, repopulate any IF_CONDITION
             // condition rows that were already on screen with the fresh
             // column list (so the dropdown never appears empty).
@@ -11081,25 +11206,43 @@
             const val = input.value;
             const lastComma = val.lastIndexOf(',');
             const currentPart = lastComma >= 0 ? val.substring(lastComma + 1).trim() : val.trim();
+            
+            const selectedCols = val.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            let matches = [];
+            
+            // If nothing typed yet, show all available columns not already selected
             if (!currentPart) {
-                hints.classList.add('hidden');
-                return;
+                matches = formulaColumnsList.filter(c => !selectedCols.includes(c) && !String(c).startsWith('__'));
+            } else {
+                matches = formulaColumnsList.filter(c =>
+                    c.toLowerCase().includes(currentPart.toLowerCase()) &&
+                    !selectedCols.includes(c) && !String(c).startsWith('__')
+                );
             }
-            const matches = formulaColumnsList.filter(c =>
-                c.toLowerCase().includes(currentPart.toLowerCase()) &&
-                !val.split(',').map(s => s.trim()).includes(c)
-            ).slice(0, 8);
+            
             if (matches.length === 0) {
                 hints.classList.add('hidden');
                 return;
             }
             hints.innerHTML = matches.map(c =>
-                `<div class="px-3 py-1.5 hover:bg-blue-50 cursor-pointer text-sm text-gray-700" onclick="selectFormulaHint('${c.replace(/'/g, "\\'")}')">${c}</div>`
+                `<div class="px-3 py-1.5 hover:bg-purple-50 cursor-pointer text-sm text-gray-700 border-b border-gray-100 last:border-0" onclick="selectFormulaHint('${c.replace(/'/g, "\\'")}', event)">${c}</div>`
             ).join('');
             hints.classList.remove('hidden');
         }
 
-        function selectFormulaHint(columnName) {
+        // Close hints when clicking outside
+        document.addEventListener('click', function(event) {
+            const hints = document.getElementById('formula-hints');
+            const input = document.getElementById('formula-columns-input');
+            if (hints && input && !input.contains(event.target) && !hints.contains(event.target)) {
+                hints.classList.add('hidden');
+            }
+        });
+
+        function selectFormulaHint(columnName, event) {
+            if (event) {
+                event.stopPropagation();
+            }
             const input = document.getElementById('formula-columns-input');
             const val = input.value;
             const lastComma = val.lastIndexOf(',');
