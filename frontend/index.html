@@ -1554,6 +1554,84 @@
         </div>
     </div>
 
+    <!-- Formula Selector Modal -->
+    <div id="formula-selector-modal" class="modal-overlay fixed inset-0 z-[60] hidden items-center justify-center" style="display:none; background-color: rgba(0,0,0,0.5);">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-gray-900">Select Formula Type</h3>
+                <button onclick="closeFormulaSelectorModal()" class="text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-full p-1 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Mathematical -->
+                <div>
+                    <h4 class="text-xs font-bold tracking-wider text-purple-600 uppercase mb-3 flex items-center space-x-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h3M13 17h.01M9 13h.01M13 13h.01M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path></svg>
+                        <span>Math & Operations</span>
+                    </h4>
+                    <div class="space-y-3">
+                        <button onclick="selectFormulaTypeAndOpen('SUM')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-purple-500 hover:shadow-md hover:bg-purple-50 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-purple-700">SUM</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Add values across multiple columns</div>
+                        </button>
+                        <button onclick="selectFormulaTypeAndOpen('SUBTRACT')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-purple-500 hover:shadow-md hover:bg-purple-50 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-purple-700">SUBTRACT</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Subtract column 2 from column 1</div>
+                        </button>
+                        <button onclick="selectFormulaTypeAndOpen('MULTIPLY')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-purple-500 hover:shadow-md hover:bg-purple-50 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-purple-700">MULTIPLY</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Multiply two columns together</div>
+                        </button>
+                        <button onclick="selectFormulaTypeAndOpen('DIVIDE')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-purple-500 hover:shadow-md hover:bg-purple-50 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-purple-700">DIVIDE</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Divide column 1 by column 2 (zero-safe)</div>
+                        </button>
+                        <button onclick="selectFormulaTypeAndOpen('PERCENTAGE')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-purple-500 hover:shadow-md hover:bg-purple-50 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-purple-700">PERCENTAGE</div>
+                            <div class="text-xs text-gray-500 mt-0.5">(Part / Whole) &times; 100</div>
+                        </button>
+                    </div>
+                </div>
+                <!-- Logic & Lookup -->
+                <div>
+                    <h4 class="text-xs font-bold tracking-wider text-blue-600 uppercase mb-3 flex items-center space-x-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        <span>Logic & Lookups</span>
+                    </h4>
+                    <div class="space-y-3">
+                        <button onclick="selectFormulaTypeAndOpen('IF_CONDITION')" class="w-full text-left px-4 py-3 rounded-xl border-2 border-blue-200 bg-blue-50 hover:border-blue-500 hover:shadow-md hover:bg-blue-100 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 group relative overflow-hidden">
+                            <div class="absolute right-0 top-0 mt-3 mr-3">
+                                <span class="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">POPULAR</span>
+                            </div>
+                            <div class="font-semibold text-blue-900 group-hover:text-blue-800">IF Condition</div>
+                            <div class="text-xs text-blue-700 mt-0.5 pr-12">Complex logical rules and condition groups</div>
+                        </button>
+                        <button onclick="selectFormulaTypeAndOpen('SUMIF')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-500 hover:shadow-md hover:bg-blue-50 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-blue-700">SUMIF</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Sum values from a secondary file</div>
+                        </button>
+                        <button onclick="selectFormulaTypeAndOpen('COUNTIF')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-500 hover:shadow-md hover:bg-blue-50 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-blue-700">COUNTIF</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Count occurrences in a secondary file</div>
+                        </button>
+                        <button onclick="selectFormulaTypeAndOpen('VLOOKUP')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-500 hover:shadow-md hover:bg-blue-50 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-blue-700">VLOOKUP / HLOOKUP</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Extract values from a secondary file</div>
+                        </button>
+                        <button onclick="selectFormulaTypeAndOpen('CONCAT')" class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-500 hover:shadow-md hover:bg-blue-50 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 group">
+                            <div class="font-semibold text-gray-900 group-hover:text-blue-700">CONCAT</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Join multiple text columns together</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Formula Modal -->
     <div id="formula-modal" class="modal-overlay fixed inset-0 z-[60] hidden items-center justify-center" style="display:none;">
         <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
@@ -3160,6 +3238,23 @@
             return '';
         }
 
+        function getSyncStatusMessage(file) {
+            if (!file.sync_status || file.sync_status === 'pending') {
+                return 'Pending Sync';
+            }
+            if (file.sync_status === 'in_processing') {
+                return 'Syncing... Click to force retry if stuck';
+            }
+            if (file.sync_status === 'synced') {
+                return 'Synced to Master File';
+            }
+            if (file.sync_status === 'rejected') {
+                const err = file.sync_error || "Unknown Error";
+                return `Sync Failed: ${err}`;
+            }
+            return '';
+        }
+
         async function forceRetrySync(fileId) {
             if (!confirm("Are you sure you want to force this file to retry syncing?")) return;
             try {
@@ -3221,6 +3316,7 @@
                             ${rejectedDownloadPill}
                         </div>
                         <p class="text-xs text-gray-400 mt-0.5">Uploaded by: ${file.uploaded_by_name || 'System'}</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Status Info: ${getSyncStatusMessage(file)}</p>
                     </div>
                     <div class="flex items-center space-x-1">
                         <button onclick="event.stopPropagation(); showFileDetails(${file.id})" class="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors" title="View Details">
@@ -3784,116 +3880,6 @@
             
             const columnNamesInput = document.getElementById('master-column-names').value.trim();
             
-            
-                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
-                
-                // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
-                if (isVal1or3) {
-                    if (!fileId) {
-                        showFieldError('phase1-file', 'Please select a file');
-                        hasError = true;
-                        firstErrorElement = document.getElementById('phase1-file');
-                    }
-                    if (hasError) {
-                        if (saveBtn) saveBtn.disabled = false;
-                        if (spinner) spinner.classList.add('hidden');
-                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
-                        if (firstErrorElement) firstErrorElement.focus();
-                        return;
-                    }
-                    
-                    // Call generation first
-                    const generateForm = new FormData();
-                    generateForm.append('file_id', fileId);
-                    generateForm.append('validation_id', window.currentValidation);
-                    
-                    const genData = await apiCall('/api/primary/generate', {
-                        method: 'POST',
-                        body: generateForm
-                    });
-                    
-                    if (!genData || !genData.success) {
-                        if (saveBtn) saveBtn.disabled = false;
-                        if (spinner) spinner.classList.add('hidden');
-                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
-                        showToast('Failed to generate primary data: ' + (genData?.detail || 'Unknown error'), 'error');
-                        return;
-                    }
-
-                    const config = {
-                        file_id: fileId,
-                        sheet: '',
-                        column: '',
-                        fields: genData.fields || [],
-                        primary_file: genData.filename,
-                        total_unique: genData.total_unique
-                    };
-                    
-                    const formData = new FormData();
-                    formData.append('phase', 1);
-                    formData.append('validation_id', window.currentValidation);
-                    formData.append('config', JSON.stringify(config));
-                    
-                    const data = await apiCall('/api/rules', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    if (saveBtn) saveBtn.disabled = false;
-                    if (spinner) spinner.classList.add('hidden');
-                    if (saveText) saveText.textContent = 'Save Phase 1 Rule';
-                    
-                    if (data.success) {
-                        showToast('Phase 1 configuration saved!', 'success');
-                        
-                        // Show Phase 1 preview for Val 1/3
-                        if (isVal1or3 && genData.fields) {
-                            const previewSection = document.getElementById('phase1-val13-preview-section');
-                            const previewHeader = document.getElementById('phase1-val13-preview-header');
-                            if (previewSection && previewHeader) {
-                                previewSection.classList.remove('hidden');
-                                let headerHtml = '';
-                                genData.fields.forEach(f => {
-                                    const colName = f.letter ? `${f.letter} - ${f.name}` : f.name;
-                                    headerHtml += `<th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${colName}</th>`;
-                                });
-                                previewHeader.innerHTML = headerHtml;
-                            }
-                        }
-
-                        // Update Phase 4 preview headers directly if we are on Val 1/3
-                        const thead = document.getElementById('phase4-primary-preview-header');
-                        if (thead && genData.fields) {
-                            let headerHtml = '';
-                            genData.fields.forEach(f => {
-                                headerHtml += `<th class="text-left font-medium text-gray-600 px-3 py-2">${f.name}</th>`;
-                            });
-                            thead.innerHTML = headerHtml;
-                        }
-                        const tbody = document.getElementById('phase4-primary-preview-body');
-                        if (tbody && genData.preview) {
-                            tbody.innerHTML = '';
-                            genData.preview.forEach(row => {
-                                const tr = document.createElement('tr');
-                                tr.className = 'border-b border-gray-100';
-                                let rowHtml = '';
-                                genData.fields.forEach(f => {
-                                    const val = row[f.name] !== undefined ? row[f.name] : '';
-                                    rowHtml += `<td class="px-3 py-2 text-gray-800">${val}</td>`;
-                                });
-                                tr.innerHTML = rowHtml;
-                                tbody.appendChild(tr);
-                            });
-                        }
-                        
-                        const p4c = document.getElementById('phase4-primary-preview-container');
-                        if (p4c) p4c.classList.remove('hidden');
-                        
-                        await loadAvailableColumnsForSummary();
-                    }
-                    return;
-                }
-
                 let hasError = false;
             let firstErrorElement = null;
 
@@ -4255,9 +4241,10 @@
                 
                 bodyEl.innerHTML = data.columns.map(col => {
                     const isProtected = col.column === 'Source_File_Name';
+                    const rowClass = col.hidden ? 'opacity-50 bg-gray-50' : '';
                     return `
-                    <tr>
-                        <td class="px-3 py-2 text-sm text-gray-900 font-medium">${col.column}</td>
+                    <tr class="${rowClass}">
+                        <td class="px-3 py-2 text-sm text-gray-900 font-medium ${col.hidden ? 'line-through text-gray-500' : ''}">${col.column}</td>
                         <td class="px-3 py-2 text-sm text-gray-700">
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${col.data_type === 'Numeric' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}">
                                 ${col.data_type}
@@ -4269,7 +4256,13 @@
                         <td class="px-3 py-2 text-center whitespace-nowrap">
                             ${isProtected ?
                                 '<span class="text-xs text-gray-400" title="Protected column">—</span>' :
-                                `<button onclick="renameMasterColumn('${col.column.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 transition-colors mr-1 inline-flex items-center" title="Rename column (auto-captured as Activity)">
+                                `<button onclick="toggleMasterColumnVisibility('${col.column.replace(/'/g, "\\'")}', ${col.hidden})" class="text-gray-500 hover:text-gray-700 transition-colors mr-1 inline-flex items-center" title="${col.hidden ? 'Unhide column' : 'Hide column'}">
+                                    ${col.hidden 
+                                        ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>'
+                                        : '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>'
+                                    }
+                                </button>
+                                <button onclick="renameMasterColumn('${col.column.replace(/'/g, "\\'")}')" class="text-blue-500 hover:text-blue-700 transition-colors mr-1 inline-flex items-center" title="Rename column (auto-captured as Activity)">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                     </svg>
@@ -9742,7 +9735,13 @@
                             const timeTaken = document.getElementById(`result-time-taken${suffix}`);
                             if(timeTaken) timeTaken.textContent = result.processing_time || 'N/A';
                             
-                            showToast(result.message || 'Processing completed successfully!', 'success');
+                            if (result.phase4_errors && result.phase4_errors.length > 0) {
+                                showToast(result.message, 'warning');
+                                alert("WARNING: Some summaries were skipped because they require columns that are currently hidden or missing:\n\n" + result.phase4_errors.join("\n\n"));
+                            } else {
+                                showToast(result.message || 'Processing completed successfully!', 'success');
+                            }
+                            
                             // Auto-refresh the processed files history
                             loadFinalProcessedHistory();
                         }
@@ -10032,6 +10031,36 @@
 
         let formulaColumnsList = [];
 
+        function openFormulaSelectorModal(folderId) {
+            const fid = folderId || currentFolderId;
+            if (!fid) {
+                showToast('Please select a folder first', 'warning');
+                return;
+            }
+            currentFolderId = fid;
+            const modalEl = document.getElementById('formula-selector-modal');
+            modalEl.classList.remove('hidden');
+            modalEl.style.display = 'flex';
+        }
+
+        function closeFormulaSelectorModal() {
+            const modalEl = document.getElementById('formula-selector-modal');
+            modalEl.classList.add('hidden');
+            modalEl.style.display = 'none';
+        }
+
+        async function selectFormulaTypeAndOpen(type, folderId) {
+            closeFormulaSelectorModal();
+            // Default to opening modal. The modal handles the rest.
+            await openFormulaModal(folderId);
+            // After modal is initialized, set the exact type.
+            const typeSelect = document.getElementById('formula-type');
+            if (typeSelect) {
+                typeSelect.value = type;
+                await updateFormulaUI();
+            }
+        }
+
         async function openFormulaModal(folderId) {
             const fid = folderId || currentFolderId;
             if (!fid) {
@@ -10061,6 +10090,18 @@
             // (called inside loadFormulaColumns) repopulates them once data arrives.
             await loadFormulaColumns();
             resetFormulaForm();
+            
+            window.editingFormulaActivityId = null;
+            const titleEl = document.getElementById('formula-modal-title');
+            if (titleEl) titleEl.textContent = 'Add Formula / Condition';
+            
+            const btn = document.getElementById('formula-apply-btn');
+            if (btn) {
+                btn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    <span>Save Formula</span>
+                `;
+            }
         }
 
         window.editingFormulaActivityId = null;
@@ -10106,7 +10147,7 @@
             const titleEl = document.getElementById('formula-modal-title');
             if (titleEl) titleEl.textContent = 'Edit Formula / Condition';
 
-            updateFormulaUI(); // This shows/hides the right containers
+            await updateFormulaUI(); // This shows/hides the right containers and awaits populating dropdowns
 
             if (ftype === 'IF_CONDITION') {
                 // Phase 2 multi-group IF_CONDITION restoration
@@ -10136,14 +10177,19 @@
                     if (document.getElementById('if-false-value')) {
                         document.getElementById('if-false-value').value = p.false_value?.value !== undefined ? p.false_value.value : '';
                         const falseCol = p.false_value?.type === 'column' ? p.false_value.value : '';
-                        if (document.getElementById('if-false-column')) document.getElementById('if-false-column').value = falseCol;
+                        if (document.getElementById('if-false-column')) {
+                            const dfc = document.getElementById('if-false-column');
+                            if (falseCol) dfc.dataset.savedValue = falseCol;
+                            dfc.value = falseCol;
+                            if (dfc.value === falseCol) delete dfc.dataset.savedValue;
+                        }
                         if (document.getElementById('if-false-type')) document.getElementById('if-false-type').value = p.false_value?.type || 'value';
                         if (typeof updateIfBranchInputs === 'function') updateIfBranchInputs('false');
                     }
                 } else if (ftype === 'SUMIF' || ftype === 'COUNTIF' || ftype === 'VLOOKUP' || ftype === 'HLOOKUP') {
-                    // Async population for cross-file formulas
+                    // Async population for cross-file formulas already awaited in updateFormulaUI
                 document.getElementById('formula-primary-column').value = p.primary_column || '';
-                await populateFormulaSecondaryFiles();
+
                 document.getElementById('formula-secondary-file').value = p.secondary_file || '';
                 
                 await loadFormulaSecondarySheets();
@@ -10257,36 +10303,40 @@
             if (container) {
                 // Each .if-col inside every group
                 container.querySelectorAll('select.if-col').forEach(sel => {
-                    const prev = sel.value;
+                    const prev = sel.value || sel.dataset.savedValue;
                     sel.innerHTML = colOpts;
                     if (prev && Array.from(sel.options).some(o => o.value === prev)) {
                         sel.value = prev;
+                        if (sel.value === prev) delete sel.dataset.savedValue;
                     }
                 });
                 // Each .if-col-value (per-row "From column")
                 container.querySelectorAll('select.if-col-value').forEach(sel => {
-                    const prev = sel.value;
+                    const prev = sel.value || sel.dataset.savedValue;
                     sel.innerHTML = colOpts;
                     if (prev && Array.from(sel.options).some(o => o.value === prev)) {
                         sel.value = prev;
+                        if (sel.value === prev) delete sel.dataset.savedValue;
                     }
                 });
                 // Each .if-group-value-column (group TRUE-value branch)
                 container.querySelectorAll('select.if-group-value-column').forEach(sel => {
-                    const prev = sel.value;
+                    const prev = sel.value || sel.dataset.savedValue;
                     sel.innerHTML = colOpts;
                     if (prev && Array.from(sel.options).some(o => o.value === prev)) {
                         sel.value = prev;
+                        if (sel.value === prev) delete sel.dataset.savedValue;
                     }
                 });
             }
             // Global Default branch "From column"
             const fCol = document.getElementById('if-false-column');
             if (fCol) {
-                const prev = fCol.value;
+                const prev = fCol.value || fCol.dataset.savedValue;
                 fCol.innerHTML = colOpts;
                 if (prev && Array.from(fCol.options).some(o => o.value === prev)) {
                     fCol.value = prev;
+                    if (fCol.value === prev) delete fCol.dataset.savedValue;
                 }
             }
         }
@@ -10394,8 +10444,10 @@
             const colSel = card.querySelector('.if-group-value-column');
             if (colSel && valueType === 'column' && valueVal) {
                 // Try to set the previously-saved column value if it exists in options
+                colSel.dataset.savedValue = valueVal;
                 if (Array.from(colSel.options).some(o => o.value === valueVal)) {
                     colSel.value = valueVal;
+                    if (colSel.value === valueVal) delete colSel.dataset.savedValue;
                 }
             }
             // Keep column dropdowns in sync with master file columns (may load later)
@@ -10512,20 +10564,28 @@
             // Restore saved selections
             if (savedCond) {
                 const colSel = row.querySelector('.if-col');
-                if (colSel && savedCond.column && Array.from(colSel.options).some(o => o.value === savedCond.column)) {
-                    colSel.value = savedCond.column;
+                if (colSel && savedCond.column) {
+                    colSel.dataset.savedValue = savedCond.column;
+                    if (Array.from(colSel.options).some(o => o.value === savedCond.column)) {
+                        colSel.value = savedCond.column;
+                        if (colSel.value === savedCond.column) delete colSel.dataset.savedValue;
+                    }
                 }
                 if (savedCond.value_type === 'column' && savedCond.value) {
                     const ccSel = row.querySelector('.if-col-value');
-                    if (ccSel && Array.from(ccSel.options).some(o => o.value === savedCond.value)) {
-                        ccSel.value = savedCond.value;
+                    if (ccSel) {
+                        ccSel.dataset.savedValue = savedCond.value;
+                        if (Array.from(ccSel.options).some(o => o.value === savedCond.value)) {
+                            ccSel.value = savedCond.value;
+                            if (ccSel.value === savedCond.value) delete ccSel.dataset.savedValue;
+                        }
                     }
                 }
             }
             // Trigger the value/vtype swap to reflect current aggregator
             onIfCondChange(row.querySelector('.if-agg'));
-            // If this is a position aggregator, also set the literal value
-            if (isPos && v !== '') {
+            // Always set the literal value if it exists
+            if (v !== '') {
                 row.querySelector('.if-val').value = v;
             }
             // Toggle Mid start visibility based on saved position
@@ -10582,7 +10642,12 @@
                         valInput.value = '';
                         colSelect.classList.remove('hidden');
                         colSelect.disabled = false;
+                        const prev = colSelect.value || colSelect.dataset.savedValue;
                         colSelect.innerHTML = buildIfColumnOptions();
+                        if (prev && Array.from(colSelect.options).some(o => o.value === prev)) {
+                            colSelect.value = prev;
+                            if (colSelect.value === prev) delete colSelect.dataset.savedValue;
+                        }
                         valInput.placeholder = 'Value to compare against (literal text)';
                     } else {
                         colSelect.classList.add('hidden');
@@ -10612,7 +10677,12 @@
                     if (colSelect) {
                         colSelect.classList.remove('hidden');
                         colSelect.disabled = false;
+                        const prev = colSelect.value || colSelect.dataset.savedValue;
                         colSelect.innerHTML = buildIfColumnOptions();
+                        if (prev && Array.from(colSelect.options).some(o => o.value === prev)) {
+                            colSelect.value = prev;
+                            if (colSelect.value === prev) delete colSelect.dataset.savedValue;
+                        }
                     }
                 } else {
                     if (colSelect) { colSelect.classList.add('hidden'); colSelect.disabled = true; colSelect.value = ''; }
@@ -10649,9 +10719,14 @@
                 valInput.classList.add('hidden');
                 valInput.disabled = true;
                 valInput.value = '';
+                const prev = colSelect.value || colSelect.dataset.savedValue;
                 colSelect.classList.remove('hidden');
                 colSelect.disabled = false;
                 colSelect.innerHTML = buildIfColumnOptions();
+                if (prev && Array.from(colSelect.options).some(o => o.value === prev)) {
+                    colSelect.value = prev;
+                    if (colSelect.value === prev) delete colSelect.dataset.savedValue;
+                }
             } else {
                 colSelect.classList.add('hidden');
                 colSelect.disabled = true;
@@ -10798,7 +10873,7 @@
             return formulaColumnsList;
         }
 
-        function updateFormulaUI() {
+        async function updateFormulaUI() {
             const type = document.getElementById('formula-type').value;
             const container = document.getElementById('formula-columns-container');
             const sumifContainer = document.getElementById('formula-sumif-container');
@@ -10860,8 +10935,8 @@
                     countContainer.classList.remove('hidden');
                 }
                 // Populate primary columns and secondary file dropdown
-                populateFormulaPrimaryColumns();
-                populateFormulaSecondaryFiles();
+                await populateFormulaPrimaryColumns();
+                await populateFormulaSecondaryFiles();
             } else {
                 container.classList.remove('hidden');
                 sumifContainer.classList.add('hidden');
@@ -11256,6 +11331,7 @@
                     if (window.editingFormulaActivityId) {
                         formData.append('payload', JSON.stringify(payload));
                         formData.append('target_column', columnName);
+                        formData.append('activity_type', 'IF_CONDITION');
                         const data = await apiCall(`/api/master/${currentFolderId}/activities/${window.editingFormulaActivityId}`, {
                             method: 'PATCH',
                             body: formData
@@ -11370,6 +11446,7 @@
                         
                         formData.append('payload', JSON.stringify(payload));
                         formData.append('target_column', columnName);
+                        formData.append('activity_type', type);
                         
                         const data = await apiCall(`/api/master/${currentFolderId}/activities/${window.editingFormulaActivityId}`, {
                             method: 'PATCH',
@@ -11514,6 +11591,25 @@
                 hideFormulaProgress();
                 document.getElementById('formula-apply-btn').disabled = false;
                 showToast('Apply failed: ' + error.message, 'error');
+            }
+        }
+
+        async function toggleMasterColumnVisibility(columnName, currentHiddenStatus) {
+            try {
+                const newHiddenStatus = !currentHiddenStatus;
+                const data = await apiCall(`/api/master/${currentFolderId}/columns/${encodeURIComponent(columnName)}/visibility`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ hidden: newHiddenStatus })
+                });
+                
+                if (data.success) {
+                    showToast(`Column '${columnName}' is now ${newHiddenStatus ? 'hidden' : 'visible'}.`, 'success');
+                    await loadMasterStats();
+                } else {
+                    showToast(data.message || 'Visibility toggle failed', 'error');
+                }
+            } catch (error) {
+                showToast('Toggle failed: ' + error.message, 'error');
             }
         }
 
@@ -12192,11 +12288,11 @@
                     const ok2 = wire('btn-formula', function() {
                         console.log('[Reconciliation] Formula button clicked (backstop listener)');
                         // Verify the modal element exists BEFORE opening so we surface any issues
-                        const modalEl = document.getElementById('formula-modal');
-                        console.log('[Reconciliation] formula-modal element:', modalEl ? 'FOUND' : 'NOT FOUND');
+                        const modalEl = document.getElementById('formula-selector-modal');
+                        console.log('[Reconciliation] formula-selector-modal element:', modalEl ? 'FOUND' : 'NOT FOUND');
 
                         // CRITICAL: Apply inline styles to guarantee visibility regardless of Tailwind state
-                        function forceShowFormulaModal() {
+                        function forceShowFormulaSelectorModal() {
                             if (!modalEl) return;
                             // Remove hidden class
                             modalEl.classList.remove('hidden');
@@ -12211,29 +12307,29 @@
                             modalEl.style.alignItems = 'center';
                             modalEl.style.justifyContent = 'center';
                             modalEl.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                            console.log('[Reconciliation] FORCE-SHOWED formula-modal with inline styles');
+                            console.log('[Reconciliation] FORCE-SHOWED formula-selector-modal with inline styles');
                         }
 
-                        if (typeof openFormulaModal === 'function') {
+                        if (typeof openFormulaSelectorModal === 'function') {
                             try {
-                                openFormulaModal();
-                                forceShowFormulaModal();
+                                openFormulaSelectorModal();
+                                forceShowFormulaSelectorModal();
                                 if (typeof showToast === 'function') {
-                                    showToast('Formula modal opened', 'success');
+                                    showToast('Formula selector opened', 'success');
                                 }
                             } catch (e) {
-                                console.error('[Reconciliation] openFormulaModal threw:', e);
-                                forceShowFormulaModal();
+                                console.error('[Reconciliation] openFormulaSelectorModal threw:', e);
+                                forceShowFormulaSelectorModal();
                                 if (typeof showToast === 'function') {
-                                    showToast('Opened Formula (fallback): ' + e.message, 'warning');
+                                    showToast('Opened Formula Selector (fallback): ' + e.message, 'warning');
                                 }
                             }
                         } else {
                             // Function not defined - force-show the modal anyway
-                            console.warn('[Reconciliation] openFormulaModal not defined, force-showing modal');
-                            forceShowFormulaModal();
+                            console.warn('[Reconciliation] openFormulaSelectorModal not defined, force-showing modal');
+                            forceShowFormulaSelectorModal();
                             if (typeof showToast === 'function') {
-                                showToast('Formula modal opened (no function)', 'info');
+                                showToast('Formula selector opened (no function)', 'info');
                             }
                         }
                     }, 'Formula');
@@ -12279,7 +12375,7 @@
                             evt.stopPropagation();
                             const id = btn.id;
                             if (id === 'btn-formula') {
-                                if (typeof openFormulaModal === 'function') openFormulaModal();
+                                if (typeof openFormulaSelectorModal === 'function') openFormulaSelectorModal();
                             } else if (id === 'btn-find-replace') {
                                 if (typeof openFindReplaceModal === 'function') openFindReplaceModal();
                             } else if (id === 'btn-export-master') {

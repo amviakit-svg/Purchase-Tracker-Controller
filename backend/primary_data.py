@@ -85,7 +85,7 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
             master = get_master_file(folder_id)
             if not master: raise Exception("Master file not found")
             import duckdb
-            conn = duckdb.connect(master['db_path'], read_only=True)
+            conn = duckdb.connect(master['db_path'])
             try:
                 # Fetch non-deleted rows
                 df = conn.execute(
@@ -97,6 +97,12 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
                 
                 # Drop internal metadata columns
                 meta_cols = ["__is_deleted", "__deleted_at", "__row_fp"]
+                if master.get('hidden_columns'):
+                    try:
+                        hidden_cols = json.loads(master['hidden_columns'])
+                        meta_cols.extend(hidden_cols)
+                    except:
+                        pass
                 df = df.drop(columns=[col for col in meta_cols if col in df.columns])
             finally:
                 conn.close()
@@ -221,9 +227,23 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
         
         # Read from DuckDB master file
         import duckdb
-        conn = duckdb.connect(db_path, read_only=True)
+        conn = duckdb.connect(db_path)
         try:
-            df = conn.execute("SELECT * FROM master_data").fetchdf()
+            df = conn.execute(
+                """
+                SELECT * FROM master_data 
+                WHERE "__is_deleted" = FALSE OR "__is_deleted" IS NULL
+                """
+            ).fetchdf()
+            
+            meta_cols = ["__is_deleted", "__deleted_at", "__row_fp"]
+            if master.get('hidden_columns'):
+                try:
+                    hidden_cols = json.loads(master['hidden_columns'])
+                    meta_cols.extend(hidden_cols)
+                except:
+                    pass
+            df = df.drop(columns=[col for col in meta_cols if col in df.columns])
         finally:
             conn.close()
         
@@ -452,7 +472,7 @@ def preview_primary_data(file_id, sheet_name, column_name, header_row=1, fields=
             master = get_master_file(folder_id)
             if not master: raise Exception("Master file not found")
             import duckdb
-            conn = duckdb.connect(master['db_path'], read_only=True)
+            conn = duckdb.connect(master['db_path'])
             try:
                 df = conn.execute("SELECT * FROM master_data LIMIT 10").fetchdf()
             finally:
@@ -490,7 +510,7 @@ def preview_primary_data(file_id, sheet_name, column_name, header_row=1, fields=
         if not master:
             raise Exception("Master file not found")
         import duckdb
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         try:
             df = conn.execute("SELECT * FROM master_data").fetchdf()
         finally:

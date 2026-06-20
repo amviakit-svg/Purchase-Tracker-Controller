@@ -1547,6 +1547,27 @@ async def merge_files(
                     # Select only the requested columns
                     df = df[selected_columns]
                     
+                    # --- AUTO-ROUND NUMERIC VALUES TO 2 DECIMALS ---
+                    def _auto_round(val):
+                        if pd.isna(val):
+                            return val
+                        if isinstance(val, (int, float)):
+                            return round(val, 2)
+                        if isinstance(val, str):
+                            try:
+                                if '.' in val:
+                                    return round(float(val), 2)
+                                else:
+                                    return val # integer string, no decimals to round
+                            except ValueError:
+                                return val
+                        return val
+                        
+                    for col in df.columns:
+                        df[col] = df[col].apply(_auto_round)
+                    # -----------------------------------------------
+                    
+                    
                     # Add Source_File_Name as the first column
                     df.insert(0, 'Source_File_Name', original_name)
                     
@@ -1716,7 +1737,7 @@ async def merge_files(
                                     sec_master = get_master_file(sec_folder_id)
                                     if not sec_master:
                                         continue
-                                    sec_conn = duckdb.connect(sec_master['db_path'], read_only=True)
+                                    sec_conn = duckdb.connect(sec_master['db_path'])
                                     sec_df = sec_conn.execute("SELECT * FROM master_data").fetchdf()
                                     sec_conn.close()
                                 else:
@@ -2290,7 +2311,7 @@ async def get_master_info(folder_id: int, current_user: Optional[dict] = Depends
 
     
     try:
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         count = conn.execute("SELECT COUNT(*) FROM master_data").fetchone()[0]
         
         # Get column names
@@ -2385,9 +2406,19 @@ async def get_master_columns(folder_id: int, current_user: Optional[dict] = Depe
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
             raise HTTPException(status_code=404, detail="Master file not found")
         
-        conn = duckdb.connect(master['db_path'], read_only=True)
-        columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        conn = duckdb.connect(master['db_path'])
+        all_columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
         conn.close()
+        
+        internal_cols = {"__is_deleted", "__deleted_at", "__row_fp"}
+        if master.get('hidden_columns'):
+            try:
+                hidden_cols = json.loads(master['hidden_columns'])
+                internal_cols.update(hidden_cols)
+            except:
+                pass
+                
+        columns = [c for c in all_columns if c not in internal_cols]
         
         return {"success": True, "columns": columns}
     except HTTPException:
@@ -2407,7 +2438,7 @@ async def query_master(folder_id: str = Form(...), query: str = Form("SELECT * F
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
             raise HTTPException(status_code=404, detail="Master file not found")
         
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         result = conn.execute(query).fetchdf()
         conn.close()
         
@@ -2452,7 +2483,7 @@ async def preview_master(
         # short-lived writeable connection to run the migration.
         try:
             from backend.row_lifecycle import ensure_lifecycle_columns
-            _mig_conn = duckdb.connect(master['db_path'], read_only=False)
+            _mig_conn = duckdb.connect(master['db_path'])
             try:
                 ensure_lifecycle_columns(_mig_conn)
             finally:
@@ -2460,12 +2491,20 @@ async def preview_master(
         except Exception:
             pass
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
 
         # Get column names first — we need them to build the search predicate.
         all_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
         internal_cols = {"__is_deleted", "__deleted_at", "__row_fp"}
-        # Public column list excludes the internal __ meta columns
+        
+        if master.get('hidden_columns'):
+            try:
+                hidden_cols = json.loads(master['hidden_columns'])
+                internal_cols.update(hidden_cols)
+            except:
+                pass
+
+        # Public column list excludes the internal __ meta columns and hidden columns
         columns = [c for c in all_cols if c not in internal_cols]
         # User columns are the columns we should match against for `search`
         user_cols = [c for c in all_cols if c not in internal_cols]
@@ -2613,7 +2652,7 @@ async def get_source_files(folder_id: int, current_user: Optional[dict] = Depend
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
             raise HTTPException(status_code=404, detail="Master file not found")
         
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         files = conn.execute("""
             SELECT Source_File_Name, COUNT(*) as row_count 
             FROM master_data 
@@ -2640,13 +2679,22 @@ async def get_master_stats(folder_id: int, current_user: Optional[dict] = Depend
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
             raise HTTPException(status_code=404, detail="Master file not found")
         
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         
         # Get column info
-        columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        all_columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        internal_cols = {"__is_deleted", "__deleted_at", "__row_fp"}
+        columns = [c for c in all_columns if c not in internal_cols]
         
         total_rows = conn.execute("SELECT COUNT(*) FROM master_data").fetchone()[0]
         
+        hidden_cols = []
+        if master.get('hidden_columns'):
+            try:
+                hidden_cols = json.loads(master['hidden_columns'])
+            except:
+                pass
+                
         stats = []
         for col in columns:
             # Data type detection
@@ -2677,7 +2725,8 @@ async def get_master_stats(folder_id: int, current_user: Optional[dict] = Depend
                 "total_rows": type_result[0],
                 "non_null_count": type_result[1],
                 "null_count": type_result[2],
-                "unique_values": type_result[3]
+                "unique_values": type_result[3],
+                "hidden": col in hidden_cols
             })
         
         conn.close()
@@ -2692,6 +2741,48 @@ async def get_master_stats(folder_id: int, current_user: Optional[dict] = Depend
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class VisibilityToggleModel(BaseModel):
+    hidden: bool
+
+@app.put("/api/master/{folder_id}/columns/{column_name}/visibility")
+async def toggle_column_visibility(
+    folder_id: int, 
+    column_name: str, 
+    payload: VisibilityToggleModel,
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    """Toggle a column's hidden status in the master file"""
+    try:
+        cid, mid = _get_context(current_user)
+        master = get_master_file(folder_id)
+        if not master or master.get('company_id') != cid or master.get('module_id') != mid:
+            raise HTTPException(status_code=404, detail="Master file not found")
+            
+        hidden_cols = []
+        if master.get('hidden_columns'):
+            try:
+                hidden_cols = json.loads(master['hidden_columns'])
+            except:
+                pass
+                
+        if payload.hidden and column_name not in hidden_cols:
+            hidden_cols.append(column_name)
+        elif not payload.hidden and column_name in hidden_cols:
+            hidden_cols.remove(column_name)
+            
+        conn = get_db_connection()
+        conn.execute(
+            "UPDATE master_files SET hidden_columns = ? WHERE folder_id = ?",
+            (json.dumps(hidden_cols), folder_id)
+        )
+        conn.commit()
+        conn.close()
+        
+        return {"success": True, "message": "Visibility updated", "hidden": payload.hidden}
+    except Exception as e:
+        logger.error(f"Error toggling column visibility: {e}")
+        return {"success": False, "message": str(e)}
 
 @app.post("/api/master/{folder_id}/export")
 async def export_master(
@@ -2714,7 +2805,7 @@ async def export_master(
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
             raise HTTPException(status_code=404, detail="Master file not found")
         
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         
         if query:
             # Custom SQL query
@@ -2906,7 +2997,7 @@ async def apply_row_filter(
         if logic not in ('AND', 'OR'):
             logic = 'AND'
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         try:
             existing_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
             total_rows = conn.execute("SELECT COUNT(*) FROM master_data").fetchone()[0]
@@ -2992,7 +3083,7 @@ async def filtered_preview(
             logic = 'AND'
         limit = max(1, min(int(limit or 50), 1000))
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         try:
             existing_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
             for c in conds:
@@ -3237,7 +3328,7 @@ async def api_list_deleted_rows(
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
             raise HTTPException(status_code=404, detail="Master file not found")
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         try:
             from backend.row_lifecycle import (
                 ensure_lifecycle_columns, list_deleted_rows, count_deleted_rows, list_deleted_source_files,
@@ -3279,7 +3370,7 @@ async def api_count_deleted_rows(
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
             raise HTTPException(status_code=404, detail="Master file not found")
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         try:
             from backend.row_lifecycle import (
                 ensure_lifecycle_columns, count_deleted_rows,
@@ -3310,7 +3401,7 @@ async def api_export_deleted_rows(
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
             raise HTTPException(status_code=404, detail="Master file not found")
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         try:
             from backend.row_lifecycle import (
                 ensure_lifecycle_columns, list_deleted_rows,
@@ -3562,7 +3653,7 @@ async def apply_master_formula(
                     if not sec_master:
                         conn.close()
                         raise HTTPException(status_code=404, detail="Secondary master file not found")
-                    sec_conn = duckdb.connect(sec_master['db_path'], read_only=True)
+                    sec_conn = duckdb.connect(sec_master['db_path'])
                     sec_df = sec_conn.execute("SELECT * FROM master_data").fetchdf()
                     sec_conn.close()
                 else:
@@ -4008,7 +4099,7 @@ async def preview_master_formula(
         
         formula_type = formula_type.upper()
         
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
 
         # ---- IF_CONDITION: conditional CASE expression preview (must come before SUMIF return) ----
         if formula_type == 'IF_CONDITION':
@@ -4077,7 +4168,7 @@ async def preview_master_formula(
                     if not sec_master:
                         conn.close()
                         raise HTTPException(status_code=404, detail="Secondary master file not found")
-                    sec_conn = duckdb.connect(sec_master['db_path'], read_only=True)
+                    sec_conn = duckdb.connect(sec_master['db_path'])
                     sec_df = sec_conn.execute("SELECT * FROM master_data").fetchdf()
                     sec_conn.close()
                 else:
@@ -4545,7 +4636,7 @@ async def preview_formula_expression(
         if not master:
             raise HTTPException(status_code=404, detail="Master file not found")
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
 
         # Get existing columns
         existing_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
@@ -4712,6 +4803,7 @@ async def api_update_activity(
     payload: Optional[str] = Form(None),
     is_enabled: Optional[str] = Form(None),
     target_column: Optional[str] = Form(None),
+    activity_type: Optional[str] = Form(None),
     step_order: Optional[str] = Form(None),
     current_user: Optional[dict] = Depends(get_optional_user)
 ):
@@ -4740,6 +4832,9 @@ async def api_update_activity(
 
         if target_column is not None:
             kwargs['target_column'] = target_column
+
+        if activity_type is not None:
+            kwargs['activity_type'] = activity_type
 
         if step_order is not None and str(step_order).strip():
             try:
@@ -4833,7 +4928,7 @@ async def api_test_activity(
         if not os.path.exists(master['db_path']):
             raise HTTPException(status_code=404, detail="Master DuckDB file not found on disk")
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
         try:
             tables = conn.execute("SHOW TABLES").fetchall()
             if ('master_data',) not in tables:
@@ -4894,7 +4989,7 @@ async def api_test_activity(
             preview["sql"] = sql_expr
             preview["output_column"] = out_col
             try:
-                conn_rw = duckdb.connect(master['db_path'], read_only=True)
+                conn_rw = duckdb.connect(master['db_path'])
                 try:
                     q = f"SELECT ({sql_expr}) as result FROM master_data LIMIT 5"
                     r = conn_rw.execute(q).fetchdf()
@@ -5319,7 +5414,7 @@ def process_rules_background():
                         logger.error(f"Master file not found for folder {folder_id}")
                         return None
                     
-                    conn_duck = duckdb.connect(master['db_path'], read_only=True)
+                    conn_duck = duckdb.connect(master['db_path'])
                     df = conn_duck.execute("SELECT * FROM master_data").fetchdf()
                     conn_duck.close()
                     
@@ -8154,6 +8249,10 @@ def _enrich_files_with_rejected_artefact(files: list) -> list:
         if not isinstance(f, dict):
             continue
         try:
+            # If the file is definitively known to be successfully synced, ignore old artefacts
+            if f.get('sync_status') == 'synced':
+                continue
+                
             latest = get_latest_rejected_artefact_for_file(f.get('id'))
             if latest:
                 f['rejected_artefact_id']    = latest.get('id')

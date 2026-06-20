@@ -245,6 +245,7 @@ def init_db():
             rejected_files TEXT,
             formulas TEXT,
             auto_sync INTEGER DEFAULT 0,
+            hidden_columns TEXT DEFAULT '[]',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (folder_id) REFERENCES folders (id)
         )
@@ -256,6 +257,13 @@ def init_db():
     if 'auto_sync' not in cols:
         try:
             conn.execute("ALTER TABLE master_files ADD COLUMN auto_sync INTEGER DEFAULT 0")
+            conn.commit()
+        except Exception:
+            pass
+            
+    if 'hidden_columns' not in cols:
+        try:
+            conn.execute("ALTER TABLE master_files ADD COLUMN hidden_columns TEXT DEFAULT '[]'")
             conn.commit()
         except Exception:
             pass

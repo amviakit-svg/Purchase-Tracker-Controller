@@ -153,14 +153,16 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
             module_id = master.get('module_id')
             
             # 1. REMOVE FILES
-            for file_name in files_to_remove:
-                duck_conn.execute("DELETE FROM master_data WHERE Source_File_Name = ?", (file_name,))
-                logger.info(f"Removed {file_name} from master_data.")
-                try:
-                    from backend.database import add_notification
-                    add_notification(company_id, module_id, 'info', f"File '{file_name}' was successfully removed from master data.", f"?folder={folder_id}", user_id=user_id)
-                except Exception as ne:
-                    pass
+            if files_to_remove:
+                duck_conn.execute("DROP TABLE IF EXISTS __dedup_concat")
+                for file_name in files_to_remove:
+                    duck_conn.execute("DELETE FROM master_data WHERE Source_File_Name = ?", (file_name,))
+                    logger.info(f"Removed {file_name} from master_data.")
+                    try:
+                        from backend.database import add_notification
+                        add_notification(company_id, module_id, 'info', f"File '{file_name}' was successfully removed from master data.", f"?folder={folder_id}", user_id=user_id)
+                    except Exception as ne:
+                        pass
                 
             # 2. ADD FILES
             if files_to_add:
@@ -253,6 +255,33 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
 
                             # Ensure column order perfectly matches
                             df = df[current_duckdb_cols]
+                            
+                            # --- AUTO-ROUND NUMERIC VALUES TO 2 DECIMALS (matches main.py) ---
+                            def _auto_round(val):
+                                if pd.isna(val):
+                                    return None
+                                if isinstance(val, (int, float)):
+                                    return round(val, 2)
+                                if isinstance(val, str):
+                                    try:
+                                        if '.' in val:
+                                            return round(float(val), 2)
+                                        else:
+                                            return val
+                                    except ValueError:
+                                        pass
+                                return val
+                                
+                            for col in df.columns:
+                                df[col] = df[col].apply(_auto_round)
+                                
+                            # --- FIX PANDAS TO DUCKDB TYPE INFERENCE ---
+                            # DuckDB's pandas scanner can incorrectly infer an object column as TIMESTAMP
+                            # if it samples date-like strings, then crash on invalid dates like "06-04-206".
+                            # We force all object/datetime columns to strict python strings/None.
+                            for col in df.columns:
+                                if df[col].dtype == 'object' or pd.api.types.is_datetime64_any_dtype(df[col]):
+                                    df[col] = df[col].apply(lambda x: str(x) if x is not None and not pd.isna(x) else None)
 
                             # --- DEDUP (concat) check during auto-sync: strict whole-file rejection ---
                             try:
@@ -949,21 +978,17 @@ def _apply_if_condition_activity(duck_conn, act):
         # Re-build from conditions block if the SQL wasn't saved (older activity)
         from backend.if_condition_engine import build_if_sql
         cols = duck_conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
-        # Strip out internal columns from the conditions to avoid lookup errors
-        internal_cols = {'__is_deleted', '__deleted_at', '__row_fp'}
-        clean_payload = {
-            'conditions': payload.get('conditions') or [],
-            'logic': payload.get('logic') or 'AND',
-            'true_value': payload.get('true_value') or {'type': 'value', 'value': 'TRUE'},
-            'false_value': payload.get('false_value') or {'type': 'value', 'value': ''},
-        }
-        sql_expr, _ = build_if_sql(clean_payload, cols)
+        sql_expr, _ = build_if_sql(payload, cols)
+
+    cols = duck_conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+    where_clause = ""
+    if "__is_deleted" in cols:
+        where_clause = "WHERE (CAST(\"__is_deleted\" AS BOOLEAN) IS NULL OR CAST(\"__is_deleted\" AS BOOLEAN) = FALSE)"
 
     # IF_CONDITION always returns VARCHAR (CASE-WHEN can yield any type)
     _ensure_column(duck_conn, 'master_data', col_name, 'VARCHAR')
     duck_conn.execute(
-        f"UPDATE master_data SET {_safe_sql_ident(col_name)} = ({sql_expr}) "
-        f"WHERE (CAST(\"__is_deleted\" AS BOOLEAN) IS NULL OR CAST(\"__is_deleted\" AS BOOLEAN) = FALSE)"
+        f"UPDATE master_data SET {_safe_sql_ident(col_name)} = ({sql_expr}) {where_clause}"
     )
 
   
