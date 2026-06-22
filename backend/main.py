@@ -6343,7 +6343,6 @@ def process_rules_background():
         final_output_filename = None
         if custom_filename:
             import re
-            from datetime import datetime, timezone, timedelta
             safe_name = re.sub(r'[^\w\s-]', '', custom_filename).strip()
             ist_tz = timezone(timedelta(hours=5, minutes=30))
             timestamp_ist = datetime.now(ist_tz).strftime("%d-%m-%Y_%I-%M-%p")
@@ -6613,41 +6612,58 @@ def process_rules_background():
             else:
                 add_notification(cid, mid, 'success', f"Processing completed successfully. {len(summary_sheets)} summaries generated.", "?page=processed", user_id=uid)
             
+            def sanitize_val(v):
+                import math
+                if isinstance(v, float) and math.isnan(v):
+                    return None
+                if hasattr(v, 'item'):  # Catch numpy types
+                    return v.item()
+                return v
+
             processing_status["result"] = {
                 "success": True,
-                "message": summary_msg,
-                "total_rules": len(all_rules),
-                "rows_processed": len(primary_df),
-                "processed_at": processed_at_india,
-                "processed_file_path": output_path,
-                "report_type": report_type,
-                "month_name": month_name,
-                "financial_year": financial_year,
-                "processing_time": f"{elapsed:.1f}s",
+                "message": str(summary_msg),
+                "total_rules": int(len(all_rules)),
+                "rows_processed": int(len(primary_df)),
+                "processed_at": str(processed_at_india),
+                "processed_file_path": str(output_path),
+                "report_type": str(sanitize_val(report_type)) if sanitize_val(report_type) is not None else "",
+                "month_name": str(sanitize_val(month_name)) if sanitize_val(month_name) is not None else "",
+                "financial_year": str(sanitize_val(financial_year)) if sanitize_val(financial_year) is not None else "",
+                "processing_time": str(f"{elapsed:.1f}s"),
                 "status": "completed",
-                "filtered": filter_sources is not None,
-                "filter_count": len(filter_sources) if filter_sources else 0,
-                "total_rows_before_filter": before_count if filter_sources else len(primary_df),
-                "summary_count": len(summary_sheets),
-                "phase4_errors": phase4_errors if phase4_errors else None
+                "filtered": bool(filter_sources is not None),
+                "filter_count": int(len(filter_sources)) if filter_sources else 0,
+                "total_rows_before_filter": int(before_count) if filter_sources else int(len(primary_df)),
+                "summary_count": int(len(summary_sheets)),
+                "phase4_errors": [str(x) for x in phase4_errors] if phase4_errors else None
             }
             processing_status["progress"] = "completed"
             processing_status["is_processing"] = False
         
     except Exception as e:
         import traceback
-        error_msg = f"Processing error: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"Processing error: {str(e)}\\n{traceback.format_exc()}"
         logger.error(error_msg)
+        try:
+            with processing_lock:
+                processing_status["error"] = str(e)
+                processing_status["result"] = {"success": False, "message": str(e)}
+                processing_status["progress"] = "error"
+                
+                from database import add_notification
+                cid = processing_status.get("company_id")
+                mid = processing_status.get("module_id")
+                uid = processing_status.get("user_id")
+                if cid and mid:
+                    add_notification(cid, mid, 'error', f"Processing failed: {str(e)[:100]}...", "?page=process", user_id=uid)
+        except Exception as inner_e:
+            logger.error(f"Error inside exception handler: {inner_e}")
+            with processing_lock:
+                processing_status["error"] = str(e)
+                processing_status["result"] = {"success": False, "message": f"Critical failure: {str(e)}"}
+    finally:
         with processing_lock:
-            from database import add_notification
-            cid = processing_status.get("company_id")
-            mid = processing_status.get("module_id")
-            uid = processing_status.get("user_id")
-            if cid and mid:
-                add_notification(cid, mid, 'error', f"Processing failed: {str(e)[:100]}...", "?page=process", user_id=uid)
-            processing_status["error"] = str(e)
-            processing_status["result"] = {"success": False, "message": str(e)}
-            processing_status["progress"] = "error"
             processing_status["is_processing"] = False
 
 @app.get("/api/primary/source-files")
@@ -6669,7 +6685,31 @@ async def get_primary_source_files(validation_id: int = 1, current_user: Optiona
         primary_file = config.get('primary_file') if isinstance(config, dict) else None
         
         if not primary_file:
-            return {"success": False, "message": "No primary data file found"}
+            # Check if it's a master file reference (like Validation 3)
+            is_master = config.get('is_master') is True or str(config.get('file_id', '')).startswith('master_')
+            file_id_raw = str(config.get('file_id', '')).replace('master_', '')
+            
+            if is_master and file_id_raw.isdigit():
+                master_info = get_master_file(int(file_id_raw))
+                if not master_info:
+                    return {"success": False, "message": "Master file not found for Validation"}
+                
+                try:
+                    import duckdb
+                    conn = duckdb.connect(master_info['db_path'])
+                    sources_df = conn.execute("SELECT DISTINCT Source_File_Name FROM master_data WHERE Source_File_Name IS NOT NULL AND Source_File_Name != ''").fetchdf()
+                    conn.close()
+                    sources = sources_df['Source_File_Name'].tolist()
+                    sources.sort()
+                    return {
+                        "success": True,
+                        "sources": sources,
+                        "total": len(sources)
+                    }
+                except Exception as e:
+                    return {"success": False, "message": f"Failed to read master data: {str(e)}"}
+            else:
+                return {"success": False, "message": "No primary data file found"}
         
         primary_path = get_primary_file_path(primary_file, cid, mid)
         if not os.path.exists(primary_path):
@@ -6827,36 +6867,58 @@ async def get_process_status():
     with processing_lock:
         status_copy = processing_status.copy()
     
+    response_data = None
     if status_copy["is_processing"]:
-        return {
+        response_data = {
             "success": True,
             "status": "processing",
             "progress": status_copy["progress"],
             "message": f"Processing in progress: {status_copy['progress']}"
         }
-    
-    if status_copy["error"]:
-        return {
+    elif status_copy.get("error"):
+        response_data = {
             "success": False,
             "status": "error",
             "message": status_copy["error"],
-            "result": status_copy["result"]
+            "result": status_copy.get("result")
         }
-    
-    if status_copy["result"]:
-        return {
+    elif status_copy.get("result"):
+        response_data = {
             "success": True,
             "status": "completed",
             "result": status_copy["result"],
             "progress": "completed"
         }
-    
-    return {
-        "success": True,
-        "status": "idle",
-        "progress": "idle",
-        "message": "No processing has been started"
-    }
+    else:
+        response_data = {
+            "success": True,
+            "status": "idle",
+            "progress": "idle",
+            "message": "No processing has been started"
+        }
+        
+    try:
+        import json
+        json_str = json.dumps(response_data)
+        from fastapi.responses import Response
+        return Response(content=json_str, media_type="application/json")
+    except Exception as e:
+        import traceback
+        import logging
+        logging.error(f"JSON serialization error in get_process_status: {e}\n{traceback.format_exc()}")
+        response_data = {"success": False, "status": "error", "message": f"Serialization error: {str(e)}"}
+        json_str = json.dumps(response_data)
+        from fastapi.responses import Response
+        
+    # LOG TO FILE FOR DEBUGGING
+    try:
+        with open("data/status_log.txt", "a") as f:
+            import datetime
+            f.write(f"{datetime.datetime.now()} - {json_str}\n")
+    except Exception:
+        pass
+        
+    return Response(content=json_str, media_type="application/json")
 
 @app.get("/api/download/{filename}")
 async def download_file(filename: str, current_user: Optional[dict] = Depends(get_optional_user)):

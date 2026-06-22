@@ -438,47 +438,38 @@ def reapply_formulas(duck_conn, folder_id, company_id, module_id):
                     continue
                     
                 is_csv = sec_path.lower().endswith('.csv')
+                is_duckdb = sec_path.lower().endswith('.duckdb')
+                
+                if is_csv:
+                    sec_table = f"read_csv_auto('{sec_path}')"
+                elif is_duckdb:
+                    import uuid
+                    alias = f"sec_db_{uuid.uuid4().hex[:8]}"
+                    duck_conn.execute(f"ATTACH IF NOT EXISTS '{sec_path}' AS {alias} (READ_ONLY)")
+                    sec_table = f"{alias}.master_data"
+                else:
+                    sec_table = f"st_read('{sec_path}', layer='{sec_sheet}')"
                 
                 if ft == 'SUMIF':
-                    if is_csv:
-                        query = f'''
-                            UPDATE master_data 
-                            SET "{col_name}" = (
-                                SELECT SUM(TRY_CAST(s."{sec_val}" AS DOUBLE))
-                                FROM read_csv_auto('{sec_path}') AS s
-                                WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
-                            )
-                        '''
-                    else:
-                        query = f'''
-                            UPDATE master_data 
-                            SET "{col_name}" = (
-                                SELECT SUM(TRY_CAST(s."{sec_val}" AS DOUBLE))
-                                FROM st_read('{sec_path}', layer='{sec_sheet}') AS s
-                                WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
-                            )
-                        '''
+                    query = f'''
+                        UPDATE master_data 
+                        SET "{col_name}" = (
+                            SELECT SUM(TRY_CAST(s."{sec_val}" AS DOUBLE))
+                            FROM {sec_table} AS s
+                            WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
+                        )
+                    '''
                     duck_conn.execute(query)
                     
                 elif ft == 'COUNTIF':
-                    if is_csv:
-                        query = f'''
-                            UPDATE master_data 
-                            SET "{col_name}" = (
-                                SELECT COUNT(*)
-                                FROM read_csv_auto('{sec_path}') AS s
-                                WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
-                            )
-                        '''
-                    else:
-                        query = f'''
-                            UPDATE master_data 
-                            SET "{col_name}" = (
-                                SELECT COUNT(*)
-                                FROM st_read('{sec_path}', layer='{sec_sheet}') AS s
-                                WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
-                            )
-                        '''
+                    query = f'''
+                        UPDATE master_data 
+                        SET "{col_name}" = (
+                            SELECT COUNT(*)
+                            FROM {sec_table} AS s
+                            WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
+                        )
+                    '''
                     duck_conn.execute(query)
                     
             elif ft == 'VLOOKUP':
@@ -500,24 +491,26 @@ def reapply_formulas(duck_conn, folder_id, company_id, module_id):
                     continue
                     
                 is_csv = sec_path.lower().endswith('.csv')
+                is_duckdb = sec_path.lower().endswith('.duckdb')
+                
                 if is_csv:
-                    query = f'''
-                        UPDATE master_data 
-                        SET "{col_name}" = (
-                            SELECT ANY_VALUE(s."{sec_val}")
-                            FROM read_csv_auto('{sec_path}') AS s
-                            WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
-                        )
-                    '''
+                    sec_table = f"read_csv_auto('{sec_path}')"
+                elif is_duckdb:
+                    import uuid
+                    alias = f"sec_db_{uuid.uuid4().hex[:8]}"
+                    duck_conn.execute(f"ATTACH IF NOT EXISTS '{sec_path}' AS {alias} (READ_ONLY)")
+                    sec_table = f"{alias}.master_data"
                 else:
-                    query = f'''
-                        UPDATE master_data 
-                        SET "{col_name}" = (
-                            SELECT ANY_VALUE(s."{sec_val}")
-                            FROM st_read('{sec_path}', layer='{sec_sheet}') AS s
-                            WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
-                        )
-                    '''
+                    sec_table = f"st_read('{sec_path}', layer='{sec_sheet}')"
+                    
+                query = f'''
+                    UPDATE master_data 
+                    SET "{col_name}" = (
+                        SELECT ANY_VALUE(s."{sec_val}")
+                        FROM {sec_table} AS s
+                        WHERE CAST(s."{sec_match}" AS VARCHAR) = CAST(master_data."{pcol}" AS VARCHAR)
+                    )
+                '''
                 duck_conn.execute(query)
                 
             elif ft == 'EXPRESSION':
@@ -677,10 +670,16 @@ def _apply_formula_activity(duck_conn, act, company_id=None, module_id=None):
             
         sec_path = resolved['path']
         is_csv = sec_path.lower().endswith('.csv')
+        is_duckdb = sec_path.lower().endswith('.duckdb')
         match_type = payload.get('match_type') or 'exact'
         
         if is_csv:
             sec_table = f"read_csv_auto('{sec_path}')"
+        elif is_duckdb:
+            import uuid
+            alias = f"sec_db_{uuid.uuid4().hex[:8]}"
+            duck_conn.execute(f"ATTACH IF NOT EXISTS '{sec_path}' AS {alias} (READ_ONLY)")
+            sec_table = f"{alias}.master_data"
         else:
             sec_table = f"st_read('{sec_path}', layer='{sec_sheet}')"
             
@@ -911,6 +910,11 @@ def apply_activities(duck_conn, folder_id, company_id, module_id):
     except Exception as e:
         logger.error(f"apply_activities: failed to list activities: {e}")
         return
+    try:
+        duck_conn.execute("INSTALL spatial; LOAD spatial;")
+    except Exception as e:
+        logger.warning(f"Could not load spatial extension: {e}")
+        
     activities.sort(key=lambda a: (a.get('step_order', 0), a.get('id', 0)))
     for act in activities:
         act_id = act.get('id')

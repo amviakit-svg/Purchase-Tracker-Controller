@@ -97,41 +97,6 @@
     </script>
 <body class="bg-gray-50 min-h-screen">
 
-    <!-- Toast Container -->
-    
-    <!-- Validation Warning Modal -->
-    <div id="validation-warning-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div class="mt-3 text-center">
-                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100">
-                    <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                    </svg>
-                </div>
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4">Validation Warning</h3>
-                <div class="mt-2 px-7 py-3">
-                    <p class="text-sm text-gray-500 text-left mb-2">
-                        The following columns are required by your Phase 4 Summary Rules, but they are NOT being generated in earlier phases (Phase 1, 2, or 3):
-                    </p>
-                    <ul id="validation-missing-columns" class="text-sm text-red-600 text-left list-disc list-inside mb-4 font-semibold">
-                    </ul>
-                    <p class="text-sm text-gray-500 text-left">
-                        <strong>Solution:</strong> Please go to Phase 2 (Matching & Mapping) or Phase 3 (Remarks) and add rules to generate these columns.
-                    </p>
-                </div>
-                <div class="items-center px-4 py-3 sm:flex sm:flex-row-reverse">
-                    <button id="validation-force-btn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
-                        Process Anyway
-                    </button>
-                    <button id="validation-cancel-btn" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                        Cancel and Fix
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
 
     <!-- Header -->
     <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
@@ -984,7 +949,7 @@
                                 <div class="flex flex-col items-center p-4 bg-gray-50 rounded-lg border border-gray-100">
                                     <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm mb-3">3</div>
                                     <div class="text-xs font-semibold text-gray-700 text-center mb-2">Phase 3:<br>Summary Gen</div>
-                                    <span id="process-phase4-status-1" class="text-xs text-gray-500 font-medium bg-white px-2 py-1 rounded shadow-sm w-full text-center border border-gray-200">Pending</span>
+                                    <span id="process-phase3-status-1" class="text-xs text-gray-500 font-medium bg-white px-2 py-1 rounded shadow-sm w-full text-center border border-gray-200">Pending</span>
                                 </div>
                             </div>
                         </div>
@@ -1251,12 +1216,32 @@
                                 <div class="flex flex-col items-center p-4 bg-gray-50 rounded-lg border border-gray-100">
                                     <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm mb-3">3</div>
                                     <div class="text-xs font-semibold text-gray-700 text-center mb-2">Phase 3:<br>Summary Gen</div>
-                                    <span id="process-phase4-status-3" class="text-xs text-gray-500 font-medium bg-white px-2 py-1 rounded shadow-sm w-full text-center border border-gray-200">Pending</span>
+                                    <span id="process-phase3-status-3" class="text-xs text-gray-500 font-medium bg-white px-2 py-1 rounded shadow-sm w-full text-center border border-gray-200">Pending</span>
                                 </div>
                             </div>
                         </div>
 
 
+                        <!-- Source File Name Filter -->
+                        <div class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="text-sm font-semibold text-gray-900">Filter by Source File</h4>
+                                <div class="flex items-center space-x-2 text-xs">
+                                    <button onclick="selectAllSourceFiles(3)" class="text-blue-600 hover:text-blue-800 font-medium">Select All</button>
+                                    <span class="text-gray-300">|</span>
+                                    <button onclick="clearAllSourceFiles(3)" class="text-red-600 hover:text-red-800 font-medium">Clear All</button>
+                                </div>
+                            </div>
+                            
+                            <div id="source-file-filter-container-3" class="max-h-52 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1 bg-gray-50">
+                                <p class="text-xs text-gray-500 text-center py-2">Loading source files...</p>
+                            </div>
+                            
+                            <div class="mt-2 flex items-center justify-between">
+                                <span id="source-file-selected-count-3" class="text-xs text-gray-600 font-medium">0 of 0 selected</span>
+                                <span class="text-xs text-gray-400 italic">All source files are selected by default</span>
+                            </div>
+                        </div>
 
                         <!-- Process Action -->
                         <div class="text-center">
@@ -1644,9 +1629,9 @@
                 </button>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
+            <div class="flex flex-col flex-1 min-h-0">
                 <!-- Left side: Form -->
-                <div class="col-span-2 overflow-y-auto pr-2 pb-6 space-y-4">
+                <div class="overflow-y-auto pr-2 pb-6 space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Formula Type</label>
                     <select id="formula-type" onchange="updateFormulaUI()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
@@ -1780,15 +1765,6 @@
                 </div>
                 <div id="formula-preview-result" class="hidden bg-gray-50 border border-gray-200 rounded-lg p-3"></div>
             </div> <!-- End Left side form -->
-
-                <!-- Right side: Master File Columns Reference -->
-                <div class="col-span-1 border-l border-gray-200 pl-4 flex flex-col h-full max-h-[75vh]">
-                    <h4 class="text-sm font-semibold text-gray-900 mb-2">Available Master File Columns</h4>
-                    <p class="text-xs text-gray-500 mb-3">Click any column name to copy it to your clipboard.</p>
-                    <div id="formula-master-columns-list" class="flex-1 overflow-y-auto space-y-1.5 pr-2">
-                        <div class="text-sm text-gray-400 text-center mt-4">Loading columns...</div>
-                    </div>
-                </div>
             </div> <!-- End Grid -->
 
             <!-- Actions row at the bottom -->
@@ -1799,7 +1775,7 @@
                 <button type="button" onclick="previewFormula()" class="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500">
                     Test Formula
                 </button>
-                <button type="button" onclick="applyFormula()" class="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <button type="button" id="formula-apply-btn" onclick="applyFormula()" class="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
                     Save Formula
                 </button>
             </div>
@@ -2473,7 +2449,7 @@
         async function triggerManualSync() {
             if (!currentFolderId) return;
             showToast("Starting manual sync...", "info");
-            const res = await apiCall(`/api/folders/${currentFolderId}/sync`, { method: 'POST' });
+            const res = await apiCall(`/api/folders/${currentFolderId}/sync?force=true`, { method: 'POST' });
             if (res.success) {
                 // Ensure files visually transition to processing immediately
                 allFiles.forEach(f => {
@@ -2560,8 +2536,16 @@
                 url = base + url;
             }
             const isGet = !options.method || options.method.toUpperCase() === 'GET';
-            if (isGet && window.apiPrefetchCache && window.apiPrefetchCache[url]) {
+            // Bypass the prefetch cache when the caller opts out (used by
+            // long-polling endpoints like /api/process/status so the UI sees
+            // backend progress updates on every poll instead of the cached
+            // response from the first poll).
+            const skipCache = !!options.skipCache;
+            if (isGet && !skipCache && window.apiPrefetchCache && window.apiPrefetchCache[url]) {
                 return JSON.parse(JSON.stringify(window.apiPrefetchCache[url]));
+            }
+            if (!isGet && window.apiPrefetchCache) {
+                window.apiPrefetchCache = {};
             }
             
             if (!isGet && window.apiPrefetchCache) {
@@ -2588,12 +2572,13 @@
                         };
                     }
                     
+                    let fetchUrl = url;
                     if (!options.method || options.method.toUpperCase() === 'GET') {
-                        const separator = url.includes('?') ? '&' : '?';
-                        url = `${url}${separator}_t=${new Date().getTime()}`;
+                        const separator = fetchUrl.includes('?') ? '&' : '?';
+                        fetchUrl = `${fetchUrl}${separator}_t=${new Date().getTime()}`;
                     }
 
-                    const response = await fetch(url, options);
+                    const response = await fetch(fetchUrl, options);
                     
                     if (!response.ok) {
                         // Handle HTTP errors with detailed diagnostics
@@ -4215,21 +4200,36 @@
                         }
                     });
                     
+                    const isGreenCol = (col) => activityCols.includes(col) || col === 'GST MATCH' || col.endsWith(' MATCH');
+
                     allCols.sort((a, b) => {
-                        const idxA = activityCols.indexOf(a);
-                        const idxB = activityCols.indexOf(b);
+                        const isGreenA = isGreenCol(a);
+                        const isGreenB = isGreenCol(b);
                         
-                        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                        if (idxA !== -1) return 1;
-                        if (idxB !== -1) return -1;
-                        return 0;
+                        if (!isGreenA && isGreenB) return -1;
+                        if (isGreenA && !isGreenB) return 1;
+                        
+                        // Both are green
+                        if (isGreenA && isGreenB) {
+                            const idxA = activityCols.indexOf(a);
+                            const idxB = activityCols.indexOf(b);
+                            
+                            // MATCH columns come before activity columns
+                            if (idxA === -1 && idxB !== -1) return -1;
+                            if (idxA !== -1 && idxB === -1) return 1;
+                            
+                            // Both are activity columns, sort by step order
+                            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                            return 0; // Both are MATCH columns
+                        }
+                        
+                        return 0; // Both are normal columns
                     });
                 }
                 
-                let firstFormulaColIdx = allCols.findIndex(col => activityCols.includes(col));
-                if (firstFormulaColIdx === -1) {
-                    firstFormulaColIdx = allCols.findIndex(col => col === 'GST MATCH' || col.endsWith(' MATCH'));
-                }
+                window.currentOrderedColumns = allCols;
+                
+                let firstFormulaColIdx = allCols.findIndex(col => activityCols.includes(col) || col === 'GST MATCH' || col.endsWith(' MATCH'));
 
                 const allColSet = new Set(allCols);
                 const systemCols = new Set(['__is_deleted', '__deleted_at', '__row_fp']);
@@ -4411,13 +4411,23 @@
         }
 
         async function exportMasterData() {
-            const limit = document.getElementById('master-row-limit').value || 10;
+            const exportLimitStr = prompt("How many rows do you want to export?\n\nLeave blank or enter 0 to export All rows.", "");
+            if (exportLimitStr === null) return;
+
+            let limit = parseInt(exportLimitStr, 10);
+            if (isNaN(limit) || limit < 0) limit = 0;
+
             const sourceFile = document.getElementById('master-source-filter').value;
             const search = document.getElementById('master-search').value;
             
             const formData = new FormData();
             formData.append('folder_id', currentFolderId);
             formData.append('limit', limit);
+            
+            if (window.currentOrderedColumns && window.currentOrderedColumns.length > 0) {
+                formData.append('ordered_columns', window.currentOrderedColumns.join('|||'));
+            }
+            
             if (sourceFile && sourceFile !== 'All Files') {
                 formData.append('source_file', sourceFile);
             }
@@ -4891,15 +4901,18 @@
                             const configRaw = data.rules[data.rules.length - 1].config;
                             const config = typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw;
                             if (config.file_id) {
-                                let sUrl = config.file_id.startsWith('master_') ? `/api/master/${config.file_id.replace('master_', '')}/sheets` : (config.file_id.startsWith('primary_') ? null : `/api/files/${config.file_id}/sheets`);
-                                if (sUrl) apiCall(sUrl);
+                                let isMaster = config.is_master || config.file_id.toString().startsWith('master_');
+                                let cleanFileId = config.file_id.toString().replace('master_', '');
+                                
+                                let sUrl = isMaster ? `/api/master/${cleanFileId}/sheets` : (config.file_id.toString().startsWith('primary_') ? null : `/api/files/${config.file_id}/sheets`);
+                                if (sUrl) apiCall(sUrl).catch(e => console.warn("Background API error:", e));
                                 if (config.sheet_name) {
-                                    let cUrl = config.file_id.startsWith('master_') ? `/api/master/${config.file_id.replace('master_', '')}/columns` : (config.file_id.startsWith('primary_') ? null : `/api/files/${config.file_id}/columns/${encodeURIComponent(config.sheet_name)}`);
-                                    if (cUrl) apiCall(cUrl);
+                                    let cUrl = isMaster ? `/api/master/${cleanFileId}/columns` : (config.file_id.toString().startsWith('primary_') ? null : `/api/files/${config.file_id}/columns/${encodeURIComponent(config.sheet_name)}`);
+                                    if (cUrl) apiCall(cUrl).catch(e => console.warn("Background API error:", e));
                                 }
                             }
                             if (config.primary_file) {
-                                apiCall(`/api/primary/preview/${encodeURIComponent(config.primary_file)}`);
+                                apiCall(`/api/primary/preview/${encodeURIComponent(config.primary_file)}`).catch(e => console.warn("Background API error:", e));
                             }
                         }
                     }).catch(() => {});
@@ -5376,7 +5389,7 @@
             if (foldersData.success) {
                 // Fetch all folder files in parallel
                 const folderPromises = foldersData.folders.map(folder => 
-                    apiCall(`/api/files/${folder.id}`)
+                    apiCall(`/api/files/${folder.id}`).catch(e => console.warn("Background API error:", e))
                 );
                 const folderResults = await Promise.all(folderPromises);
                 folderResults.forEach(res => {
@@ -5829,6 +5842,9 @@
             } else if (fileId.startsWith('primary_')) {
                 // Primary data file - always has Working sheet
                 data = { success: true, sheets: ['Working'] };
+            } else if (window.currentValidation === 1 || window.currentValidation === 3) {
+                // Val 1/3 use master data implicitly but store it as folder ID (e.g. "5")
+                data = await apiCall(`/api/master/${fileId}/sheets`);
             } else {
                 // Regular file
                 data = await apiCall(`/api/files/${fileId}/sheets`);
@@ -5863,6 +5879,9 @@
             } else if (fileId.startsWith('primary_')) {
                 // Primary data file - always has Unique_ID, Source_File_Name and Primary_Value
                 data = { success: true, columns: ['Unique_ID', 'Source_File_Name', 'Order ID', 'Sales Amount'] };
+            } else if (window.currentValidation === 1 || window.currentValidation === 3) {
+                // Val 1/3 use master data implicitly but store it as folder ID (e.g. "5")
+                data = await apiCall(`/api/master/${fileId}/columns`);
             } else {
                 // Regular file
                 data = await apiCall(`/api/files/${fileId}/columns?sheet_name=${encodeURIComponent(sheetName)}`);
@@ -9535,7 +9554,10 @@
         function startAutoRefresh() {
             if (autoRefreshInterval) clearInterval(autoRefreshInterval);
             autoRefreshInterval = setInterval(async () => {
-                const statusData = await apiCall('/api/process/status');
+                // skipCache: true so the polling loop always hits the backend
+                // and sees real progress (apiCall's prefetch cache would otherwise
+                // serve the first poll's stale response forever).
+                const statusData = await apiCall('/api/process/status', { skipCache: true });
                 if (statusData.status === 'completed') {
                     await loadProcessedTree();
                 }
@@ -9552,8 +9574,9 @@
         // ==================== SOURCE FILE FILTER ====================
         async function loadSourceFileFilter(vid) {
             if(!vid) vid = typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : 2;
-            const container = document.getElementById('source-file-filter-container');
-            const countEl = document.getElementById('source-file-selected-count');
+            const suffix = vid === 3 ? '-3' : '';
+            const container = document.getElementById(`source-file-filter-container${suffix}`);
+            const countEl = document.getElementById(`source-file-selected-count${suffix}`);
             
             if(!container) return;
             
@@ -9589,8 +9612,9 @@
 
         function updateSelectedSourceCount(vid) {
             if(!vid) vid = typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : 2;
-            const container = document.getElementById('source-file-filter-container');
-            const countEl = document.getElementById('source-file-selected-count');
+            const suffix = vid === 3 ? '-3' : '';
+            const container = document.getElementById(`source-file-filter-container${suffix}`);
+            const countEl = document.getElementById(`source-file-selected-count${suffix}`);
             if(!container || !countEl) return;
             
             const total = container.querySelectorAll('.source-file-checkbox').length;
@@ -9600,7 +9624,8 @@
 
         function selectAllSourceFiles(vid) {
             if(!vid) vid = typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : 2;
-            const container = document.getElementById('source-file-filter-container');
+            const suffix = vid === 3 ? '-3' : '';
+            const container = document.getElementById(`source-file-filter-container${suffix}`);
             if(!container) return;
             container.querySelectorAll('.source-file-checkbox').forEach(cb => cb.checked = true);
             updateSelectedSourceCount(vid);
@@ -9608,7 +9633,8 @@
 
         function clearAllSourceFiles(vid) {
             if(!vid) vid = typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : 2;
-            const container = document.getElementById('source-file-filter-container');
+            const suffix = vid === 3 ? '-3' : '';
+            const container = document.getElementById(`source-file-filter-container${suffix}`);
             if(!container) return;
             container.querySelectorAll('.source-file-checkbox').forEach(cb => cb.checked = false);
             updateSelectedSourceCount(vid);
@@ -9616,7 +9642,8 @@
 
         function getSelectedSourceFiles(vid) {
             if(!vid) vid = typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : 2;
-            const container = document.getElementById('source-file-filter-container');
+            const suffix = vid === 3 ? '-3' : '';
+            const container = document.getElementById(`source-file-filter-container${suffix}`);
             if(!container) return [];
             return Array.from(container.querySelectorAll('.source-file-checkbox:checked')).map(cb => cb.value);
         }
@@ -9652,6 +9679,9 @@
 
             currentFinalValidation = validationId;
             loadFinalProcessedHistory();
+            if (validationId === 2 || validationId === 3) {
+                loadSourceFileFilter(validationId);
+            }
         }
 
         async function processAllRules(force = false) {
@@ -9682,7 +9712,7 @@
                 // Get selected source files
                 let selectedSourceFiles = [];
                 if (vid !== 1) {
-                    selectedSourceFiles = getSelectedSourceFiles();
+                    selectedSourceFiles = getSelectedSourceFiles(vid);
                     if (selectedSourceFiles.length === 0) {
                         if (btn) btn.disabled = false;
                         if (spinner) spinner.classList.add('hidden');
@@ -9777,82 +9807,104 @@
                 
                 // Poll for status every 2 seconds
                 const pollInterval = setInterval(async () => {
-                    const statusData = await apiCall('/api/process/status');
-                    
-                    if (statusData.status === 'processing') {
-                        // Update phase statuses based on progress
-                        const progress = statusData.progress;
-                        if (progress === 'loading_primary') {
-                            if(p1Stat) p1Stat.textContent = 'Running...';
-                        } else if (progress === 'phase2') {
-                            if(p1Stat) p1Stat.textContent = 'Completed';
-                            if(p2Stat) p2Stat.textContent = 'Running...';
-                        } else if (progress === 'phase3') {
-                            if(p1Stat) p1Stat.textContent = 'Completed';
-                            if(p2Stat) p2Stat.textContent = 'Completed';
-                            if(p3Stat) p3Stat.textContent = 'Running...';
-                        } else if (progress === 'saving') {
+                    try {
+                        // skipCache: true so the polling loop always hits the backend
+                        // and sees real progress (apiCall's prefetch cache would otherwise
+                        // serve the first poll's stale response forever).
+                        const statusData = await apiCall('/api/process/status', { skipCache: true });
+                        
+                        if (statusData.status === 'processing') {
+                            // Update phase statuses based on progress
+                            const progress = statusData.progress;
+                            if (progress === 'loading_primary') {
+                                if(p1Stat) p1Stat.textContent = 'Running...';
+                            } else if (progress === 'phase2') {
+                                if(p1Stat) p1Stat.textContent = 'Completed';
+                                if(p2Stat) p2Stat.textContent = 'Running...';
+                            } else if (progress === 'phase3') {
+                                if(p1Stat) p1Stat.textContent = 'Completed';
+                                if(p2Stat) p2Stat.textContent = 'Completed';
+                                if(p3Stat) p3Stat.textContent = 'Running...';
+                            } else if (progress === 'phase4') {
+                                if(p1Stat) p1Stat.textContent = 'Completed';
+                                if(p2Stat) p2Stat.textContent = 'Completed';
+                                if(p3Stat) p3Stat.textContent = 'Completed';
+                                if(p4Stat) p4Stat.textContent = 'Running...';
+                            } else if (progress === 'saving') {
+                                if(p1Stat) p1Stat.textContent = 'Completed';
+                                if(p2Stat) p2Stat.textContent = 'Completed';
+                                if(p3Stat) p3Stat.textContent = 'Completed';
+                                if(p4Stat) p4Stat.textContent = 'Saving...';
+                            }
+                        } else if (statusData.status === 'completed') {
+                            clearInterval(pollInterval);
+                            if (btn) btn.disabled = false;
+                            if (spinner) spinner.classList.add('hidden');
+                            
+                            // All completed
                             if(p1Stat) p1Stat.textContent = 'Completed';
                             if(p2Stat) p2Stat.textContent = 'Completed';
                             if(p3Stat) p3Stat.textContent = 'Completed';
-                            if(p4Stat) p4Stat.textContent = 'Saving...';
+                            if(p4Stat) p4Stat.textContent = 'Completed';
+                            
+                            // Auto-refresh dashboard stats
+                            loadDashboardStats();
+                            loadProcessedTree();
+                            
+                            // Hide any lingering loading overlays
+                            const loadingOverlay = document.getElementById('rules-loading-overlay');
+                            if (loadingOverlay) loadingOverlay.classList.add('hidden');
+                            
+                            // Show result info
+                            const result = statusData.result;
+                            if (result) {
+                                if (!result.success) {
+                                    showToast(result.message || 'Processing completed with errors', 'error');
+                                    return;
+                                }
+                                if (resultDiv) resultDiv.classList.remove('hidden');
+                                
+                                // Populate the info spans
+                                const procAt = document.getElementById(`result-processed-at${suffix}`);
+                                if(procAt) procAt.textContent = result.processed_at || 'N/A';
+                                
+                                const rowsProc = document.getElementById(`result-rows-processed${suffix}`);
+                                if(rowsProc) rowsProc.textContent = result.rows_processed?.toLocaleString() || 0;
+                                
+                                const rulesApp = document.getElementById(`result-rules-applied${suffix}`);
+                                if(rulesApp) rulesApp.textContent = result.total_rules || 0;
+                                
+                                const timeTaken = document.getElementById(`result-time-taken${suffix}`);
+                                if(timeTaken) timeTaken.textContent = result.processing_time || 'N/A';
+                                
+                                if (result.phase4_errors && result.phase4_errors.length > 0) {
+                                    showToast(result.message, 'warning');
+                                    alert("WARNING: Some summaries were skipped because they require columns that are currently hidden or missing:\n\n" + result.phase4_errors.join("\n\n"));
+                                } else {
+                                    showToast(result.message || 'Processing completed successfully!', 'success');
+                                }
+                                
+                                // Auto-refresh the processed files history
+                                loadFinalProcessedHistory();
+                            }
+                        } else if (statusData.status === 'error') {
+                            clearInterval(pollInterval);
+                            if (btn) btn.disabled = false;
+                            if (spinner) spinner.classList.add('hidden');
+                            showToast(statusData.message || 'Processing failed', 'error');
+                        } else if (statusData.status === 'idle') {
+                            // If it somehow reverted to idle, stop polling
+                            clearInterval(pollInterval);
+                            if (btn) btn.disabled = false;
+                            if (spinner) spinner.classList.add('hidden');
+                            showToast('Processing status is idle. Did it crash silently?', 'error');
                         }
-                    } else if (statusData.status === 'completed') {
+                    } catch (pollErr) {
+                        console.error('Polling error:', pollErr);
                         clearInterval(pollInterval);
                         if (btn) btn.disabled = false;
                         if (spinner) spinner.classList.add('hidden');
-                        
-                        // All completed
-                        if(p1Stat) p1Stat.textContent = 'Completed';
-                        if(p2Stat) p2Stat.textContent = 'Completed';
-                        if(p3Stat) p3Stat.textContent = 'Completed';
-                        if(p4Stat) p4Stat.textContent = 'Completed';
-                        
-                        // Auto-refresh dashboard stats
-                        loadDashboardStats();
-                        loadProcessedTree();
-                        
-                        // Hide any lingering loading overlays
-                        const loadingOverlay = document.getElementById('rules-loading-overlay');
-                        if (loadingOverlay) loadingOverlay.classList.add('hidden');
-                        
-                        // Show result info
-                        const result = statusData.result;
-                        if (result) {
-                            if (!result.success) {
-                                showToast(result.message || 'Processing completed with errors', 'error');
-                                return;
-                            }
-                            if (resultDiv) resultDiv.classList.remove('hidden');
-                            
-                            // Populate the info spans
-                            const procAt = document.getElementById(`result-processed-at${suffix}`);
-                            if(procAt) procAt.textContent = result.processed_at || 'N/A';
-                            
-                            const rowsProc = document.getElementById(`result-rows-processed${suffix}`);
-                            if(rowsProc) rowsProc.textContent = result.rows_processed?.toLocaleString() || 0;
-                            
-                            const rulesApp = document.getElementById(`result-rules-applied${suffix}`);
-                            if(rulesApp) rulesApp.textContent = result.total_rules || 0;
-                            
-                            const timeTaken = document.getElementById(`result-time-taken${suffix}`);
-                            if(timeTaken) timeTaken.textContent = result.processing_time || 'N/A';
-                            
-                            if (result.phase4_errors && result.phase4_errors.length > 0) {
-                                showToast(result.message, 'warning');
-                                alert("WARNING: Some summaries were skipped because they require columns that are currently hidden or missing:\n\n" + result.phase4_errors.join("\n\n"));
-                            } else {
-                                showToast(result.message || 'Processing completed successfully!', 'success');
-                            }
-                            
-                            // Auto-refresh the processed files history
-                            loadFinalProcessedHistory();
-                        }
-                    } else if (statusData.status === 'error') {
-                        clearInterval(pollInterval);
-                        if (btn) btn.disabled = false;
-                        if (spinner) spinner.classList.add('hidden');
-                        showToast(statusData.message || 'Processing failed', 'error');
+                        showToast(`Status check failed: ${pollErr.message}`, 'error');
                     }
                 }, 2000);
             
@@ -9872,9 +9924,13 @@
             const vid = typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : (window.currentValidation || 1);
             const container = document.getElementById('final-processed-history-container');
             container.innerHTML = '<div class="flex items-center justify-center space-x-2 py-8"><div class="spinner-sm"></div><span class="text-sm text-gray-500">Loading...</span></div>';
-            
+
             try {
-                const data = await apiCall(`/api/processed/files?validation_id=${vid}`);
+                // skipCache: true so the "Recently Processed Files" list is always
+                // fetched live from the backend (the in-memory apiCall prefetch
+                // cache would otherwise serve the OLD list from before the run,
+                // making the user think their newly-processed file didn't land).
+                const data = await apiCall(`/api/processed/files?validation_id=${vid}`, { skipCache: true });
                 if (data.success) {
                     // Save to cache for instant render on next tab switch
                     if (data.files) {
@@ -10356,6 +10412,8 @@
             { v: 'contains',    label: 'Contains' },
             { v: 'blank',       label: 'Is blank / empty' },
             { v: 'not_blank',   label: 'Is NOT blank / empty' },
+            { v: 'zero_or_blank',label: 'Either Zero or Blank' },
+            { v: 'not_zero_or_blank',label: 'Neither 0 nor blank' },
             { v: 'left_eq',     label: 'Left N chars (position)',  is_position: true },
             { v: 'right_eq',    label: 'Right N chars (position)', is_position: true },
             { v: 'mid_eq',      label: 'Mid (start, length) chars', is_position: true }
@@ -10770,7 +10828,7 @@
             // Non-position: hide extras
             if (posExtras) posExtras.classList.add('hidden');
 
-            if (agg === 'blank' || agg === 'not_blank') {
+            if (agg === 'blank' || agg === 'not_blank' || agg === 'zero_or_blank' || agg === 'not_zero_or_blank') {
                 if (vtype) vtype.disabled = true;
                 if (valInput) { valInput.disabled = true; valInput.placeholder = '(no value needed)'; valInput.value = ''; }
                 if (colSelect) { colSelect.disabled = true; colSelect.value = ''; }
@@ -10881,7 +10939,7 @@
                         value_type: vtype,
                     };
 
-                    if (agg === 'blank' || agg === 'not_blank') {
+                    if (agg === 'blank' || agg === 'not_blank' || agg === 'zero_or_blank' || agg === 'not_zero_or_blank') {
                         cond.value = '';
                     } else if (isPos) {
                         const position = (row.querySelector('.if-pos-position')?.value || 'left').toLowerCase();
@@ -11482,19 +11540,21 @@
                         hideFormulaProgress();
                         document.getElementById('formula-apply-btn').disabled = false;
                         if (data.success) {
-                            showToast(`IF formula updated! Syncing master file...`, 'success', 4500);
+                            showToast(`IF formula updated! Syncing master file...`, 'success');
                             closeFormulaModal();
-                            apiCall(`/api/folders/${currentFolderId}/sync`, { method: 'POST' }).then(() => {
-                                Promise.all([
-                                    loadMasterPreview(),
-                                    loadMasterStats(),
-                                    loadMasterSummary(),
-                                    loadMasterValidation(),
-                                    typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
-                                ]);
-                            });
+                            apiCall(`/api/folders/${currentFolderId}/sync?force=true`, { method: 'POST' }).then(async () => {
+                            if (typeof loadMasterActivities === 'function') await loadMasterActivities();
+                            await Promise.all([
+                                loadMasterPreview(),
+                                loadMasterStats(),
+                                loadMasterSummary(),
+                                loadMasterValidation()
+                            ]);
+                        });
                         } else {
-                            showToast(data.message || 'Update failed', 'error');
+                            const errEl = document.getElementById('formula-error');
+                            errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error:</span><br/>${ data.message || 'Update failed' }`;
+                            errEl.classList.remove('hidden');
                         }
                     } else {
                         formData.append('formula_type', 'IF_CONDITION');
@@ -11509,23 +11569,33 @@
                         document.getElementById('formula-apply-btn').disabled = false;
                         if (data.success) {
                             const actIdPart = data.activity_id ? ` · Activity #${data.activity_id} saved` : '';
-                            showToast(`IF formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}'${actIdPart}`, 'success', 4500);
+                            showToast(`IF formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}'${actIdPart}`, 'success');
                             closeFormulaModal();
+                            if (typeof loadMasterActivities === 'function') await loadMasterActivities();
+
                             await Promise.all([
+
                                 loadMasterPreview(),
+
                                 loadMasterStats(),
+
                                 loadMasterSummary(),
-                                loadMasterValidation(),
-                                typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+
+                                loadMasterValidation()
+
                             ]);
                         } else {
-                            showToast(data.message || data.detail || 'Apply failed', 'error');
+                            const errEl = document.getElementById('formula-error');
+                            errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error:</span><br/>${ data.message || data.detail || 'Apply failed' }`;
+                            errEl.classList.remove('hidden');
                         }
                     }
                 } catch (error) {
                     hideFormulaProgress();
                     document.getElementById('formula-apply-btn').disabled = false;
-                    showToast('Apply failed: ' + error.message, 'error');
+                    const errEl = document.getElementById('formula-error');
+                    errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error applying formula:</span><br/>${error.message}`;
+                    errEl.classList.remove('hidden');
                 }
                 return;
             }
@@ -11600,19 +11670,21 @@
                         document.getElementById('formula-apply-btn').disabled = false;
                         
                         if (data.success) {
-                            showToast(`Formula updated! Syncing master file...`, 'success', 4500);
+                            showToast(`Formula updated! Syncing master file...`, 'success');
                             closeFormulaModal();
-                            apiCall(`/api/folders/${currentFolderId}/sync`, { method: 'POST' }).then(() => {
-                                Promise.all([
-                                    loadMasterPreview(),
-                                    loadMasterStats(),
-                                    loadMasterSummary(),
-                                    loadMasterValidation(),
-                                    typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
-                                ]);
-                            });
+                            apiCall(`/api/folders/${currentFolderId}/sync?force=true`, { method: 'POST' }).then(async () => {
+                            if (typeof loadMasterActivities === 'function') await loadMasterActivities();
+                            await Promise.all([
+                                loadMasterPreview(),
+                                loadMasterStats(),
+                                loadMasterSummary(),
+                                loadMasterValidation()
+                            ]);
+                        });
                         } else {
-                            showToast(data.message || 'Update failed', 'error');
+                            const errEl = document.getElementById('formula-error');
+                            errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error:</span><br/>${ data.message || 'Update failed' }`;
+                            errEl.classList.remove('hidden');
                         }
                     } else {
                         formData.append('formula_type', type);
@@ -11633,23 +11705,33 @@
                         hideFormulaProgress();
                         document.getElementById('formula-apply-btn').disabled = false;
                         if (data.success) {
-                            showToast(`Formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}' · Activity #${data.activity_id || '?'} saved`, 'success', 4500);
+                            showToast(`Formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}' · Activity #${data.activity_id || '?'} saved`, 'success');
                             closeFormulaModal();
+                            if (typeof loadMasterActivities === 'function') await loadMasterActivities();
+
                             await Promise.all([
+
                                 loadMasterPreview(),
+
                                 loadMasterStats(),
+
                                 loadMasterSummary(),
-                                loadMasterValidation(),
-                                typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+
+                                loadMasterValidation()
+
                             ]);
                         } else {
-                            showToast(data.message || 'Apply failed', 'error');
+                            const errEl = document.getElementById('formula-error');
+                            errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error:</span><br/>${ data.message || 'Apply failed' }`;
+                            errEl.classList.remove('hidden');
                         }
                     }
                 } catch (error) {
                     hideFormulaProgress();
                     document.getElementById('formula-apply-btn').disabled = false;
-                    showToast('Apply failed: ' + error.message, 'error');
+                    const errEl = document.getElementById('formula-error');
+                    errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error applying formula:</span><br/>${error.message}`;
+                    errEl.classList.remove('hidden');
                 }
                 return;
             }
@@ -11685,21 +11767,23 @@
                     document.getElementById('formula-apply-btn').disabled = false;
                     
                     if (data.success) {
-                        showToast(`Formula updated! Syncing master file...`, 'success', 4500);
+                        showToast(`Formula updated! Syncing master file...`, 'success');
                         closeFormulaModal();
                         
                         // Trigger background sync to apply changes
-                        apiCall(`/api/folders/${currentFolderId}/sync`, { method: 'POST' }).then(() => {
-                            Promise.all([
+                        apiCall(`/api/folders/${currentFolderId}/sync?force=true`, { method: 'POST' }).then(async () => {
+                            if (typeof loadMasterActivities === 'function') await loadMasterActivities();
+                            await Promise.all([
                                 loadMasterPreview(),
                                 loadMasterStats(),
                                 loadMasterSummary(),
-                                loadMasterValidation(),
-                                typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                                loadMasterValidation()
                             ]);
                         });
                     } else {
-                        showToast(data.message || 'Update failed', 'error');
+                        const errEl = document.getElementById('formula-error');
+                        errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error:</span><br/>${ data.message || 'Update failed' }`;
+                        errEl.classList.remove('hidden');
                     }
                 } else {
                     formData.append('formula_type', type);
@@ -11717,23 +11801,33 @@
                     document.getElementById('formula-apply-btn').disabled = false;
                     
                     if (data.success) {
-                        showToast(`Formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}' · Activity #${data.activity_id || '?'} saved`, 'success', 4500);
+                        showToast(`Formula applied to ${(data.rows_affected || 0).toLocaleString()} rows in '${data.column_name}' · Activity #${data.activity_id || '?'} saved`, 'success');
                         closeFormulaModal();
+                        if (typeof loadMasterActivities === 'function') await loadMasterActivities();
+
                         await Promise.all([
+
                             loadMasterPreview(),
+
                             loadMasterStats(),
+
                             loadMasterSummary(),
-                            loadMasterValidation(),
-                            typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+
+                            loadMasterValidation()
+
                         ]);
                     } else {
-                        showToast(data.message || 'Apply failed', 'error');
+                        const errEl = document.getElementById('formula-error');
+                        errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error:</span><br/>${ data.message || 'Apply failed' }`;
+                        errEl.classList.remove('hidden');
                     }
                 }
             } catch (error) {
                 hideFormulaProgress();
                 document.getElementById('formula-apply-btn').disabled = false;
-                showToast('Apply failed: ' + error.message, 'error');
+                const errEl = document.getElementById('formula-error');
+                errEl.innerHTML = `<span class=\"font-semibold text-red-700\">Error applying formula:</span><br/>${error.message}`;
+                errEl.classList.remove('hidden');
             }
         }
 
@@ -11764,12 +11858,12 @@
                 });
                 if (data.success) {
                     const actIdPart = data.activity_id ? ` \u00b7 Activity #${data.activity_id} saved` : '';
-                    showToast(`Column '${columnName}' deleted${actIdPart}`, 'success', 4000);
+                    showToast(`Column '${columnName}' deleted${actIdPart}`, 'success');
+                    if (typeof loadMasterActivities === 'function') await loadMasterActivities();
                     await Promise.all([
                         loadMasterPreview(),
                         loadMasterStats(),
-                        loadMasterSummary(),
-                        typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+                        loadMasterSummary()
                     ]);
                 } else {
                     showToast(data.message || 'Delete failed', 'error');
@@ -12304,15 +12398,21 @@
 
                     if (!dryRun && data.total_rows_affected > 0) {
                         const actIdPart = data.activity_id ? ` \u00b7 Activity #${data.activity_id} saved` : '';
-                        showToast(`Replaced ${data.total_rows_affected} occurrences${actIdPart}`, 'success', 4500);
+                        showToast(`Replaced ${data.total_rows_affected} occurrences${actIdPart}`, 'success');
                         // Refresh master preview, stats, summary, validation, and the activity panel
                         if (masterViewOpen) {
+                            if (typeof loadMasterActivities === 'function') await loadMasterActivities();
+
                             await Promise.all([
+
                                 loadMasterPreview(),
+
                                 loadMasterStats(),
+
                                 loadMasterSummary(),
-                                loadMasterValidation(),
-                                typeof loadMasterActivities === 'function' ? loadMasterActivities() : Promise.resolve()
+
+                                loadMasterValidation()
+
                             ]);
                         }
                     }

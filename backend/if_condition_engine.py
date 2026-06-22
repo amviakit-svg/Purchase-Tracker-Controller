@@ -66,7 +66,7 @@ from typing import Any, Dict, List, Optional, Tuple
 NUMERIC_AGGREGATORS = {">", "<", ">=", "<="}
 EQUALITY_AGGREGATORS = {"=", "!="}
 TEXT_AGGREGATORS = {"starts_with", "ends_with", "contains"}
-BLANK_AGGREGATORS = {"blank", "not_blank"}
+BLANK_AGGREGATORS = {"blank", "not_blank", "zero_or_blank", "not_zero_or_blank"}
 POSITION_AGGREGATORS = {"left_eq", "right_eq", "mid_eq"}
 ALL_AGGREGATORS = (
     NUMERIC_AGGREGATORS
@@ -269,12 +269,22 @@ def _render_condition(cond: Dict[str, Any], columns: List[str]) -> Tuple[str, Li
     # --- Blank checks ignore value entirely ---
     if agg == "blank":
         return (
-            f"({col_id} IS NULL OR CAST({col_id} AS VARCHAR) = '')",
+            f"({col_id} IS NULL OR TRIM(CAST({col_id} AS VARCHAR)) = '')",
             referenced,
         )
     if agg == "not_blank":
         return (
-            f"({col_id} IS NOT NULL AND CAST({col_id} AS VARCHAR) != '')",
+            f"({col_id} IS NOT NULL AND TRIM(CAST({col_id} AS VARCHAR)) != '')",
+            referenced,
+        )
+    if agg == "zero_or_blank":
+        return (
+            f"({col_id} IS NULL OR TRIM(CAST({col_id} AS VARCHAR)) = '' OR TRY_CAST({col_id} AS DOUBLE) = 0)",
+            referenced,
+        )
+    if agg == "not_zero_or_blank":
+        return (
+            f"({col_id} IS NOT NULL AND TRIM(CAST({col_id} AS VARCHAR)) != '' AND TRY_CAST({col_id} AS DOUBLE) IS DISTINCT FROM 0)",
             referenced,
         )
 
