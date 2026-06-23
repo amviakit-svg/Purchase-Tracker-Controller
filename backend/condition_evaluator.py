@@ -127,9 +127,12 @@ def evaluate_condition_vectorized(df: pd.DataFrame, cond: dict) -> pd.Series:
             return pd.Series([str(v) not in str(t) if str(v) else True for t, v in zip(col_data.str.lower(), val_str.str.lower())], index=df.index)
         else:
             return ~col_data.str.lower().str.contains(str(val_str.iloc[0]).lower(), regex=False, na=False)
-    elif operator == 'between':
+    elif operator in ('between', 'not_between'):
         val_min_str, val_min_num = get_comparison_series('value_min')
         val_max_str, val_max_num = get_comparison_series('value_max')
-        return (col_num >= val_min_num) & (col_num <= val_max_num)
+        if operator == 'between':
+            return (col_num >= val_min_num) & (col_num <= val_max_num)
+        else:
+            return (col_num < val_min_num) | (col_num > val_max_num)
         
     return mask

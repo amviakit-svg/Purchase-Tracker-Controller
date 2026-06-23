@@ -881,6 +881,10 @@ async def api_delete_folder(folder_id: int, current_user: Optional[dict] = Depen
         clear_file_cache()
         return {"success": True, "message": "Folder moved to recycle bin"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Delete folder error: {e}")
@@ -1226,6 +1230,10 @@ async def api_delete_file(file_id: int, background_tasks: BackgroundTasks, curre
 
         return {"success": True, "message": "File moved to recycle bin"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Delete file error: {e}")
@@ -1268,8 +1276,21 @@ async def api_move_file(file_id: str = Form(...), new_folder_id: str = Form(...)
         clear_file_cache()
         return {"success": True, "message": "File moved successfully"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/files/{file_id}/rename")
@@ -1315,8 +1336,21 @@ async def api_rename_file(file_id: int, new_name: str = Form(...)):
             }
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/files/{file_id}/details")
@@ -1384,8 +1418,21 @@ async def update_file_header_row(file_id: int, header_row: int = Form(...)):
         clear_file_cache()
         return {"success": True, "message": f"File header row updated to {header_row}"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/files/{file_id}/sheets")
@@ -1431,8 +1478,21 @@ async def api_file_columns(file_id: int, sheet_name: str, header_row: Optional[i
         columns = [str(col) for col in df.columns.tolist()]
         return {"success": True, "columns": columns}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============ MASTER FILE APIs ============
@@ -1764,9 +1824,9 @@ async def merge_files(
                                 conn.execute("CREATE TEMPORARY TABLE IF NOT EXISTS temp_secondary AS SELECT * FROM sec_df")
                                 match_t = f.get('match_type', 'exact') or 'exact'
                                 if match_t == 'exact':
-                                    join_cond = f'CAST(master."{pcol}" AS VARCHAR) = CAST(secondary."{sec_match}" AS VARCHAR)'
+                                    join_cond = f'CAST(master_data."{pcol}" AS VARCHAR) = CAST(secondary."{sec_match}" AS VARCHAR)'
                                 else:
-                                    join_cond = f'CAST(master."{pcol}" AS VARCHAR) LIKE \'%\' || CAST(secondary."{sec_match}" AS VARCHAR) || \'%\''
+                                    join_cond = f'CAST(master_data."{pcol}" AS VARCHAR) LIKE \'%\' || CAST(secondary."{sec_match}" AS VARCHAR) || \'%\''
                                 if ft == 'SUMIF':
                                     conn.execute(f'ALTER TABLE master_data ADD COLUMN "{col_name}" DOUBLE')
                                     upd_sql = f'UPDATE master_data SET "{col_name}" = (SELECT COALESCE(SUM(TRY_CAST(secondary."{sec_val}" AS DOUBLE)), 0) FROM temp_secondary AS secondary WHERE {join_cond})'
@@ -1919,6 +1979,10 @@ async def merge_files(
                 pass
         
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Merge error: {e}")
@@ -2393,8 +2457,21 @@ async def get_master_sheets(folder_id: int, current_user: Optional[dict] = Depen
             raise HTTPException(status_code=404, detail="Master file not found")
         return {"success": True, "sheets": ["Working"]}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/master/{folder_id}/columns")
@@ -2408,7 +2485,7 @@ async def get_master_columns(folder_id: int, current_user: Optional[dict] = Depe
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
             raise HTTPException(status_code=404, detail="Master file not found")
         
-        conn = duckdb.connect(master['db_path'])
+        conn = duckdb.connect(master['db_path'], read_only=True)
         all_columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
         conn.close()
         
@@ -2424,8 +2501,21 @@ async def get_master_columns(folder_id: int, current_user: Optional[dict] = Depe
         
         return {"success": True, "columns": columns}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/master/query")
@@ -2451,8 +2541,21 @@ async def query_master(folder_id: str = Form(...), query: str = Form("SELECT * F
             "row_count": len(result)
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/master/{folder_id}/preview")
@@ -2493,7 +2596,7 @@ async def preview_master(
         except Exception:
             pass
 
-        conn = duckdb.connect(master['db_path'])
+        conn = duckdb.connect(master['db_path'], read_only=True)
 
         # Get column names first — we need them to build the search predicate.
         all_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
@@ -2641,8 +2744,21 @@ async def preview_master(
             "truncated_by_limit": bool(search_active and total_count > len(data)),
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/master/{folder_id}/source-files")
@@ -2668,8 +2784,21 @@ async def get_source_files(folder_id: int, current_user: Optional[dict] = Depend
             "source_files": [{"name": row[0], "row_count": row[1]} for row in files]
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/master/{folder_id}/stats")
@@ -2740,8 +2869,21 @@ async def get_master_stats(folder_id: int, current_user: Optional[dict] = Depend
             "columns": stats
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 class VisibilityToggleModel(BaseModel):
@@ -2859,8 +3001,21 @@ async def export_master(
             filename=f"master_export_{folder_id}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         )
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2954,6 +3109,10 @@ async def rename_master_column(
             "columns": updated_cols,
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Rename column error: {e}")
@@ -3044,6 +3203,10 @@ async def apply_row_filter(
             "conditions": conds,
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Apply row filter error: {e}")
@@ -3155,6 +3318,10 @@ async def filtered_preview(
             "data": clean_nan_values(result.to_dict(orient='records')),
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Filtered preview error: {e}")
@@ -3238,6 +3405,10 @@ async def api_delete_master_rows(
             "activity_id": activity_id,
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Delete master rows error: {e}")
@@ -3308,6 +3479,10 @@ async def api_restore_master_rows(
             "message": f"Restored {int(affected)} row(s)",
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Restore master rows error: {e}")
@@ -3352,6 +3527,10 @@ async def api_list_deleted_rows(
             "source_files": sources,
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"List deleted rows error: {e}")
@@ -3383,6 +3562,10 @@ async def api_count_deleted_rows(
             conn.close()
         return {"success": True, "count": int(count)}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Count deleted rows error: {e}")
@@ -3457,6 +3640,10 @@ async def api_export_deleted_rows(
             filename=f"master_deleted_rows_{folder_id}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
         )
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Export deleted rows error: {e}")
@@ -3512,6 +3699,10 @@ async def delete_master_api(folder_id: int, current_user: Optional[dict] = Depen
         
         return {"success": True, "message": "Master file moved to recycle bin"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Delete master error: {e}")
@@ -3707,9 +3898,9 @@ async def apply_master_formula(
             # Build the aggregation query
             match_type = match_type or 'exact'
             if match_type == 'exact':
-                join_condition = f'master."{primary_column}" = secondary."{secondary_match_column}"'
+                join_condition = f'master_data."{primary_column}" = secondary."{secondary_match_column}"'
             else:  # contains - partial match
-                join_condition = f'CAST(master."{primary_column}" AS VARCHAR) LIKE \'%\' || CAST(secondary."{secondary_match_column}" AS VARCHAR) || \'%\''
+                join_condition = f'CAST(master_data."{primary_column}" AS VARCHAR) LIKE \'%\' || CAST(secondary."{secondary_match_column}" AS VARCHAR) || \'%\''
             
             # Add new column
             if formula_type == 'SUMIF':
@@ -3803,6 +3994,55 @@ async def apply_master_formula(
             except Exception as e:
                 logger.warning(f"Failed to update master metadata columns: {e}")
             
+            # Persist formula for auto-reapply on future merges
+            try:
+                existing_formulas = get_master_formulas(folder_id)
+                formula_record = {
+                    "formula_type": formula_type,
+                    "column_name": column_name,
+                    "source_columns": [],
+                    "constant_value": None,
+                    "primary_column": primary_column,
+                    "secondary_file": secondary_file,
+                    "secondary_sheet": secondary_sheet,
+                    "secondary_match_column": secondary_match_column,
+                    "secondary_value_column": secondary_value_column,
+                    "count_column": count_column if formula_type == 'COUNTIF' else None,
+                    "match_type": match_type,
+                    "created_at": datetime.now().isoformat()
+                }
+                existing_formulas.append(formula_record)
+                update_master_formulas(folder_id, existing_formulas)
+            except Exception as e:
+                logger.warning(f"Failed to persist formula: {e}")
+
+            # === AUTO-CAPTURE: FORMULA_ADD ===
+            try:
+                cid_f = (current_user or {}).get('company_id') or master.get('company_id')
+                mid_f = (current_user or {}).get('module_id') or master.get('module_id')
+                _create_activity_from_action(
+                    folder_id=folder_id, action_type='FORMULA_ADD',
+                    payload={
+                        'output_column': column_name,
+                        'formula_type': formula_type,
+                        'source_columns': [],
+                        'constant_value': None,
+                        'primary_column': primary_column,
+                        'secondary_file': secondary_file,
+                        'secondary_sheet': secondary_sheet,
+                        'secondary_match_column': secondary_match_column,
+                        'secondary_value_column': secondary_value_column,
+                        'count_column': count_column if formula_type == 'COUNTIF' else None,
+                        'match_type': match_type,
+                    },
+                    target_column=column_name,
+                    company_id=cid_f, module_id=mid_f,
+                    master_file_id=master.get('id'),
+                    user_id=current_user.get('user_id') if current_user else None,
+                )
+            except Exception as _e:
+                logger.warning(f'Auto-capture FORMULA_ADD failed: {_e}')
+
             return {
                 "success": True,
                 "message": f"Formula '{formula_type}' applied successfully",
@@ -4003,9 +4243,20 @@ async def apply_master_formula(
         }
 
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        import traceback
+        with open('error_log.txt', 'a') as ef:
+            ef.write(traceback.format_exc() + '\n')
         logger.error(f"Formula error: {e}")
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -4070,6 +4321,10 @@ async def delete_master_column(folder_id: int, column_name: str, current_user: O
             "columns": updated_cols
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Delete column error: {e}")
@@ -4201,9 +4456,9 @@ async def preview_master_formula(
             # Build the aggregation query
             match_type = match_type or 'exact'
             if match_type == 'exact':
-                join_condition = f'master."{primary_column}" = secondary."{secondary_match_column}"'
+                join_condition = f'master_data."{primary_column}" = secondary."{secondary_match_column}"'
             else:  # contains - partial match
-                join_condition = f'CAST(master."{primary_column}" AS VARCHAR) LIKE \'%\' || CAST(secondary."{secondary_match_column}" AS VARCHAR) || \'%\''
+                join_condition = f'CAST(master_data."{primary_column}" AS VARCHAR) LIKE \'%\' || CAST(secondary."{secondary_match_column}" AS VARCHAR) || \'%\''
 
             # Build preview query (first 5 rows)
             if formula_type == 'SUMIF':
@@ -4321,6 +4576,10 @@ async def preview_master_formula(
         }
         
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Formula preview error: {e}")
@@ -4474,6 +4733,10 @@ async def find_replace_master(
         }
 
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Find & Replace error: {e}")
@@ -4614,6 +4877,10 @@ async def apply_formula_expression(
         }
 
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Formula expression error: {e}")
@@ -4681,6 +4948,10 @@ async def preview_formula_expression(
         }
 
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Formula expression preview error: {e}")
@@ -4718,6 +4989,10 @@ async def api_list_activities(folder_id: int, current_user: Optional[dict] = Dep
             "folder_id": folder_id
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"List activities error: {e}")
@@ -4792,6 +5067,10 @@ async def api_create_activity(
         act = get_master_activity(activity_id)
         return {"success": True, "activity": act, "activity_id": activity_id, "message": "Activity created"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Create activity error: {e}")
@@ -4851,6 +5130,10 @@ async def api_update_activity(
         updated = get_master_activity(activity_id)
         return {"success": True, "activity": updated, "message": "Activity updated"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Update activity error: {e}")
@@ -4871,6 +5154,10 @@ async def api_delete_activity(
         delete_master_activity(activity_id)
         return {"success": True, "message": "Activity deleted"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Delete activity error: {e}")
@@ -4903,6 +5190,10 @@ async def api_reorder_activities(
         reorder_master_activities(folder_id, ids_list)
         return {"success": True, "message": "Activities reordered", "count": len(ids_list)}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Reorder activities error: {e}")
@@ -5023,6 +5314,10 @@ async def api_test_activity(
 
         return {"success": True, "preview": preview}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Test activity error: {e}")
@@ -5099,8 +5394,21 @@ async def generate_primary(
             "download_url": f"/api/primary/download/{result['filename']}"
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/primary/preview-live")
@@ -5132,8 +5440,21 @@ async def preview_primary_live(
             "total_unique": result['total_unique']
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/primary/field-columns")
@@ -5144,6 +5465,15 @@ async def get_primary_field_columns_endpoint(current_user: Optional[dict] = Depe
         field_columns = get_primary_field_columns(cid, mid)
         return {"success": True, "fields": field_columns}
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/primary/download/{filename}")
@@ -5155,8 +5485,21 @@ async def download_primary(filename: str, current_user: Optional[dict] = Depends
             raise HTTPException(status_code=404, detail="File not found")
         return FileResponse(file_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/primary/files")
@@ -5166,8 +5509,21 @@ async def list_primary(current_user: Optional[dict] = Depends(get_optional_user)
         files = list_primary_files(cid, mid)
         return {"success": True, "files": files}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/primary/preview/{filename}")
@@ -5207,6 +5563,10 @@ async def preview_primary(filename: str, current_user: Optional[dict] = Depends(
             "columns": df.columns.tolist()
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Primary preview error for '{filename}': {e}")
@@ -5233,8 +5593,21 @@ async def create_rule(
         rule_id = save_rule(phase, config_parsed, name=name, processing_type=processing_type, company_id=cid, module_id=mid, validation_id=validation_id)
         return {"success": True, "rule_id": rule_id, "message": "Rule saved successfully"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/rules/{phase}")
@@ -5271,8 +5644,21 @@ async def api_delete_rule(rule_id: int):
         delete_rule(rule_id)
         return {"success": True, "message": "Rule deleted successfully"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============ OPTIMIZED BACKGROUND PROCESSING ============
@@ -5306,17 +5692,22 @@ def process_rules_background():
             processing_status["is_processing"] = False
             processing_status["progress"] = "completed"
             return
-        
+
         phase1_rules = [dict(r) for r in all_rules if r['phase'] == 1]
         phase2_rules = [dict(r) for r in all_rules if r['phase'] == 2]
         phase3_rules = [dict(r) for r in all_rules if r['phase'] == 3]
-        
+
         # FIX: Only use the most recent rule record for each phase!
         # The database keeps historical saves, but we should only execute the latest configuration.
         phase1_rules = [phase1_rules[-1]] if phase1_rules else []
         phase2_rules = [phase2_rules[-1]] if phase2_rules else []
         phase3_rules = [phase3_rules[-1]] if phase3_rules else []
-        
+
+        # FIX: For Validation 1 and 3, Phase 2 (Matching Rules) is intentionally hidden in the UI.
+        # Do NOT load or process Phase 2 rules for these validations, even if they exist in DB.
+        # The "Phase 2" the user sees in Val 1/3 is actually the renamed Phase 3 (Remarks).
+        if vid in (1, 3):
+            phase2_rules = []
         if not phase1_rules:
             processing_status["result"] = {"success": False, "message": "No Phase 1 (Primary Data) rule configured"}
             processing_status["is_processing"] = False
@@ -5748,7 +6139,62 @@ def process_rules_background():
         
         # Process Phase 3: Remarks & Actions (VECTORIZED)
         phase3_output_columns = {}
-        
+
+        # FIX #4: Build a column-name resolver so Phase 3 conditions can reference
+        # both the ORIGINAL Phase 1 source column names (e.g., 'Order ID', 'Sales Amount')
+        # AND the renamed Phase 1 output columns. Without this, when Phase 1 has renamed
+        # columns (common in Val 1/3 where 'Phase 2' UI is actually the renamed Phase 3
+        # Remarks tab), saved remark conditions referencing the original column name
+        # fail to match any rows because that name no longer exists in primary_df.
+        p3_col_alias_map = {}
+        if isinstance(p1_config, dict):
+            _p1_pk = p1_config.get('column', 'Order ID')
+            if _p1_pk and _p1_pk in primary_df.columns and _p1_pk != 'Order ID':
+                p3_col_alias_map['Order ID'] = _p1_pk
+            if isinstance(p1_fields, list):
+                for _f in p1_fields:
+                    _src = _f.get('source_column')
+                    _name = _f.get('name')
+                    if _src and _name and _src != _name and _name in primary_df.columns:
+                        p3_col_alias_map[_src] = _name
+
+        def p3_resolve_column(col_name):
+            """Resolve a Phase 3 condition column to an actual primary_df column."""
+            if not col_name:
+                return col_name
+            if col_name in primary_df.columns:
+                return col_name
+            if col_name in p3_col_alias_map and p3_col_alias_map[col_name] in primary_df.columns:
+                return p3_col_alias_map[col_name]
+            # Case-insensitive match
+            for actual_col in primary_df.columns:
+                if actual_col.lower() == col_name.lower():
+                    return actual_col
+            # FIX #6: Strip a leading "X - " or "X -" prefix where X is one or two
+            # uppercase Excel column letters. This handles the common user mistake
+            # of selecting "H - Tracker Invoice Amount" from the dropdown when the
+            # actual column is named "Tracker Invoice Amount" (the letter prefix
+            # is shown only as a badge in the Val 1/3 Phase 1 UI).
+            import re as _re_letter
+            _m = _re_letter.match(r'^([A-Z]{1,2})\s*-\s*(.+)$', col_name.strip())
+            if _m:
+                _stripped = _m.group(2).strip()
+                if _stripped in primary_df.columns:
+                    logger.info(
+                        f"PHASE 3 DIAGNOSTIC: Resolved condition column '{col_name}' to '{_stripped}' "
+                        f"by stripping the '{_m.group(1)} -' letter prefix."
+                    )
+                    return _stripped
+                # Case-insensitive match against the stripped name
+                for actual_col in primary_df.columns:
+                    if actual_col.lower() == _stripped.lower():
+                        logger.info(
+                            f"PHASE 3 DIAGNOSTIC: Resolved condition column '{col_name}' to '{actual_col}' "
+                            f"by stripping the '{_m.group(1)} -' letter prefix (case-insensitive match)."
+                        )
+                        return actual_col
+            return col_name
+
         if phase3_rules:
             # FIX #1: Process ALL Phase 3 rules, not just the last one
             for p3_rule in phase3_rules:
@@ -5756,42 +6202,89 @@ def process_rules_background():
                 if isinstance(phase3_config, str):
                     try: phase3_config = json.loads(phase3_config)
                     except: pass
-                
+
                 groups = phase3_config if isinstance(phase3_config, list) else []
-                
+
                 for group in groups:
                     col_name = group.get('column_name', '')
                     default_remark = group.get('default_remark', '')
                     remark_rules = group.get('remark_rules', [])
-                    
+
                     output_col = group.get('output_column', '')
-                    if not col_name or not remark_rules:
+                    if not col_name:
                         continue
-                    
+
                     if output_col and col_name:
                         phase3_output_columns[output_col] = col_name
-                    
+
+                    # FIX #5: If remark_rules is empty, still apply the default remark so the
+                    # column appears in the output. This matches the user's mental model
+                    # that "I configured a remark column with default text".
+                    if not remark_rules:
+                        primary_df[col_name] = default_remark if default_remark else ''
+                        logger.info(
+                            f"PHASE 3 DIAGNOSTIC: Group '{col_name}' has no remark_rules; "
+                            f"applying default_remark='{default_remark}' to all {len(primary_df)} rows."
+                        )
+                        continue
+
                     primary_df[col_name] = default_remark if default_remark else ''
-                    
+
                     for remark_rule in reversed(remark_rules):
                         remark_text = remark_rule.get('remark', '')
                         conditions = remark_rule.get('conditions', [])
-                        
+
                         if not conditions:
+                            # No conditions means apply this remark to all rows (overriding default).
+                            primary_df[col_name] = remark_text
+                            logger.info(
+                                f"PHASE 3 DIAGNOSTIC: Remark '{remark_text}' for col '{col_name}' has no conditions; "
+                                f"applying to all {len(primary_df)} rows."
+                            )
                             continue
-                        
+
                         mask = pd.Series([True] * len(primary_df), index=primary_df.index)
-                        
+
                         for cond in conditions:
                             try:
-                                cond_mask = evaluate_condition_vectorized(primary_df, cond)
+                                # FIX #4: Resolve condition's 'column' through Phase 1 alias map
+                                # so remarks saved against original source column names still match
+                                # when Phase 1 has renamed the column.
+                                if isinstance(cond, dict) and cond.get('column'):
+                                    raw_col = cond['column']
+                                    cond_resolved = dict(cond)
+                                    cond_resolved['column'] = p3_resolve_column(raw_col)
+                                    # FIX #5: If the resolved column doesn't exist in primary_df,
+                                    # log a warning so the user knows their remark isn't matching.
+                                    if cond_resolved['column'] not in primary_df.columns:
+                                        logger.warning(
+                                            f"PHASE 3 DIAGNOSTIC: Condition column '{raw_col}' "
+                                            f"(resolved to '{cond_resolved['column']}') NOT FOUND in primary_df "
+                                            f"(columns: {list(primary_df.columns)}). "
+                                            f"Remark '{remark_text}' will not match any rows."
+                                        )
+                                        cond_mask = pd.Series([False] * len(primary_df), index=primary_df.index)
+                                    else:
+                                        cond_mask = evaluate_condition_vectorized(primary_df, cond_resolved)
+                                else:
+                                    cond_mask = evaluate_condition_vectorized(primary_df, cond)
                                 mask &= cond_mask
                             except Exception as e:
                                 logger.error(f"Remark condition failed: {e}")
                                 mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
-                        
-                        if mask.any():
+
+                        matched_count = int(mask.sum())
+                        if matched_count > 0:
                             primary_df.loc[mask, col_name] = remark_text
+                            logger.info(
+                                f"PHASE 3 DIAGNOSTIC: Remark '{remark_text}' matched {matched_count}/{len(primary_df)} rows for col '{col_name}'"
+                            )
+                        else:
+                            logger.warning(
+                                f"PHASE 3 DIAGNOSTIC: Remark '{remark_text}' matched 0 rows for col '{col_name}'. "
+                                f"Conditions were: {conditions}. "
+                                f"primary_df has columns: {list(primary_df.columns)}"
+                            )
         
         # ===== PHASE 4: SUMMARY & PIVOT =====
         with processing_lock:
@@ -6093,9 +6586,19 @@ def process_rules_background():
         with processing_lock:
             processing_status["progress"] = "saving"
         
-        # Merge Phase 2 and Phase 3 output columns for ordering
-        all_output_columns = {**output_columns, **phase3_output_columns}
-        
+        # Merge Phase 2 and Phase 3 output columns for ordering.
+        # Each entry maps Excel-letter (e.g. "A", "B", "AA") -> actual column name in primary_df.
+        # IMPORTANT: For Validation 1/3, Phase 2 (Matching Rules) is intentionally skipped,
+        # so output_columns will be empty. The "Phase 2" the user sees in Val 1/3 is the
+        # renamed Phase 3 (Remarks), so the only "decided" columns come from phase3_output_columns
+        # and Phase 1 fields.
+        all_output_columns = {}
+        for letter, col_name in output_columns.items():
+            all_output_columns[letter] = col_name
+        for letter, col_name in phase3_output_columns.items():
+            # Last write wins — Phase 3/remarks column overrides Phase 2 if both reference same letter
+            all_output_columns[letter] = col_name
+
         # Also merge Phase 1 field output columns so they participate in letter-based ordering
         if isinstance(p1_fields, list):
             for f in p1_fields:
@@ -6103,62 +6606,101 @@ def process_rules_background():
                 name = f.get('name')
                 if letter and name:
                     all_output_columns[letter] = name
-        
-        # Build dynamic PRIMARY_COL_ORDER based on actual column names in the DataFrame
-        # The first columns in primary_df are always: Unique_ID, Source_File_Name, primary key column, then field columns
-        PRIMARY_COL_ORDER = []
-        for col in primary_df.columns:
-            PRIMARY_COL_ORDER.append(col)
-            if len(PRIMARY_COL_ORDER) >= 4:
-                # Stop after including Unique_ID, Source_File_Name, primary key, and first field column
-                # This ensures Phase 1 columns are captured dynamically by actual names
-                found_all_phase1_fields = True
-                for f in p1_fields if isinstance(p1_fields, list) else []:
-                    fname = f.get('name', '')
-                    if fname and fname not in PRIMARY_COL_ORDER:
-                        found_all_phase1_fields = False
-                        break
-                if found_all_phase1_fields:
-                    break
-        
+
+        # Build dynamic PRIMARY_COL_ORDER based on actual column names in the DataFrame.
+        # We need to include Phase 1 field columns here so the "decided" columns for
+        # Phase 2/3 (which sort AFTER Phase 1 by letter) do not accidentally push a
+        # Phase 1 field down to "other_cols".
+        #
+        # The first columns in primary_df are always: Unique_ID, Source_File_Name,
+        # primary key column, then Phase 1 field columns. We walk through primary_df.columns
+        # and ensure every Phase 1 field name appears in PRIMARY_COL_ORDER (even if the
+        # field is not in the first 4 columns of the dataframe).
+        PRIMARY_COL_ORDER = list(primary_df.columns)
+
+        # Then explicitly include all Phase 1 fields that should appear early
+        # (in the order they were configured by the user).
+        if isinstance(p1_fields, list):
+            seen_in_primary = set(PRIMARY_COL_ORDER)
+            # Phase 1 fields are typically in the first N columns of primary_df;
+            # ensure each is present and ordered by the configured Phase 1 order.
+            ordered_p1_fields = []
+            for f in p1_fields:
+                fname = f.get('name', '')
+                if fname and fname in seen_in_primary:
+                    ordered_p1_fields.append(fname)
+            # Make sure PRIMARY_COL_ORDER starts with all Phase 1 fields (in order)
+            # before any other columns. We rebuild the front of the list deterministically.
+            new_front = []
+            seen = set()
+            # First: Unique_ID, Source_File_Name
+            for must in ['Unique_ID', 'Source_File_Name']:
+                if must in PRIMARY_COL_ORDER and must not in seen:
+                    new_front.append(must)
+                    seen.add(must)
+            # Then: primary key column (p1_config.column)
+            pk_col = p1_config.get('column', 'Order ID')
+            if pk_col in PRIMARY_COL_ORDER and pk_col not in seen:
+                new_front.append(pk_col)
+                seen.add(pk_col)
+            # Then: Phase 1 fields in configured order
+            for fname in ordered_p1_fields:
+                if fname not in seen:
+                    new_front.append(fname)
+                    seen.add(fname)
+            # Append any remaining columns from PRIMARY_COL_ORDER not yet included
+            for c in PRIMARY_COL_ORDER:
+                if c not in seen:
+                    new_front.append(c)
+                    seen.add(c)
+            PRIMARY_COL_ORDER = new_front
+
         logger.info(f"Dynamic PRIMARY_COL_ORDER: {PRIMARY_COL_ORDER}")
         logger.info(f"All output columns (incl Phase 1): {all_output_columns}")
-        
+
         ordered_col_names = []
         cols_with_letters = []
         other_cols = []
-        
+
         for col in primary_df.columns:
             letter = None
             for l, n in all_output_columns.items():
                 if n == col:
                     letter = l
                     break
-            
+
             if letter:
                 cols_with_letters.append((letter, col))
             elif col not in PRIMARY_COL_ORDER:
                 other_cols.append(col)
-        
+
         # Sort Phase 2/3 columns by Excel column letter order (A, B, C... Z, AA, AB... ZZ)
         cols_with_letters = sort_excel_columns(dict(cols_with_letters))
-        
+
         # Build final column order:
         # 1. Primary columns first (A, B, C - dynamically from Phase 1)
         # 2. Phase 2/3 columns in letter order (D onwards)
         # 3. Any other columns last
-        for pc in PRIMARY_COL_ORDER:
-            if pc in primary_df.columns and pc not in ordered_col_names:
-                ordered_col_names.append(pc)
         
+        assigned_col_names = {col for _, col in cols_with_letters}
+
+        for pc in PRIMARY_COL_ORDER:
+            if pc in primary_df.columns and pc not in ordered_col_names and pc not in assigned_col_names:
+                ordered_col_names.append(pc)
+
         for letter, col in cols_with_letters:
             if col not in ordered_col_names:
                 ordered_col_names.append(col)
-        
+
         for col in other_cols:
             if col not in ordered_col_names:
                 ordered_col_names.append(col)
-        
+
+        # Safety: any column not yet placed, place it now to avoid losing data
+        for col in primary_df.columns:
+            if col not in ordered_col_names:
+                ordered_col_names.append(col)
+
         primary_df = primary_df[ordered_col_names]
         
         # Parse filename — use ORIGINAL uploaded file name (from Phase 1 config) 
@@ -6642,8 +7184,11 @@ async def process_all_rules(
                     for f in c1.get('fields', []):
                         if f.get('name'): generated_cols.add(f['name'])
                 except: pass
-                
-            if p2_rules:
+
+            # For Validation 1 and 3, Phase 2 (Matching Rules) is not used.
+            # The "Phase 2" the user sees in Val 1/3 is the renamed Phase 3 (Remarks),
+            # so Phase 2 rules should NOT participate in column generation here.
+            if p2_rules and validation_id not in (1, 3):
                 try:
                     c2 = json.loads(p2_rules['config'])
                     for r in c2:
@@ -6797,8 +7342,21 @@ async def download_file(filename: str, current_user: Optional[dict] = Depends(ge
             }
         )
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============ PHASE 4: SUMMARY & PIVOT APIs ============
@@ -6826,8 +7384,21 @@ async def save_summary(
         clear_file_cache()
         return {"success": True, "summary_id": rule_id, "message": "Summary saved successfully"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/summary/list")
@@ -6851,8 +7422,21 @@ async def list_summaries(validation_id: int = 1, current_user: Optional[dict] = 
                 pass
         return {"success": True, "summaries": summaries}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/summary/{summary_id}")
@@ -6865,8 +7449,21 @@ async def delete_summary(summary_id: int, current_user: Optional[dict] = Depends
         conn.close()
         return {"success": True, "message": "Summary deleted successfully"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/summary/clear-all")
@@ -6880,8 +7477,21 @@ async def clear_all_summaries(validation_id: int = 1, current_user: Optional[dic
         conn.close()
         return {"success": True, "message": "All summaries cleared"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/summary/preview")
@@ -7406,8 +8016,21 @@ async def get_processed_tree_api(current_user: Optional[dict] = Depends(get_opti
             "stats": stats
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 def format_to_ist(created_at_str):
@@ -7447,8 +8070,21 @@ async def get_processed_files_list(
             "count": len(files)
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/processed/{file_id}")
@@ -7460,8 +8096,21 @@ async def delete_processed(file_id: int):
             os.remove(file['file_path'])
         return {"success": True, "message": "Processed file deleted"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/processed/{file_id}/preview")
@@ -7553,8 +8202,21 @@ async def preview_processed_file(file_id: int):
     except HTTPException as he:
         raise he
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 def _safe_extract_chart_data(file_path):
@@ -7800,6 +8462,10 @@ async def get_processed_chart(file_id: int, chart_type: str = 'bar_chart'):
         }
 
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         import traceback
@@ -7866,8 +8532,21 @@ async def get_processed_raw_data(file_id: int, page: int = 1, limit: int = 100):
     except HTTPException as he:
         raise he
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/processed/{file_id}/download")
@@ -7914,8 +8593,21 @@ async def download_processed_file(file_id: int):
     except HTTPException as he:
         raise he
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        if 'sec_conn' in locals() and hasattr(sec_conn, 'close'):
+            try: sec_conn.close()
+            except: pass
+        if 'duck_conn' in locals() and hasattr(duck_conn, 'close'):
+            try: duck_conn.close()
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============ DASHBOARD APIs ============
@@ -8018,6 +8710,10 @@ async def restore_recycle_bin_item(recycle_id: int, current_user: Optional[dict]
             "restored": restored
         }
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Restore recycle bin error: {e}")
@@ -8051,6 +8747,10 @@ async def permanent_delete_recycle_bin_item(recycle_id: int, current_user: Optio
         clear_file_cache()
         return {"success": True, "message": "Item permanently deleted"}
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Permanent delete recycle bin error: {e}")
@@ -8147,6 +8847,10 @@ async def api_download_rejected_artefact(file_id: int, current_user: Optional[di
             headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
         )
     except HTTPException:
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise
     except Exception as e:
         logger.error(f"Rejected download error for file {file_id}: {e}")

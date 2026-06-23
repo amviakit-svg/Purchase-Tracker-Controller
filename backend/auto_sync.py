@@ -879,11 +879,14 @@ def _apply_filter_activity(duck_conn, act):
                 where_clauses.append(f"TRY_CAST({col_ident} AS DOUBLE) < {_sql_escape(fv)}")
             except Exception:
                 pass
-        elif op == 'between':
+        elif op in ('between', 'not_between'):
             try:
                 fmin = float(vmin) if vmin not in (None, '') else 0
                 fmax = float(vmax) if vmax not in (None, '') else 0
-                where_clauses.append(f"TRY_CAST({col_ident} AS DOUBLE) BETWEEN {_sql_escape(fmin)} AND {_sql_escape(fmax)}")
+                if op == 'between':
+                    where_clauses.append(f"TRY_CAST({col_ident} AS DOUBLE) BETWEEN {_sql_escape(fmin)} AND {_sql_escape(fmax)}")
+                else:
+                    where_clauses.append(f"TRY_CAST({col_ident} AS DOUBLE) NOT BETWEEN {_sql_escape(fmin)} AND {_sql_escape(fmax)}")
             except Exception:
                 pass
         elif op == 'blank':

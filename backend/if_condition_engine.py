@@ -68,12 +68,14 @@ EQUALITY_AGGREGATORS = {"=", "!="}
 TEXT_AGGREGATORS = {"starts_with", "ends_with", "contains"}
 BLANK_AGGREGATORS = {"blank", "not_blank", "zero_or_blank", "not_zero_or_blank"}
 POSITION_AGGREGATORS = {"left_eq", "right_eq", "mid_eq"}
+BETWEEN_AGGREGATORS = {"between", "not_between"}
 ALL_AGGREGATORS = (
     NUMERIC_AGGREGATORS
     | EQUALITY_AGGREGATORS
     | TEXT_AGGREGATORS
     | BLANK_AGGREGATORS
     | POSITION_AGGREGATORS
+    | BETWEEN_AGGREGATORS
 )
 
 # Sub-operators usable inside a position operator
@@ -289,6 +291,38 @@ def _render_condition(cond: Dict[str, Any], columns: List[str]) -> Tuple[str, Li
         )
 
     # --- Resolve the RHS ---
+    if agg in BETWEEN_AGGREGATORS:
+        val_min = cond.get("value_min", "")
+        val_max = cond.get("value_max", "")
+        
+        if val_type == "column":
+            if not val_min or not val_max:
+                raise ValueError(f"Min and max columns cannot be empty for '{agg}'")
+            if val_min not in columns:
+                raise ValueError(f"Column '{val_min}' does not exist")
+            if val_max not in columns:
+                raise ValueError(f"Column '{val_max}' does not exist")
+            rhs_min = _safe_ident(val_min)
+            rhs_max = _safe_ident(val_max)
+            referenced.extend([val_min, val_max])
+            sql_rhs_min = f"TRY_CAST({rhs_min} AS DOUBLE)"
+            sql_rhs_max = f"TRY_CAST({rhs_max} AS DOUBLE)"
+        else:
+            if val_min is None or val_min == "" or val_max is None or val_max == "":
+                raise ValueError(f"Min and Max values cannot be empty for '{agg}'")
+            try:
+                sql_rhs_min = _sql_number_literal(val_min)
+                sql_rhs_max = _sql_number_literal(val_max)
+            except ValueError:
+                sql_rhs_min = f"TRY_CAST({_sql_string_literal(str(val_min))} AS DOUBLE)"
+                sql_rhs_max = f"TRY_CAST({_sql_string_literal(str(val_max))} AS DOUBLE)"
+                
+        sql_lhs = f"TRY_CAST({col_id} AS DOUBLE)"
+        if agg == "between":
+            return f"({sql_lhs} BETWEEN {sql_rhs_min} AND {sql_rhs_max})", referenced
+        else:
+            return f"({sql_lhs} NOT BETWEEN {sql_rhs_min} AND {sql_rhs_max})", referenced
+
     if val_type == "column":
         if not val:
             raise ValueError("Column reference cannot be empty")

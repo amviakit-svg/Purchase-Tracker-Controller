@@ -104,6 +104,19 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
                     except:
                         pass
                 df = df.drop(columns=[col for col in meta_cols if col in df.columns])
+                
+                # Apply column order if stored
+                if master.get('column_order'):
+                    try:
+                        col_order = json.loads(master['column_order'])
+                        if isinstance(col_order, list):
+                            ordered_existing = [c for c in col_order if c in df.columns]
+                            for c in df.columns:
+                                if c not in ordered_existing:
+                                    ordered_existing.append(c)
+                            df = df[ordered_existing]
+                    except Exception:
+                        pass
             finally:
                 conn.close()
             df = df.astype(str)
