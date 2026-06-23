@@ -4123,6 +4123,63 @@
             }
         }
 
+        // Shared function to visually sort columns based on activities
+        function sortColumnsByActivities(columns, activities) {
+            const allCols = columns.slice();
+            let activityCols = [];
+            
+            if (activities && Array.isArray(activities)) {
+                activities.forEach(a => {
+                    if (a.activity_type === 'FORMULA_ADD' || a.activity_type === 'IF_CONDITION') {
+                        let col = a.target_column || (a.payload && (a.payload.output_column || a.payload.column_name));
+                        if (col && !activityCols.includes(col)) {
+                            activityCols.push(col);
+                        }
+                    } else if (a.activity_type === 'COLUMN_RENAME') {
+                        let oldName = a.payload && a.payload.from;
+                        let newName = a.payload && (a.payload.to || a.payload.to_column);
+                        let idx = activityCols.indexOf(oldName);
+                        if (idx !== -1 && newName) {
+                            activityCols[idx] = newName;
+                        }
+                    } else if (a.activity_type === 'COLUMN_DELETE') {
+                        let col = a.payload && a.payload.column_name;
+                        let idx = activityCols.indexOf(col);
+                        if (idx !== -1) {
+                            activityCols.splice(idx, 1);
+                        }
+                    }
+                });
+                
+                const isGreenCol = (col) => activityCols.includes(col) || col === 'GST MATCH' || col.endsWith(' MATCH');
+
+                allCols.sort((a, b) => {
+                    const isGreenA = isGreenCol(a);
+                    const isGreenB = isGreenCol(b);
+                    
+                    if (!isGreenA && isGreenB) return -1;
+                    if (isGreenA && !isGreenB) return 1;
+                    
+                    // Both are green
+                    if (isGreenA && isGreenB) {
+                        const idxA = activityCols.indexOf(a);
+                        const idxB = activityCols.indexOf(b);
+                        
+                        // MATCH columns come before activity columns
+                        if (idxA === -1 && idxB !== -1) return -1;
+                        if (idxA !== -1 && idxB === -1) return 1;
+                        
+                        // Both are activity columns, sort by step order
+                        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                        return 0; // Both are MATCH columns
+                    }
+                    
+                    return 0; // Both are normal columns
+                });
+            }
+            return allCols;
+        }
+
         async function loadMasterPreview() {
             const limitStr = document.getElementById('master-row-limit').value || 10;
             let limit = parseInt(limitStr, 10);
@@ -4173,57 +4230,27 @@
                 }
 
                 // Render headers (add a trailing Action column for the delete button)
-                const allCols = data.columns.slice();
+                let allCols = data.columns.slice();
                 
                 // Reorder columns visually based on the activities step order
-                let activityCols = [];
                 if (typeof __masterActivities !== 'undefined' && Array.isArray(__masterActivities)) {
+                    allCols = sortColumnsByActivities(allCols, __masterActivities);
+                    // Reconstruct activityCols for styling logic below
+                    let activityCols = [];
                     __masterActivities.forEach(a => {
                         if (a.activity_type === 'FORMULA_ADD' || a.activity_type === 'IF_CONDITION') {
                             let col = a.target_column || (a.payload && (a.payload.output_column || a.payload.column_name));
-                            if (col && !activityCols.includes(col)) {
-                                activityCols.push(col);
-                            }
+                            if (col && !activityCols.includes(col)) activityCols.push(col);
                         } else if (a.activity_type === 'COLUMN_RENAME') {
                             let oldName = a.payload && a.payload.from;
                             let newName = a.payload && (a.payload.to || a.payload.to_column);
                             let idx = activityCols.indexOf(oldName);
-                            if (idx !== -1 && newName) {
-                                activityCols[idx] = newName;
-                            }
+                            if (idx !== -1 && newName) activityCols[idx] = newName;
                         } else if (a.activity_type === 'COLUMN_DELETE') {
                             let col = a.payload && a.payload.column_name;
                             let idx = activityCols.indexOf(col);
-                            if (idx !== -1) {
-                                activityCols.splice(idx, 1);
-                            }
+                            if (idx !== -1) activityCols.splice(idx, 1);
                         }
-                    });
-                    
-                    const isGreenCol = (col) => activityCols.includes(col) || col === 'GST MATCH' || col.endsWith(' MATCH');
-
-                    allCols.sort((a, b) => {
-                        const isGreenA = isGreenCol(a);
-                        const isGreenB = isGreenCol(b);
-                        
-                        if (!isGreenA && isGreenB) return -1;
-                        if (isGreenA && !isGreenB) return 1;
-                        
-                        // Both are green
-                        if (isGreenA && isGreenB) {
-                            const idxA = activityCols.indexOf(a);
-                            const idxB = activityCols.indexOf(b);
-                            
-                            // MATCH columns come before activity columns
-                            if (idxA === -1 && idxB !== -1) return -1;
-                            if (idxA !== -1 && idxB === -1) return 1;
-                            
-                            // Both are activity columns, sort by step order
-                            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                            return 0; // Both are MATCH columns
-                        }
-                        
-                        return 0; // Both are normal columns
                     });
                 }
                 
@@ -4698,10 +4725,12 @@
             
             // Reload all phases for the new validation only if it's the first time
             if (isFirstLoad && !document.getElementById('page-rules').classList.contains('hidden')) {
-                loadSavedPhase1().then(() => {
-                    if (window.currentValidation === 2) loadSavedPhase2();
-                    loadSavedPhase3();
-                    loadSavedPhase4();
+                loadSavedPhase1().then(async () => {
+                    if (window.currentValidation === 2) {
+                        await loadSavedPhase2();
+                    }
+                    await loadSavedPhase3();
+                    await loadSavedPhase4();
                 });
             }
             
@@ -4834,13 +4863,10 @@
             };
 
             try {
-                updateProgress('Loading files and rules in parallel...');
+                updateProgress('Loading files and rules...');
                 
                 // Start network requests concurrently for maximum speed
                 const filesPromise = getAllFilesList();
-                const p2Promise = loadSavedPhase2();
-                const p3Promise = loadSavedPhase3();
-                const p4Promise = loadSavedPhase4();
 
                 const allFilesData = await filesPromise;
                 const allFilesList = allFilesData.files || [];
@@ -4869,11 +4895,15 @@
                     }
                 }
 
-                // Phase 1 must be awaited after dropdown population, but concurrent with P2/P3/P4
-                await loadSavedPhase1();
-                
-                // Await completion of the remaining phases
-                await Promise.all([p2Promise, p3Promise, p4Promise]);
+                // If we are showing rules page, load them sequentially AFTER dropdowns are populated
+                if (!document.getElementById('page-rules').classList.contains('hidden')) {
+                    await loadSavedPhase1();
+                    if (window.currentValidation === 2) {
+                        await loadSavedPhase2();
+                    }
+                    await loadSavedPhase3();
+                    await loadSavedPhase4();
+                }
                 
                 resequenceOutputColumns();
                 
@@ -6031,6 +6061,14 @@
                         if (p4c) p4c.classList.remove('hidden');
                         
                         await loadAvailableColumnsForSummary();
+                        
+                        // Automatically refresh Phase 2/3 UI to reflect any column changes
+                        if (typeof loadSavedPhase2 === 'function') {
+                            await loadSavedPhase2();
+                        }
+                        if (typeof loadSavedPhase3 === 'function') {
+                            await loadSavedPhase3();
+                        }
                     }
                     return;
                 }
@@ -6132,6 +6170,14 @@
                     
                     // Immediately update Phase 4 available columns
                     await loadAvailableColumnsForSummary();
+                    
+                    // Automatically refresh Phase 2/3 UI to reflect any column changes
+                    if (typeof loadSavedPhase2 === 'function') {
+                        await loadSavedPhase2();
+                    }
+                    if (typeof loadSavedPhase3 === 'function') {
+                        await loadSavedPhase3();
+                    }
                 } else {
                     if (!isAutoSave) {
                         if (saveBtn) saveBtn.disabled = false;
@@ -6558,10 +6604,6 @@
                     if (cn && cn.value.trim()) availableCols.push(cn.value.trim());
                 });
                 availableCols = [...new Set(availableCols)];
-                const colOptions = availableCols.map(c => {
-                    const label = (c === 'Order ID') ? (window.primaryValueColumnName || 'Order ID') : c;
-                    return `<option value="${c}">${label}</option>`;
-                }).join('');
                 
                 panel.innerHTML = `
                     <td colspan="9" class="px-4 py-4">
@@ -6588,7 +6630,7 @@
                             
                             <!-- Conditions List -->
                             <div id="conditions-list-${rowId}" class="space-y-2 mb-3">
-                                ${buildConditionRow(rowId, 0, colOptions)}
+                                ${buildConditionRow(rowId, 0, availableCols)}
                             </div>
                             
                             <button onclick="addConditionRowToPanel(${rowId})" class="flex items-center space-x-1 text-xs text-purple-600 hover:text-purple-800 font-medium mb-4">
@@ -6604,7 +6646,7 @@
                                         <label class="text-xs text-gray-600 block mb-1">Copy data FROM column:</label>
                                         <select id="extract-source-${rowId}" class="w-full text-xs border border-gray-300 rounded px-2 py-1.5">
                                             <option value="">Select Source Column</option>
-                                            ${colOptions}
+                                            ${getColumnOptionsHtml('', availableCols)}
                                         </select>
                                     </div>
                                     <div class="flex items-center justify-center">
@@ -6626,7 +6668,7 @@
             });
         }
 
-        function buildConditionRow(rowId, idx, colOptions, selectedCol='', selectedOp='equal_to', val='') {
+        function buildConditionRow(rowId, idx, availableCols, selectedCol='', selectedOp='equal_to', val='') {
             const operators = [
                 ['equal_to', 'Equal to (Numbers only)'],
                 ['not_equal_to', 'Doesn\'t equal to (Numbers only)'],
@@ -6659,7 +6701,7 @@
                     <span class="text-xs font-medium text-gray-500 w-8">${idx === 0 ? 'IF' : 'AND'}</span>
                     <select class="cond-col w-40 text-xs border border-gray-300 rounded px-2 py-1.5">
                         <option value="">Select Column</option>
-                        ${colOptions.replace(`value="${selectedCol}"`, `value="${selectedCol}" selected`)}
+                        ${getColumnOptionsHtml(selectedCol, availableCols)}
                     </select>
                     <select class="cond-op w-44 text-xs border border-gray-300 rounded px-2 py-1.5" onchange="onPanelConditionOpChange(this)">
                         ${operators.map(([op, label]) => `<option value="${op}" ${op === selectedOp ? 'selected' : ''}>${label}</option>`).join('')}
@@ -6697,13 +6739,9 @@
                 if (cn && cn.value.trim()) availableCols.push(cn.value.trim());
             });
             availableCols = [...new Set(availableCols)];
-            const colOptions = availableCols.map(c => {
-                const label = (c === 'Order ID') ? (window.primaryValueColumnName || 'Order ID') : c;
-                return `<option value="${c}">${label}</option>`;
-            }).join('');
 
             const div = document.createElement('div');
-            div.innerHTML = buildConditionRow(rowId, idx, colOptions);
+            div.innerHTML = buildConditionRow(rowId, idx, availableCols);
             list.appendChild(div.firstElementChild);
         }
 
@@ -6782,10 +6820,10 @@
             let conditionsHtml = '';
             if (colCondData.conditions && colCondData.conditions.length > 0) {
                 colCondData.conditions.forEach((cond, idx) => {
-                    conditionsHtml += buildConditionRow(rowId, idx, colOptions, cond.column, cond.operator, cond.value);
+                    conditionsHtml += buildConditionRow(rowId, idx, availableCols, cond.column, cond.operator, cond.value);
                 });
             } else {
-                conditionsHtml = buildConditionRow(rowId, 0, colOptions);
+                conditionsHtml = buildConditionRow(rowId, 0, availableCols);
             }
             
             // Create the panel
@@ -6838,7 +6876,7 @@
                                     <label class="text-xs text-gray-600 block mb-1">Copy data FROM column:</label>
                                     <select id="extract-source-${rowId}" class="w-full text-xs border border-gray-300 rounded px-2 py-1.5">
                                         <option value="">Select Source Column</option>
-                                        ${colOptions.replace(`value="${sourceCol}"`, `value="${sourceCol}" selected`)}
+                                        ${getColumnOptionsHtml(sourceCol, availableCols)}
                                     </select>
                                 </div>
                                 <div class="flex items-center justify-center">
@@ -7139,11 +7177,28 @@
                     const p1Config = typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw;
                     
                     if (isVal1or3) {
-                        if (p1Config.file_id) {
+                        if (p1Config.fields && p1Config.fields.length > 0) {
+                            p1Config.fields.forEach((f, idx) => {
+                                // Fallback to generating sequence letter if f.letter is missing
+                                const letter = f.letter || val13GetSequenceLetter(idx);
+                                cols.push(`${letter} - ${f.name}`);
+                            });
+                        } else if (p1Config.file_id) {
+                            // Fallback to old behavior if fields not yet generated, but SORT them correctly
                             const cleanFileId = String(p1Config.file_id).replace('master_', '');
-                            const masterColsData = await apiCall(`/api/master/${cleanFileId}/columns`);
+                            const [masterColsData, activitiesData] = await Promise.all([
+                                apiCall(`/api/master/${cleanFileId}/columns`),
+                                apiCall(`/api/master/${cleanFileId}/activities`)
+                            ]);
+                            
                             if (masterColsData.success && masterColsData.columns) {
-                                masterColsData.columns.forEach((c, idx) => {
+                                let masterCols = masterColsData.columns;
+                                if (activitiesData.success && Array.isArray(activitiesData.activities)) {
+                                    if (typeof sortColumnsByActivities === 'function') {
+                                        masterCols = sortColumnsByActivities(masterCols, activitiesData.activities);
+                                    }
+                                }
+                                masterCols.forEach((c, idx) => {
                                     cols.push(`${val13GetSequenceLetter(idx)} - ${c}`);
                                 });
                             }
@@ -7563,6 +7618,11 @@
                 
                 // Immediately update Phase 4 available columns
                 await loadAvailableColumnsForSummary();
+                
+                // Automatically refresh Phase 3 UI to reflect any newly created Phase 2 columns
+                if (typeof loadSavedPhase3 === 'function') {
+                    await loadSavedPhase3();
+                }
             }
         }
 
@@ -7674,21 +7734,41 @@
             }
         }
 
-        function addRemarkRule(groupId) {
-            const container = document.querySelector(`#remarks-group-${groupId} .remark-rules-container`);
-            const ruleId = Date.now() + Math.floor(Math.random() * 1000); // Unique integer ID for this rule
-            const phase2Cols = getPhase2Columns();
+        function getColumnOptionsHtml(selectedValue, availableCols) {
+            let html = '';
+            let found = false;
+            availableCols.forEach(col => {
+                const label = col === 'Order ID' ? (window.primaryValueColumnName || 'Order ID') : col;
+                if (col === selectedValue) found = true;
+                html += `<option value="${col}" ${col === selectedValue ? 'selected' : ''}>${label}</option>`;
+            });
+            if (selectedValue && !found) {
+                html += `<option value="${selectedValue}" class="text-red-500" selected>${selectedValue} (Missing from Phase 1)</option>`;
+            }
+            return html;
+        }
+
+        function addRemarkRule(groupIdOrData = null) {
+            let container;
+            // Check if argument is a groupId (Validation 2/3) or data (Validation 1)
+            if (typeof groupIdOrData === 'number') {
+                container = document.querySelector(`#remarks-group-${groupIdOrData} .remark-rules-container`);
+            } else {
+                container = document.getElementById('phase3-rules'); // Legacy Validation 1
+            }
+            if (!container) return;
+            
+            const ruleId = Date.now() + Math.floor(Math.random() * 1000);
             
             const ruleDiv = document.createElement('div');
-            ruleDiv.className = 'bg-gray-50 rounded-lg p-4 border border-gray-200';
+            ruleDiv.className = 'remark-rule bg-gray-50 border border-gray-200 rounded p-4 mb-4';
             ruleDiv.id = `remark-rule-${ruleId}`;
             
             ruleDiv.innerHTML = `
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center space-x-2">
                         <span class="text-sm font-medium text-gray-700">Remark Text:</span>
-                        <input type="text" class="remark-text w-64 border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
-                            placeholder="e.g. Order Validated" maxlength="100">
+                        <input type="text" class="remark-text w-64 border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g. Order Validated" maxlength="100">
                     </div>
                     <button onclick="deleteRemarkRule(${ruleId})" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -7743,16 +7823,11 @@
                     }).join('')}
                 </select>
                 <select class="cond-operator w-40 text-xs border border-gray-300 rounded px-2 py-1.5" onchange="onConditionChange(${condId})">
-                    <option value="equal_to">Equal to</option>
-                    <option value="greater_than">Greater than</option>
-                    <option value="smaller_than">Smaller than</option>
-                    <option value="between">Between</option>
-                    <option value="blank">Blank</option>
-                    <option value="not_equal_to">Does not equal to</option>
-                    <option value="begin_with">Begin with</option>
-                    <option value="end_with">End with</option>
-                    <option value="contain">Contain</option>
-                    <option value="not_contain">Does not contain</option>
+                    ${IF_AGG_OPTIONS.map(o => `<option value="${o.v}">${o.label}</option>`).join('')}
+                </select>
+                <select class="cond-vtype w-24 text-xs border border-gray-300 rounded px-2 py-1.5" onchange="onConditionChange(${condId})">
+                    <option value="value" selected>Value</option>
+                    <option value="column">Column</option>
                 </select>
                 <div class="cond-value-container flex items-center space-x-2 flex-1">
                     <input type="text" class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Value">
@@ -7769,19 +7844,72 @@
 
         function onConditionChange(condId) {
             const condDiv = document.getElementById(`condition-${condId}`);
+            if (!condDiv) return;
             const operator = condDiv.querySelector('.cond-operator').value;
+            const vtypeSelect = condDiv.querySelector('.cond-vtype');
+            const vtype = vtypeSelect ? vtypeSelect.value : 'value';
             const valueContainer = condDiv.querySelector('.cond-value-container');
+            const phase2Cols = getPhase2Columns();
             
-            if (operator === 'blank') {
+            let colOptions = '<option value="">Select Column</option>';
+            phase2Cols.forEach(col => {
+                const label = col === 'Order ID' ? (window.primaryValueColumnName || 'Order ID') : col;
+                colOptions += `<option value="${col}">${label}</option>`;
+            });
+            
+            const aggDef = IF_AGG_OPTIONS.find(o => o.v === operator) || {};
+            
+            if (operator === 'blank' || operator === 'not_blank' || operator === 'zero_or_blank' || operator === 'not_zero_or_blank') {
                 valueContainer.innerHTML = '<span class="text-xs text-gray-500 italic">(no value needed)</span>';
+                if (vtypeSelect) vtypeSelect.classList.add('hidden');
+            } else if (aggDef.is_position) {
+                if (vtypeSelect) vtypeSelect.classList.remove('hidden');
+                
+                const opsHtml = IF_POS_TEXT_OPS.map(o => `<option value="${o.v}">${o.label}</option>`).join('');
+                
+                let valInputHtml = '';
+                if (vtype === 'column') {
+                    valInputHtml = `<select class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5">${colOptions}</select>`;
+                } else {
+                    valInputHtml = `<input type="text" class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Value">`;
+                }
+
+                if (operator === 'mid_eq') {
+                    valueContainer.innerHTML = `
+                        <input type="number" class="cond-pos-start w-16 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Start">
+                        <input type="number" class="cond-pos-len w-16 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Len">
+                        <select class="cond-pos-op w-24 text-xs border border-gray-300 rounded px-2 py-1.5">${opsHtml}</select>
+                        ${valInputHtml}
+                    `;
+                } else {
+                    valueContainer.innerHTML = `
+                        <input type="number" class="cond-pos-len w-16 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="N">
+                        <select class="cond-pos-op w-24 text-xs border border-gray-300 rounded px-2 py-1.5">${opsHtml}</select>
+                        ${valInputHtml}
+                    `;
+                }
             } else if (operator === 'between') {
-                valueContainer.innerHTML = `
-                    <input type="text" class="cond-value-min w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Min">
-                    <span class="text-xs text-gray-500">and</span>
-                    <input type="text" class="cond-value-max w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Max">
-                `;
+                if (vtypeSelect) vtypeSelect.classList.remove('hidden');
+                if (vtype === 'column') {
+                    valueContainer.innerHTML = `
+                        <select class="cond-value-min w-32 text-xs border border-gray-300 rounded px-2 py-1.5">${colOptions}</select>
+                        <span class="text-xs text-gray-500">and</span>
+                        <select class="cond-value-max w-32 text-xs border border-gray-300 rounded px-2 py-1.5">${colOptions}</select>
+                    `;
+                } else {
+                    valueContainer.innerHTML = `
+                        <input type="text" class="cond-value-min w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Min">
+                        <span class="text-xs text-gray-500">and</span>
+                        <input type="text" class="cond-value-max w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Max">
+                    `;
+                }
             } else {
-                valueContainer.innerHTML = `<input type="text" class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Value">`;
+                if (vtypeSelect) vtypeSelect.classList.remove('hidden');
+                if (vtype === 'column') {
+                    valueContainer.innerHTML = `<select class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5">${colOptions}</select>`;
+                } else {
+                    valueContainer.innerHTML = `<input type="text" class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Value">`;
+                }
             }
         }
 
@@ -7798,116 +7926,7 @@
             const groups = [];
             const groupDivs = document.querySelectorAll('#remarks-groups-container > div');
             
-                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
-                
-                // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
-                if (isVal1or3) {
-                    if (!fileId) {
-                        showFieldError('phase1-file', 'Please select a file');
-                        hasError = true;
-                        firstErrorElement = document.getElementById('phase1-file');
-                    }
-                    if (hasError) {
-                        if (saveBtn) saveBtn.disabled = false;
-                        if (spinner) spinner.classList.add('hidden');
-                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
-                        if (firstErrorElement) firstErrorElement.focus();
-                        return;
-                    }
-                    
-                    // Call generation first
-                    const generateForm = new FormData();
-                    generateForm.append('file_id', fileId);
-                    generateForm.append('validation_id', window.currentValidation);
-                    
-                    const genData = await apiCall('/api/primary/generate', {
-                        method: 'POST',
-                        body: generateForm
-                    });
-                    
-                    if (!genData || !genData.success) {
-                        if (saveBtn) saveBtn.disabled = false;
-                        if (spinner) spinner.classList.add('hidden');
-                        if (saveText) saveText.textContent = 'Save Phase 1 Rule';
-                        showToast('Failed to generate primary data: ' + (genData?.detail || 'Unknown error'), 'error');
-                        return;
-                    }
-
-                    const config = {
-                        file_id: fileId,
-                        sheet: '',
-                        column: '',
-                        fields: genData.fields || [],
-                        primary_file: genData.filename,
-                        total_unique: genData.total_unique
-                    };
-                    
-                    const formData = new FormData();
-                    formData.append('phase', 1);
-                    formData.append('validation_id', window.currentValidation);
-                    formData.append('config', JSON.stringify(config));
-                    
-                    const data = await apiCall('/api/rules', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    if (saveBtn) saveBtn.disabled = false;
-                    if (spinner) spinner.classList.add('hidden');
-                    if (saveText) saveText.textContent = 'Save Phase 1 Rule';
-                    
-                    if (data.success) {
-                        showToast('Phase 1 configuration saved!', 'success');
-                        
-                        // Show Phase 1 preview for Val 1/3
-                        if (isVal1or3 && genData.fields) {
-                            const previewSection = document.getElementById('phase1-val13-preview-section');
-                            const previewHeader = document.getElementById('phase1-val13-preview-header');
-                            if (previewSection && previewHeader) {
-                                previewSection.classList.remove('hidden');
-                                let headerHtml = '';
-                                genData.fields.forEach(f => {
-                                    const colName = f.letter ? `${f.letter} - ${f.name}` : f.name;
-                                    headerHtml += `<th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${colName}</th>`;
-                                });
-                                previewHeader.innerHTML = headerHtml;
-                            }
-                        }
-
-                        // Update Phase 4 preview headers directly if we are on Val 1/3
-                        const thead = document.getElementById('phase4-primary-preview-header');
-                        if (thead && genData.fields) {
-                            let headerHtml = '';
-                            genData.fields.forEach(f => {
-                                headerHtml += `<th class="text-left font-medium text-gray-600 px-3 py-2">${f.name}</th>`;
-                            });
-                            thead.innerHTML = headerHtml;
-                        }
-                        const tbody = document.getElementById('phase4-primary-preview-body');
-                        if (tbody && genData.preview) {
-                            tbody.innerHTML = '';
-                            genData.preview.forEach(row => {
-                                const tr = document.createElement('tr');
-                                tr.className = 'border-b border-gray-100';
-                                let rowHtml = '';
-                                genData.fields.forEach(f => {
-                                    const val = row[f.name] !== undefined ? row[f.name] : '';
-                                    rowHtml += `<td class="px-3 py-2 text-gray-800">${val}</td>`;
-                                });
-                                tr.innerHTML = rowHtml;
-                                tbody.appendChild(tr);
-                            });
-                        }
-                        
-                        const p4c = document.getElementById('phase4-primary-preview-container');
-                        if (p4c) p4c.classList.remove('hidden');
-                        
-                        await loadAvailableColumnsForSummary();
-                    }
-                    return;
-                }
-
-                let hasError = false;
+            let hasError = false;
             let firstErrorElement = null;
             
             groupDivs.forEach(groupDiv => {
@@ -7969,10 +7988,36 @@
                             return;
                         }
                         
-                        let value, valueMin, valueMax;
+                        const vtypeSelect = condDiv.querySelector('.cond-vtype');
+                        const vtype = vtypeSelect ? vtypeSelect.value : 'value';
+                        const aggDef = IF_AGG_OPTIONS.find(o => o.v === operator) || {};
                         
-                        if (operator === 'blank') {
+                        let value, valueMin, valueMax;
+                        let posStart, posLen, posOp;
+                        
+                        if (operator === 'blank' || operator === 'not_blank' || operator === 'zero_or_blank' || operator === 'not_zero_or_blank') {
                             value = null;
+                        } else if (aggDef.is_position) {
+                            value = condDiv.querySelector('.cond-value')?.value || '';
+                            posOp = condDiv.querySelector('.cond-pos-op')?.value || '';
+                            if (operator === 'mid_eq') {
+                                posStart = condDiv.querySelector('.cond-pos-start')?.value || '';
+                                posLen = condDiv.querySelector('.cond-pos-len')?.value || '';
+                                if (!posStart || !posLen) {
+                                    showElementError(condDiv.querySelector('.cond-pos-start') || condDiv.querySelector('.cond-pos-len'), 'Start and length required');
+                                    hasError = true;
+                                }
+                            } else {
+                                posLen = condDiv.querySelector('.cond-pos-len')?.value || '';
+                                if (!posLen) {
+                                    showElementError(condDiv.querySelector('.cond-pos-len'), 'Length required');
+                                    hasError = true;
+                                }
+                            }
+                            if (!value.trim()) {
+                                showElementError(condDiv.querySelector('.cond-value'), 'Value required');
+                                hasError = true;
+                            }
                         } else if (operator === 'between') {
                             valueMin = condDiv.querySelector('.cond-value-min')?.value || '';
                             valueMax = condDiv.querySelector('.cond-value-max')?.value || '';
@@ -8002,12 +8047,18 @@
                             }
                         }
                         
+                        const mappedOperator = operator;
+                        
                         conditions.push({
                             column,
-                            operator,
+                            operator: mappedOperator,
                             value,
                             value_min: valueMin,
-                            value_max: valueMax
+                            value_max: valueMax,
+                            value_type: vtype,
+                            pos_start: posStart ? parseInt(posStart, 10) : null,
+                            pos_len: posLen ? parseInt(posLen, 10) : null,
+                            pos_op: posOp
                         });
                     });
                     
@@ -8118,41 +8169,97 @@
                     let conditionsHtml = '';
                     for (const cond of rule.conditions || []) {
                         const condId = conditionCounter++;
-                        let valueHtml;
+                        let valueHtml = '';
+                        let rawOp = cond.operator ? String(cond.operator).trim() : '';
                         
-                        if (cond.operator === 'blank') {
-                            valueHtml = '<span class="text-xs text-gray-500 italic">(no value needed)</span>';
-                        } else if (cond.operator === 'between') {
-                            valueHtml = `
-                                <input type="text" class="cond-value-min w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Min" value="${cond.value_min || ''}">
-                                <span class="text-xs text-gray-500">and</span>
-                                <input type="text" class="cond-value-max w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Max" value="${cond.value_max || ''}">
-                            `;
-                        } else {
-                            valueHtml = `<input type="text" class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Value" value="${cond.value || ''}">`;
+                        // Map legacy remarks operators to the new IF_AGG_OPTIONS
+                        const legacyOpMap = {
+                            'equal_to': '=',
+                            'greater_than': '>',
+                            'smaller_than': '<',
+                            'not_equal_to': '!=',
+                            'begin_with': 'starts_with',
+                            'end_with': 'ends_with',
+                            'contain': 'contains',
+                            'not_contain': 'not_contain' // Add this to IF_AGG_OPTIONS if missing, else map to !=
+                        };
+                        
+                        // Support not_contain dynamically by mapping it (or keeping if we added it)
+                        if (legacyOpMap[rawOp]) {
+                            rawOp = legacyOpMap[rawOp];
                         }
+                        
+                        const op = rawOp;
+                        const vtype = cond.value_type || 'value';
+                        const aggDef = IF_AGG_OPTIONS.find(o => o.v === op) || {};
+                        
+                        let colOptions = '<option value="">Select Column</option>' + getColumnOptionsHtml(cond.value, phase2Cols);
+                        let colOptionsMin = '<option value="">Select Column</option>' + getColumnOptionsHtml(cond.value_min, phase2Cols);
+                        let colOptionsMax = '<option value="">Select Column</option>' + getColumnOptionsHtml(cond.value_max, phase2Cols);
+                        
+                        if (op === 'blank' || op === 'not_blank' || op === 'zero_or_blank' || op === 'not_zero_or_blank') {
+                            valueHtml = '<span class="text-xs text-gray-500 italic">(no value needed)</span>';
+                        } else if (aggDef.is_position) {
+                            const opsHtml = IF_POS_TEXT_OPS.map(o => `<option value="${o.v}" ${o.v === cond.pos_op ? 'selected' : ''}>${o.label}</option>`).join('');
+                            
+                            let valInputHtml = '';
+                            if (vtype === 'column') {
+                                valInputHtml = `<select class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5">${colOptions}</select>`;
+                            } else {
+                                valInputHtml = `<input type="text" class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Value" value="${cond.value || ''}">`;
+                            }
+
+                            if (op === 'mid_eq') {
+                                valueHtml = `
+                                    <input type="number" class="cond-pos-start w-16 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Start" value="${cond.pos_start || ''}">
+                                    <input type="number" class="cond-pos-len w-16 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Len" value="${cond.pos_len || ''}">
+                                    <select class="cond-pos-op w-24 text-xs border border-gray-300 rounded px-2 py-1.5">${opsHtml}</select>
+                                    ${valInputHtml}
+                                `;
+                            } else {
+                                valueHtml = `
+                                    <input type="number" class="cond-pos-len w-16 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="N" value="${cond.pos_len || ''}">
+                                    <select class="cond-pos-op w-24 text-xs border border-gray-300 rounded px-2 py-1.5">${opsHtml}</select>
+                                    ${valInputHtml}
+                                `;
+                            }
+                        } else if (op === 'between') {
+                            if (vtype === 'column') {
+                                valueHtml = `
+                                    <select class="cond-value-min w-32 text-xs border border-gray-300 rounded px-2 py-1.5">${colOptionsMin}</select>
+                                    <span class="text-xs text-gray-500">and</span>
+                                    <select class="cond-value-max w-32 text-xs border border-gray-300 rounded px-2 py-1.5">${colOptionsMax}</select>
+                                `;
+                            } else {
+                                valueHtml = `
+                                    <input type="text" class="cond-value-min w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Min" value="${cond.value_min || ''}">
+                                    <span class="text-xs text-gray-500">and</span>
+                                    <input type="text" class="cond-value-max w-20 text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Max" value="${cond.value_max || ''}">
+                                `;
+                            }
+                        } else {
+                            if (vtype === 'column') {
+                                valueHtml = `<select class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5">${colOptions}</select>`;
+                            } else {
+                                valueHtml = `<input type="text" class="cond-value w-full text-xs border border-gray-300 rounded px-2 py-1.5" placeholder="Value" value="${cond.value || ''}">`;
+                            }
+                        }
+                        
+                        const hideVtype = (op === 'blank' || op === 'not_blank' || op === 'zero_or_blank' || op === 'not_zero_or_blank') ? 'hidden' : '';
                         
                         conditionsHtml += `
                             <div class="condition-row flex items-center space-x-2 bg-white rounded p-2 border border-gray-100" id="condition-${condId}">
                                 <span class="text-xs font-medium text-gray-500 w-6">IF</span>
                                 <select class="cond-column w-32 text-xs border border-gray-300 rounded px-2 py-1.5">
                                     <option value="">Column</option>
-                                    ${phase2Cols.map(col => {
-                                        const label = col === 'Order ID' ? (window.primaryValueColumnName || 'Order ID') : col;
-                                        return `<option value="${col}" ${col === cond.column ? 'selected' : ''}>${label}</option>`;
-                                    }).join('')}
+                                    ${getColumnOptionsHtml(cond.column, phase2Cols)}
                                 </select>
                                 <select class="cond-operator w-40 text-xs border border-gray-300 rounded px-2 py-1.5" onchange="onConditionChange(${condId})">
-                                    <option value="equal_to" ${cond.operator === 'equal_to' ? 'selected' : ''}>Equal to</option>
-                                    <option value="greater_than" ${cond.operator === 'greater_than' ? 'selected' : ''}>Greater than</option>
-                                    <option value="smaller_than" ${cond.operator === 'smaller_than' ? 'selected' : ''}>Smaller than</option>
-                                    <option value="between" ${cond.operator === 'between' ? 'selected' : ''}>Between</option>
-                                    <option value="blank" ${cond.operator === 'blank' ? 'selected' : ''}>Blank</option>
-                                    <option value="not_equal_to" ${cond.operator === 'not_equal_to' ? 'selected' : ''}>Does not equal to</option>
-                                    <option value="begin_with" ${cond.operator === 'begin_with' ? 'selected' : ''}>Begin with</option>
-                                    <option value="end_with" ${cond.operator === 'end_with' ? 'selected' : ''}>End with</option>
-                                    <option value="contain" ${cond.operator === 'contain' ? 'selected' : ''}>Contain</option>
-                                    <option value="not_contain" ${cond.operator === 'not_contain' ? 'selected' : ''}>Does not contain</option>
+                                    ${IF_AGG_OPTIONS.map(o => `<option value="${o.v}" ${op === o.v ? 'selected' : ''}>${o.label}</option>`).join('')}
+                                </select>
+                                <select class="cond-vtype w-24 text-xs border border-gray-300 rounded px-2 py-1.5 ${hideVtype}" onchange="onConditionChange(${condId})">
+                                    <option value="value" ${vtype === 'value' ? 'selected' : ''}>Value</option>
+                                    <option value="column" ${vtype === 'column' ? 'selected' : ''}>Column</option>
                                 </select>
                                 <div class="cond-value-container flex items-center space-x-2 flex-1">
                                     ${valueHtml}
@@ -10410,10 +10517,12 @@
             { v: 'starts_with', label: 'Starts with' },
             { v: 'ends_with',   label: 'Ends with' },
             { v: 'contains',    label: 'Contains' },
+            { v: 'not_contain', label: 'Does not contain' },
             { v: 'blank',       label: 'Is blank / empty' },
             { v: 'not_blank',   label: 'Is NOT blank / empty' },
             { v: 'zero_or_blank',label: 'Either Zero or Blank' },
             { v: 'not_zero_or_blank',label: 'Neither 0 nor blank' },
+            { v: 'between',     label: 'Between' },
             { v: 'left_eq',     label: 'Left N chars (position)',  is_position: true },
             { v: 'right_eq',    label: 'Right N chars (position)', is_position: true },
             { v: 'mid_eq',      label: 'Mid (start, length) chars', is_position: true }
@@ -12769,10 +12878,15 @@ async function val13LoadAndSave() {
     document.getElementById('val13-phase1-load-text').textContent = 'Syncing...';
     
     try {
-        const colsData = await apiCall(`/api/master/${folderId}/columns`);
+        const colsData = await apiCall(`/api/master/${folderId}/columns`, { skipCache: true });
+        const activitiesData = await apiCall(`/api/master/${folderId}/activities`);
         
         if (colsData.success) {
-            val13CurrentColumns = colsData.columns;
+            let cols = colsData.columns;
+            if (activitiesData.success && Array.isArray(activitiesData.activities)) {
+                cols = sortColumnsByActivities(cols, activitiesData.activities);
+            }
+            val13CurrentColumns = cols;
             window.GLOBAL_PHASE1_COLUMNS = val13CurrentColumns;
             val13RenderColumns();
             document.getElementById('val13-phase1-preview-section').classList.remove('hidden');
@@ -12786,7 +12900,7 @@ async function val13LoadAndSave() {
                 is_master: true,
                 sheet_name: '', 
                 deactivated_columns: [], // No longer used, keep for compatibility
-                fields: [] 
+                fields: val13CurrentColumns.map((col, idx) => ({ name: col, letter: val13GetSequenceLetter(idx) }))
             }));
             
             const saveResp = await apiCall('/api/rules', {
@@ -12799,6 +12913,7 @@ async function val13LoadAndSave() {
                 if (typeof resequenceOutputColumns === 'function') resequenceOutputColumns();
                 
                 document.getElementById('val13-phase1-load-text').textContent = 'Synced & Saved!';
+                showToast('Master file synced and saved successfully!', 'success');
                 setTimeout(() => {
                     const textEl = document.getElementById('val13-phase1-load-text');
                     if(textEl) textEl.textContent = '';
@@ -12825,9 +12940,14 @@ async function val13LoadAndSave() {
 async function val13LoadFileHeadersSilent(folderId) {
     try {
         const cleanFolderId = String(folderId).replace('master_', '');
-        const colsData = await apiCall(`/api/master/${cleanFolderId}/columns`);
+        const colsData = await apiCall(`/api/master/${cleanFolderId}/columns`, { skipCache: true });
+        const activitiesData = await apiCall(`/api/master/${cleanFolderId}/activities`);
         if (colsData.success) {
-            val13CurrentColumns = colsData.columns;
+            let cols = colsData.columns;
+            if (activitiesData.success && Array.isArray(activitiesData.activities)) {
+                cols = sortColumnsByActivities(cols, activitiesData.activities);
+            }
+            val13CurrentColumns = cols;
             window.GLOBAL_PHASE1_COLUMNS = val13CurrentColumns;
             val13RenderColumns();
             document.getElementById('val13-phase1-preview-section').classList.remove('hidden');

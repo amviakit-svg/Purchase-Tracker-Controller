@@ -46,6 +46,8 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 import traceback
 
+from backend.condition_evaluator import evaluate_condition_vectorized
+
 # ---- Smart Error Helper ----
 MASTER_ERROR_MAP = {
     "no_files": {
@@ -5721,63 +5723,10 @@ def process_rules_background():
                         mask = pd.Series([False] * len(primary_df), index=primary_df.index)
                     break
                 
-                col_data = primary_df[cond_col].astype(str).str.strip()
-                col_data_raw = primary_df[cond_col]
-                
                 try:
-                    if operator == 'equal_to':
-                        try:
-                            col_numeric = pd.to_numeric(col_data, errors='coerce')
-                            val_numeric = pd.to_numeric(value, errors='coerce')
-                            numeric_match = (col_numeric - val_numeric).abs() <= 1e-9
-                            string_match = col_data.str.lower() == str(value).lower()
-                            cond_mask = numeric_match | string_match
-                        except:
-                            cond_mask = col_data.str.lower() == str(value).lower()
-                    
-                    elif operator == 'not_equal_to':
-                        try:
-                            col_numeric = pd.to_numeric(col_data, errors='coerce')
-                            val_numeric = pd.to_numeric(value, errors='coerce')
-                            numeric_match = (col_numeric - val_numeric).abs() <= 1e-9
-                            string_match = col_data.str.lower() == str(value).lower()
-                            cond_mask = ~(numeric_match | string_match)
-                        except:
-                            cond_mask = col_data.str.lower() != str(value).lower()
-                    
-                    elif operator == 'zero_or_blank':
-                        numeric_zeros = pd.to_numeric(col_data, errors='coerce') == 0
-                        blanks = (col_data == '') | col_data_raw.isna() | col_data.isin(['nan', 'null', 'none', 'na', 'n/a', '-'])
-                        cond_mask = numeric_zeros | blanks
-                    
-                    elif operator == 'no_zero_or_no_blank':
-                        numeric_zeros = pd.to_numeric(col_data, errors='coerce') == 0
-                        blanks = (col_data == '') | col_data_raw.isna() | col_data.isin(['nan', 'null', 'none', 'na', 'n/a', '-'])
-                        cond_mask = ~(numeric_zeros | blanks)
-                    
-                    elif operator == 'greater_than':
-                        cond_mask = pd.to_numeric(col_data, errors='coerce') > float(value)
-                    
-                    elif operator == 'smaller_than':
-                        cond_mask = pd.to_numeric(col_data, errors='coerce') < float(value)
-                    
-                    elif operator == 'contain':
-                        cond_mask = col_data.str.contains(str(value), na=False, case=False)
-                    
-                    elif operator == 'not_contain':
-                        cond_mask = ~col_data.str.contains(str(value), na=False, case=False)
-                    
-                    elif operator == 'begin_with':
-                        cond_mask = col_data.str.lower().str.startswith(str(value).lower())
-                    
-                    elif operator == 'end_with':
-                        cond_mask = col_data.str.lower().str.endswith(str(value).lower())
-                    
-                    else:
-                        cond_mask = pd.Series([False] * len(primary_df), index=primary_df.index)
-                
+                    cond_mask = evaluate_condition_vectorized(primary_df, cond)
                 except Exception as e:
-                    logger.error(f"Column condition operator '{operator}' failed: {e}")
+                    logger.error(f"Column condition '{operator}' failed: {e}")
                     cond_mask = pd.Series([False] * len(primary_df), index=primary_df.index)
                 
                 # Combine with main mask
@@ -5834,89 +5783,12 @@ def process_rules_background():
                         mask = pd.Series([True] * len(primary_df), index=primary_df.index)
                         
                         for cond in conditions:
-                            cond_col = cond.get('column', '')
-                            operator = cond.get('operator', '')
-                            value = cond.get('value', '')
-                            value_min = cond.get('value_min', '')
-                            value_max = cond.get('value_max', '')
-                            
-                            # FIX #5: Skip empty condition columns instead of failing silently
-                            if not cond_col or cond_col not in primary_df.columns:
-                                mask = pd.Series([False] * len(primary_df), index=primary_df.index)
-                                break
-                            
-                            # FIX #3: Handle blank properly - check for NaN, empty, 'nan', 'null', 'none'
-                            col_data_raw = primary_df[cond_col]
-                            col_data = col_data_raw.astype(str).str.strip()
-                            
-                            if operator == 'blank':
-                                # Match empty strings, NaN values, and common null string representations
-                                is_blank = (col_data == '') | col_data_raw.isna() | col_data.isin(['nan', 'null', 'none', 'na', 'n/a', '-'])
-                                mask &= is_blank
-                            elif operator == 'equal_to':
-                                try:
-                                    col_numeric = pd.to_numeric(col_data, errors='coerce')
-                                    val_numeric = pd.to_numeric(value, errors='coerce')
-                                    numeric_match = (col_numeric - val_numeric).abs() <= 1e-9
-                                    string_match = col_data.str.lower() == str(value).lower()
-                                    mask &= numeric_match.fillna(string_match)
-                                except:
-                                    mask &= (col_data.str.lower() == str(value).lower())
-                            elif operator == 'not_equal_to':
-                                try:
-                                    col_numeric = pd.to_numeric(col_data, errors='coerce')
-                                    val_numeric = pd.to_numeric(value, errors='coerce')
-                                    numeric_ne = (col_numeric - val_numeric).abs() > 1e-9
-                                    string_ne = col_data.str.lower() != str(value).lower()
-                                    mask &= numeric_ne.fillna(string_ne)
-                                except:
-                                    mask &= (col_data.str.lower() != str(value).lower())
-                            elif operator == 'greater_than':
-                                try:
-                                    col_numeric = pd.to_numeric(col_data, errors='coerce')
-                                    val_numeric = pd.to_numeric(value, errors='coerce')
-                                    # FIX #2: Don't break on text columns - skip this condition for non-numeric
-                                    if pd.isna(val_numeric):
-                                        mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
-                                    else:
-                                        mask &= col_numeric > val_numeric
-                                except:
-                                    # Skip this condition on text data, don't kill the whole rule
-                                    mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
-                            elif operator == 'smaller_than':
-                                try:
-                                    col_numeric = pd.to_numeric(col_data, errors='coerce')
-                                    val_numeric = pd.to_numeric(value, errors='coerce')
-                                    # FIX #2: Don't break on text columns
-                                    if pd.isna(val_numeric):
-                                        mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
-                                    else:
-                                        mask &= col_numeric < val_numeric
-                                except:
-                                    mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
-                            elif operator == 'between':
-                                # FIX #4: Skip "between" if min or max is empty
-                                if not value_min or not value_max:
-                                    mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
-                                    continue
-                                try:
-                                    col_numeric = pd.to_numeric(col_data, errors='coerce')
-                                    min_v = pd.to_numeric(value_min, errors='coerce')
-                                    max_v = pd.to_numeric(value_max, errors='coerce')
-                                    if pd.isna(min_v) or pd.isna(max_v):
-                                        mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
-                                    else:
-                                        mask &= (col_numeric >= min_v) & (col_numeric <= max_v)
-                                except:
-                                    mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
-                            elif operator == 'begin_with':
-                                mask &= col_data.str.lower().str.startswith(str(value).lower())
-                            elif operator == 'end_with':
-                                mask &= col_data.str.lower().str.endswith(str(value).lower())
-                            elif operator == 'contain':
-                                mask &= col_data.str.lower().str.contains(str(value).lower(), na=False)
-                            elif operator == 'not_contain':
-                                mask &= ~col_data.str.lower().str.contains(str(value).lower(), na=False)
+                            try:
+                                cond_mask = evaluate_condition_vectorized(primary_df, cond)
+                                mask &= cond_mask
+                            except Exception as e:
+                                logger.error(f"Remark condition failed: {e}")
+                                mask &= pd.Series([False] * len(primary_df), index=primary_df.index)
                         
                         if mask.any():
                             primary_df.loc[mask, col_name] = remark_text
@@ -6053,25 +5925,11 @@ def process_rules_background():
                     # Apply filters
                     filtered_df = primary_df.copy()
                     for filt in filter_fields:
-                        col = filt.get('column', '')
-                        op = filt.get('operator', '')
-                        val = filt.get('value', '')
-                        
-                        if col and col in filtered_df.columns and op:
-                            if op == 'equal_to':
-                                filtered_df = filtered_df[filtered_df[col].astype(str) == str(val)]
-                            elif op == 'not_equal_to':
-                                filtered_df = filtered_df[filtered_df[col].astype(str) != str(val)]
-                            elif op == 'blank':
-                                filtered_df = filtered_df[filtered_df[col].astype(str).str.strip() == '']
-                            elif op == 'greater_than':
-                                try:
-                                    filtered_df = filtered_df[pd.to_numeric(filtered_df[col], errors='coerce') > float(val)]
-                                except: pass
-                            elif op == 'smaller_than':
-                                try:
-                                    filtered_df = filtered_df[pd.to_numeric(filtered_df[col], errors='coerce') < float(val)]
-                                except: pass
+                        try:
+                            filt_mask = evaluate_condition_vectorized(filtered_df, filt)
+                            filtered_df = filtered_df[filt_mask]
+                        except Exception as e:
+                            logger.error(f"Phase 4 filter '{filt}' failed: {e}")
                     
                     # Check if filtered data is empty
                     if len(filtered_df) == 0:
