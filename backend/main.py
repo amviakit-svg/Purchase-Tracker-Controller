@@ -1002,9 +1002,13 @@ async def upload_file(
         original_filename = file.filename
         file_path = os.path.join(storage_dir, original_filename)
         
-        # Check for duplicates
-        if os.path.exists(file_path):
+        # Check for duplicates in DB first
+        conn = get_db_connection()
+        old_file = conn.execute("SELECT id, original_name FROM files WHERE folder_id = ? AND original_name = ?", (folder_id_int, original_filename)).fetchone()
+        
+        if old_file:
             if not replace:
+                conn.close()
                 from database import add_notification
                 uid = current_user.get('id') if current_user else None
                 add_notification(cid, mid, "duplicate_upload", f"Duplicate file '{original_filename}' upload attempted.", user_id=uid)
@@ -1013,34 +1017,34 @@ async def upload_file(
                 return JSONResponse(status_code=409, content=err)
             else:
                 # We are replacing. Move old file to recycle bin and delete DB record.
-                conn = get_db_connection()
-                old_file = conn.execute("SELECT id, original_name FROM files WHERE folder_id = ? AND original_name = ?", (folder_id_int, original_filename)).fetchone()
-                if old_file:
-                    import time
-                    new_path = f"{file_path}.deleted.{int(time.time())}"
-                    try:
+                import time
+                new_path = f"{file_path}.deleted.{int(time.time())}"
+                try:
+                    if os.path.exists(file_path):
                         os.rename(file_path, new_path)
-                    except OSError:
-                        new_path = file_path
-                    
-                    move_to_recycle_bin(
-                        company_id=cid,
-                        entity_type='file',
-                        entity_id=old_file['id'],
-                        entity_name=old_file['original_name'],
-                        original_path=new_path,
-                        deleted_by=current_user.get('id') if current_user else None
-                    )
-                    conn.execute("DELETE FROM files WHERE id = ?", (old_file['id'],))
-                    conn.commit()
-                else:
-                    # If file exists on disk but not in DB, rename it so we can write the new one
-                    import time
-                    try:
-                        os.rename(file_path, f"{file_path}.deleted.{int(time.time())}")
-                    except OSError:
-                        pass
-                conn.close()
+                except OSError:
+                    new_path = file_path
+                
+                move_to_recycle_bin(
+                    company_id=cid,
+                    entity_type='file',
+                    entity_id=old_file['id'],
+                    entity_name=old_file['original_name'],
+                    original_path=new_path,
+                    deleted_by=current_user.get('id') if current_user else None,
+                    module_id=mid
+                )
+                conn.execute("DELETE FROM files WHERE id = ?", (old_file['id'],))
+                conn.commit()
+                
+        # If file exists on disk but not in DB (e.g. from failed delete), rename it
+        if os.path.exists(file_path):
+            import time
+            try:
+                os.rename(file_path, f"{file_path}.deleted.{int(time.time())}")
+            except OSError:
+                pass
+        conn.close()
         
         # Check path length
         if len(file_path) > 260:
@@ -1177,16 +1181,27 @@ async def api_delete_file(file_id: int, background_tasks: BackgroundTasks, curre
         try:
             file_dict = dict(file)
             
-            # Physically rename the file to avoid conflict if uploaded again
+            # Move to recycle_bin directory to mimic Windows behavior
             old_path = file_dict.get('file_path')
             new_path = old_path
             if old_path and os.path.exists(old_path):
                 import time
-                new_path = f"{old_path}.deleted.{int(time.time())}"
+                from database import get_physical_storage_path
+                # Create a recycle_bin folder at the same level as uploads
+                base_storage = os.path.dirname(os.path.dirname(old_path)) # up from uploads/folder_X
+                if os.path.basename(base_storage) == 'uploads':
+                    base_storage = os.path.dirname(base_storage) # safety fallback
+                recycle_bin_dir = os.path.join(base_storage, "recycle_bin")
+                os.makedirs(recycle_bin_dir, exist_ok=True)
+                
+                # Use timestamp prefix to avoid name collisions in recycle bin, but preserve extension
+                filename = os.path.basename(old_path)
+                new_path = os.path.join(recycle_bin_dir, f"{int(time.time())}_{filename}")
                 try:
-                    os.rename(old_path, new_path)
+                    import shutil
+                    shutil.move(old_path, new_path)
                 except OSError as e:
-                    logger.warning(f"Could not rename file for recycle bin: {e}")
+                    logger.warning(f"Could not move file to recycle bin folder: {e}")
                     new_path = old_path
             
             move_to_recycle_bin(
@@ -1578,7 +1593,8 @@ async def merge_files(
                     # If "All" was specified, use all columns from the first file
                     if is_all_columns:
                         if idx == 0:
-                            user_columns = actual_columns.copy()
+                            ignored_sync_cols = {'__is_deleted', '__deleted_at', '__row_fp', 'GST MATCH'}
+                            user_columns = [c for c in actual_columns if c not in ignored_sync_cols and c != 'Source_File_Name']
                         selected_columns = user_columns
                     else:
                         # Try exact-match first; if anything is missing, fall back to fuzzy match
@@ -1893,14 +1909,37 @@ async def merge_files(
             
             row_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             
-            # Get updated columns after reapplying formulas
-            updated_cols_after_reapply = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+            try:
+                current_cols_before_act = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+            except Exception:
+                current_cols_before_act = user_columns
+
+            # Re-apply any saved activity steps (Formula, Find & Replace, Rename, Delete, Filter)
+            # so they survive master-file recreation. Wrapped in try/except so merge still succeeds
+            # if activity engine itself errors out.
+            try:
+                from backend.auto_sync import apply_activities
+                apply_activities(conn, folder_id_int, company_id, module_id)
+                # Refresh columns after activities may have added/renamed/deleted columns
+                try:
+                    updated_cols_after_activities = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+                except Exception:
+                    updated_cols_after_activities = current_cols_before_act
+            except Exception as act_e:
+                logger.warning(f"Failed to re-apply activities after merge: {act_e}")
+                updated_cols_after_activities = current_cols_before_act
+
+            # Get updated columns after reapplying formulas and activities
+            structured_columns = {
+                "raw_columns": user_columns,
+                "system_columns": [c for c in updated_cols_after_activities if c not in user_columns]
+            }
             
             save_master_file(
                 folder_id=folder_id_int,
                 db_path=master_db_path,
                 sheet_name="First_Sheet",
-                columns=json.dumps(updated_cols_after_reapply),
+                columns=structured_columns,
                 header_row=1,
                 concat_columns=None,
                 rejected_files=json.dumps(rejected_files) if rejected_files else None,
@@ -1928,26 +1967,10 @@ async def merge_files(
             except Exception as _dedup_save_err:
                 logger.warning(f"Failed to persist dedup config: {_dedup_save_err}")
 
-            # Re-apply any saved activity steps (Formula, Find & Replace, Rename, Delete, Filter)
-            # so they survive master-file recreation. Wrapped in try/except so merge still succeeds
-            # if activity engine itself errors out.
-            try:
-                from backend.auto_sync import apply_activities
-                apply_activities(conn, folder_id_int, company_id, module_id)
-                # Refresh columns after activities may have added/renamed/deleted columns
-                try:
-                    updated_cols_after_activities = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
-                except Exception:
-                    updated_cols_after_activities = updated_cols_after_reapply
-            except Exception as act_e:
-                logger.warning(f"Failed to re-apply activities after merge: {act_e}")
-                updated_cols_after_activities = updated_cols_after_reapply
-
             # Update auto-sync statuses for the UI
             try:
-                from database import get_db_connection
                 conn_sync = get_db_connection()
-                conn_sync.execute("UPDATE files SET sync_status = 'synced', sync_error = NULL WHERE folder_id = ?", (folder_id_int,))
+                conn_sync.execute("UPDATE files SET sync_status = 'synced', sync_error = NULL WHERE folder_id = ? AND sync_status != 'rejected'", (folder_id_int,))
                 if rejected_files:
                     for rej in rejected_files:
                         original_name = rej.get('file')
@@ -2409,6 +2432,59 @@ async def get_master_info(folder_id: int, current_user: Optional[dict] = Depends
         master['merged_files'] = []
         master['columns'] = []
     
+    # Parse and auto-migrate columns
+    if master.get('columns'):
+        try:
+            parsed_columns = json.loads(master['columns']) if isinstance(master['columns'], str) else master['columns']
+            if isinstance(parsed_columns, str):
+                parsed_columns = json.loads(parsed_columns)
+            
+            # If it's a list, it's the legacy flat format, so we auto-migrate
+            if isinstance(parsed_columns, list):
+                from backend.auto_sync import get_master_formulas
+                from backend.database import list_master_activities
+                
+                formulas = get_master_formulas(folder_id)
+                formula_cols = set([f.get('column_name') for f in formulas if f.get('column_name')])
+                
+                try:
+                    activities = list_master_activities(folder_id, company_id=cid, module_id=mid, enabled_only=True)
+                    for act in activities:
+                        act_type = (act.get('activity_type') or '').upper()
+                        if act_type in ('FORMULA_ADD', 'FORMULA_UPDATE', 'IF_CONDITION'):
+                            payload = act.get('payload') or {}
+                            col_name = act.get('target_column') or payload.get('output_column') or payload.get('column_name')
+                            if col_name:
+                                formula_cols.add(col_name)
+                except Exception:
+                    pass
+                
+                system_cols = [c for c in parsed_columns if c in formula_cols or c in ('__is_deleted', '__deleted_at', '__row_fp', 'GST MATCH')]
+                raw_cols = [c for c in parsed_columns if c not in system_cols]
+                
+                migrated_columns = {
+                    "raw_columns": raw_cols,
+                    "system_columns": system_cols
+                }
+                
+                # Save the migrated columns back to the database
+                conn_migrate = get_db_connection()
+                conn_migrate.execute('UPDATE master_files SET columns = ? WHERE folder_id = ?', (json.dumps(migrated_columns), folder_id))
+                conn_migrate.commit()
+                conn_migrate.close()
+                
+                master['columns'] = migrated_columns
+            elif isinstance(parsed_columns, dict):
+                master['columns'] = parsed_columns
+            else:
+                master['columns'] = {"raw_columns": [], "system_columns": []}
+                
+        except Exception as e:
+            logger.warning(f"Error parsing columns for folder {folder_id}: {e}")
+            master['columns'] = {"raw_columns": [], "system_columns": []}
+    else:
+        master['columns'] = {"raw_columns": [], "system_columns": []}
+    
     # Parse rejected files from JSON (legacy column on master_files)
     if master.get('rejected_files'):
         try:
@@ -2485,8 +2561,16 @@ async def get_master_columns(folder_id: int, current_user: Optional[dict] = Depe
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
             raise HTTPException(status_code=404, detail="Master file not found")
         
-        conn = duckdb.connect(master['db_path'], read_only=True)
-        all_columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        conn = duckdb.connect(master['db_path'])
+        try:
+            all_columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+            total_rows = conn.execute("SELECT COUNT(*) FROM master_data").fetchone()[0]
+        except Exception as e:
+            if "Table with name master_data does not exist" in str(e):
+                all_columns = []
+                total_rows = 0
+            else:
+                raise
         conn.close()
         
         internal_cols = {"__is_deleted", "__deleted_at", "__row_fp"}
@@ -2596,10 +2680,26 @@ async def preview_master(
         except Exception:
             pass
 
-        conn = duckdb.connect(master['db_path'], read_only=True)
+        conn = duckdb.connect(master['db_path'])
 
         # Get column names first — we need them to build the search predicate.
-        all_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        try:
+            all_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        except Exception as e:
+            if "Table with name master_data does not exist" in str(e):
+                conn.close()
+                return {
+                    "success": True,
+                    "columns": [],
+                    "data": [],
+                    "total_count": 0,
+                    "returned_count": 0,
+                    "limit": limit,
+                    "offset": offset,
+                    "search_active": bool(search and search.strip()),
+                    "truncated_by_limit": False
+                }
+            raise
         internal_cols = {"__is_deleted", "__deleted_at", "__row_fp"}
         
         if master.get('hidden_columns'):
@@ -2771,12 +2871,18 @@ async def get_source_files(folder_id: int, current_user: Optional[dict] = Depend
             raise HTTPException(status_code=404, detail="Master file not found")
         
         conn = duckdb.connect(master['db_path'])
-        files = conn.execute("""
-            SELECT Source_File_Name, COUNT(*) as row_count 
-            FROM master_data 
-            GROUP BY Source_File_Name
-            ORDER BY Source_File_Name
-        """).fetchall()
+        try:
+            files = conn.execute("""
+                SELECT Source_File_Name, COUNT(*) as row_count 
+                FROM master_data 
+                GROUP BY Source_File_Name
+                ORDER BY Source_File_Name
+            """).fetchall()
+        except Exception as e:
+            if "Table with name master_data does not exist" in str(e):
+                files = []
+            else:
+                raise
         conn.close()
         
         return {
@@ -2813,11 +2919,17 @@ async def get_master_stats(folder_id: int, current_user: Optional[dict] = Depend
         conn = duckdb.connect(master['db_path'])
         
         # Get column info
-        all_columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+        try:
+            all_columns = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+            total_rows = conn.execute("SELECT COUNT(*) FROM master_data").fetchone()[0]
+        except Exception as e:
+            if "Table with name master_data does not exist" in str(e):
+                all_columns = []
+                total_rows = 0
+            else:
+                raise
         internal_cols = {"__is_deleted", "__deleted_at", "__row_fp"}
         columns = [c for c in all_columns if c not in internal_cols]
-        
-        total_rows = conn.execute("SELECT COUNT(*) FROM master_data").fetchone()[0]
         
         hidden_cols = []
         if master.get('hidden_columns'):
@@ -8681,12 +8793,19 @@ async def get_recycle_bin(current_user: Optional[dict] = Depends(get_optional_us
 
 
 @app.post("/api/recycle-bin/{recycle_id}/restore")
-async def restore_recycle_bin_item(recycle_id: int, current_user: Optional[dict] = Depends(get_optional_user)):
+async def restore_recycle_bin_item(recycle_id: int, background_tasks: BackgroundTasks, current_user: Optional[dict] = Depends(get_optional_user)):
     """Restore an item from the recycle bin back to its original location"""
     try:
         restored = restore_from_recycle_bin(recycle_id)
         if restored is None:
             raise HTTPException(status_code=404, detail="Recycle bin item not found")
+            
+        if restored.get('type') == 'file':
+            try:
+                from backend.auto_sync import trigger_folder_sync
+                background_tasks.add_task(trigger_folder_sync, restored.get('folder_id', 1), True, current_user.get('user_id') if current_user else None)
+            except Exception as e:
+                logger.error(f"Failed to trigger sync for restored file: {e}")
         
         cid, mid = _get_context(current_user)
         try:

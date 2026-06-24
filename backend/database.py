@@ -887,13 +887,18 @@ def format_storage_error(error_key, extra_context=None, status_code=500):
             if placeholder in suggestion:
                 suggestion = suggestion.replace(placeholder, str(v))
     
-    return {
+    resp = {
         "success": False,
         "error_code": error_key,
         "reason": reason,
         "suggestion": suggestion,
         "path": extra_context.get("path", "") if extra_context else ""
     }
+    if extra_context:
+        for k, v in extra_context.items():
+            if k not in ["path"]:
+                resp[k] = v
+    return resp
 
 def is_valid_folder_name(name):
     """Validate folder name against forbidden characters."""
@@ -1839,10 +1844,36 @@ def restore_from_recycle_bin(recycle_id):
                 os.makedirs(folder_dir, exist_ok=True)
             
         elif entity_type == 'file':
-            # Re-create file record (without the physical file - it was moved, not deleted)
+            # Restore the physical file back to the uploads folder
+            target_path = original_path
+            if original_path and metadata.get('file_path'):
+                try:
+                    if os.path.exists(original_path):
+                        target_path = metadata.get('file_path')
+                        import os
+                        
+                        # Ensure no .deleted. suffix exists (legacy fallback)
+                        if '.deleted.' in target_path:
+                            target_path = target_path.split('.deleted.')[0]
+                            
+                        # If the destination already exists (user uploaded a file with same name),
+                        # generate a safe, unique filename in the destination directory to prevent overwriting
+                        if os.path.exists(target_path):
+                            import time
+                            base, ext = os.path.splitext(target_path)
+                            target_path = f"{base}_restored_{int(time.time())}{ext}"
+                            
+                        import shutil
+                        shutil.move(original_path, target_path)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Could not move restored file back to uploads: {e}")
+                    target_path = original_path
+
+            # Re-create file record
             cursor = conn.execute(
                 'INSERT INTO files (folder_id, name, original_name, file_path, format, size, sheet_names, company_id, module_id, header_row, uploaded_by, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (metadata.get('folder_id', 1), metadata.get('name', entity_name), entity_name, original_path, metadata.get('format'), 
+                (metadata.get('folder_id', 1), metadata.get('name', entity_name), entity_name, target_path, metadata.get('format'), 
                  metadata.get('size'), metadata.get('sheet_names'), company_id, module_id, metadata.get('header_row', 1), metadata.get('uploaded_by'), 'pending')
             )
             restored = {'id': cursor.lastrowid, 'name': entity_name, 'type': 'file', 'folder_id': metadata.get('folder_id', 1)}

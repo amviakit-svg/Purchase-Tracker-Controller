@@ -102,11 +102,17 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
         is_all_columns = column_names.strip().upper() == 'ALL'
         if not is_all_columns:
             try:
-                user_columns = json.loads(column_names)
-                if isinstance(user_columns, str):
-                    user_columns = json.loads(user_columns)
-                if not isinstance(user_columns, list):
-                    user_columns = [c.strip() for c in str(user_columns).split(',') if c.strip()]
+                user_columns_parsed = json.loads(column_names)
+                if isinstance(user_columns_parsed, str):
+                    user_columns_parsed = json.loads(user_columns_parsed)
+                
+                # Check if it is the new structured format
+                if isinstance(user_columns_parsed, dict) and 'raw_columns' in user_columns_parsed:
+                    user_columns = user_columns_parsed['raw_columns']
+                elif isinstance(user_columns_parsed, list):
+                    user_columns = user_columns_parsed
+                else:
+                    user_columns = [c.strip() for c in str(user_columns_parsed).split(',') if c.strip()]
             except Exception:
                 user_columns = [c.strip() for c in column_names.split(',') if c.strip()]
         else:
@@ -114,6 +120,20 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
             
         formulas = get_master_formulas(folder_id)
         formula_cols = set([f.get('column_name') for f in formulas if f.get('column_name')])
+
+        # ALSO INCLUDE formula columns created via activities
+        from backend.database import list_master_activities
+        try:
+            activities = list_master_activities(folder_id, company_id=master.get('company_id'), module_id=master.get('module_id'), enabled_only=True)
+            for act in activities:
+                act_type = (act.get('activity_type') or '').upper()
+                if act_type in ('FORMULA_ADD', 'FORMULA_UPDATE', 'IF_CONDITION'):
+                    payload = act.get('payload') or {}
+                    col_name = act.get('target_column') or payload.get('output_column') or payload.get('column_name')
+                    if col_name:
+                        formula_cols.add(col_name)
+        except Exception as e:
+            pass
 
         
         # Connect to DuckDB
@@ -203,7 +223,8 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
                         actual_columns = df.columns.tolist()
                         
                         if is_all_columns:
-                            selected_columns = actual_columns.copy()
+                            ignored_sync_cols = {'__is_deleted', '__deleted_at', '__row_fp', 'GST MATCH'}
+                            selected_columns = [c for c in actual_columns if c not in formula_cols and c not in ignored_sync_cols and c != 'Source_File_Name']
                         else:
                             # Build the desired column list (excluding formula cols + Source_File_Name + system cols).
                             ignored_sync_cols = {'__is_deleted', '__deleted_at', '__row_fp', 'GST MATCH'}
@@ -300,7 +321,7 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
                                             # Re-derive from existing rows in master_data
                                             _existing = duck_conn.execute(
                                                 f"SELECT * FROM master_data"
-                                            ).fetchdf() if (DEDUP_COL_NAME,) in duck_conn.execute("SHOW TABLES").fetchall() else pd.DataFrame(columns=current_duckdb_cols)
+                                            ).fetchdf() if ("master_data",) in duck_conn.execute("SHOW TABLES").fetchall() else pd.DataFrame(columns=current_duckdb_cols)
                                             ensure_dedup_table(duck_conn, DEDUP_COL_NAME)
                                             if len(_existing) > 0 and all(c in _existing.columns for c in _resolved_cols):
                                                 populate_dedup_table(duck_conn, _existing, _resolved_cols, _sep, DEDUP_COL_NAME)
@@ -337,6 +358,17 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
                                 logger.warning(f"Auto-sync dedup check skipped for file {file_id}: {_dedup_err}")
 
                             duck_conn.execute("INSERT INTO master_data SELECT * FROM df")
+                            
+                            try:
+                                _dedup_cfg = get_dedup_config(folder_id)
+                                if is_dedup_active(_dedup_cfg):
+                                    _resolved_cols = resolve_dedup_columns(_dedup_cfg, df.columns.tolist())
+                                    if _resolved_cols:
+                                        _sep = _dedup_cfg.get('dedup_separator') or ' | '
+                                        populate_dedup_table(duck_conn, df, _resolved_cols, _sep, DEDUP_COL_NAME)
+                            except Exception as _post_dedup_err:
+                                logger.warning(f"Failed to populate dedup table after insert: {_post_dedup_err}")
+
                             set_file_sync_status(file_id, 'synced', None)
                             try:
                                 from backend.database import add_notification
