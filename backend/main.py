@@ -8877,12 +8877,8 @@ async def permanent_delete_recycle_bin_item(recycle_id: int, current_user: Optio
 
 
 # ============ GRACEFUL SHUTDOWN ============
-def signal_handler(sig, frame):
-    logger.info(f"Received signal {sig}, shutting down gracefully...")
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+# Relying on Uvicorn's native graceful shutdown instead of custom signal handlers
+# to prevent asyncio CancelledError tracebacks during shutdown.
 
 if __name__ == "__main__":
     import uvicorn
