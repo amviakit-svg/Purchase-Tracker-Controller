@@ -31,13 +31,20 @@ env/
 *.swo
 *~
 
-# Data and logs (local files)
+# Data and logs (LOCAL runtime files - DO NOT commit)
 data/logs/
-data/metadata.db
-data/uploads/*.csv
-data/uploads/*.xlsx
-data/uploads/**/*.xlsx
-data/processed/**/*.xlsx
+data/metadata.db           # Local SQLite database (auto-generated from template.db)
+data/uploads/*.csv          # User-uploaded CSV files
+data/uploads/*.xlsx         # User-uploaded Excel files
+data/uploads/**/*.xlsx      # User-uploaded Excel files (recursive)
+data/processed/**/*.xlsx    # User-processed Excel files (runtime output)
+data/rejected/              # Runtime rejected-artefact files
+data/master_files/          # Runtime DuckDB master file artifacts
+data/module_1/              # Runtime module-isolated storage
+
+# Deploy bundle (COMMITTED to git - used by startup_event on fresh deploys)
+# template.db              <- keep this tracked (DO NOT add to ignore)
+# data/template_master_dbs/ <- keep this tracked (DO NOT add to ignore)
 
 # Debug and test files
 debug_*.py
@@ -56,5 +63,3 @@ Thumbs.db
 
 # Node modules (if applicable)
 node_modules/
-
-data/
