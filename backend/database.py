@@ -22,7 +22,7 @@ def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = get_db_connection()
     try:
-    
+
         # =================== CORE TABLES ===================
     
         # Companies table
@@ -337,6 +337,10 @@ def init_db():
         ''')
     
         # Processed files table
+        # NOTE: the `validation` column is REQUIRED by get_processed_files() and
+        # save_processed_file() and MUST be present in fresh schemas. It is
+        # also added via the migrations block below for legacy DBs that
+        # pre-date this column.
         conn.execute('''
             CREATE TABLE IF NOT EXISTS processed_files (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -355,110 +359,185 @@ def init_db():
                 sheets_data TEXT,
                 file_size REAL,
                 processing_time TEXT,
+                validation INTEGER DEFAULT 2,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-    
+
         # =================== MIGRATIONS ===================
-    
+
         # Helper to check if column exists
+        def column_exists(table, column):
+            try:
+                conn.execute(f"SELECT {column} FROM {table} LIMIT 1")
+                return True
+            except Exception:
+                return False
+
+        # Migrate existing tables to add company_id and module_id
+        tables_to_migrate = [
+            ("folders", ["company_id", "module_id"]),
+            ("files", ["company_id", "module_id"]),
+            ("master_files", ["company_id", "module_id"]),
+            ("rules", ["company_id", "module_id"]),
+            ("processed_files", ["company_id", "module_id"]),
+            ("recycle_bin", ["company_id", "module_id"])
+        ]
+
+        for table, columns in tables_to_migrate:
+            for col in columns:
+                if not column_exists(table, col):
+                    try:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} INTEGER")
+                    except sqlite3.OperationalError:
+                        pass
+
+        # Migrate existing columns
+        migrations = [
+            ("rules", "processing_type", "TEXT DEFAULT 'both'"),
+            ("master_files", "rejected_files", "TEXT"),
+            ("processed_files", "file_size", "REAL"),
+            ("processed_files", "processing_time", "TEXT"),
+            ("processed_files", "validation", "INTEGER DEFAULT 2"),  # CRITICAL for /api/processed/files
+            ("users", "first_login", "INTEGER DEFAULT 1"),
+            ("users", "role_id", "INTEGER"),
+            ("master_files", "formulas", "TEXT"),
+            ("companies", "status", "TEXT DEFAULT 'active'"),
+            ("modules", "status", "TEXT DEFAULT 'active'"),
+            ("modules", "template_company_id", "INTEGER"),
+            ("modules", "readme_content", "TEXT"),
+            ("company_modules", "status", "TEXT DEFAULT 'active'"),
+            ("users", "status", "TEXT DEFAULT 'active'"),
+            ("super_admin", "status", "TEXT DEFAULT 'active'"),
+            ("folders", "description", "TEXT"),
+            ("folders", "path", "TEXT"),
+            ("files", "name", "TEXT"),
+            # ---- Duplicate detection (Concat) on master_file_configs ----
+            ("master_file_configs", "dedup_enabled",   "INTEGER DEFAULT 0"),
+            ("master_file_configs", "dedup_columns",   "TEXT"),
+            ("master_file_configs", "dedup_separator", "TEXT DEFAULT ' | '"),
+            ("master_file_configs", "updated_at",      "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ]
+
+        for table, column, col_type in migrations:
+            if not column_exists(table, column):
+                try:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+                except sqlite3.OperationalError:
+                    pass
+
+        # ---- Rejected Artefacts table (downloadable full-file reject reports) ----
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS rejected_artefacts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                folder_id       INTEGER NOT NULL,
+                file_id         INTEGER,
+                original_name   TEXT NOT NULL,
+                artefact_path   TEXT NOT NULL,
+                reject_reason   TEXT,
+                rejected_rows   INTEGER,
+                total_rows      INTEGER,
+                source          TEXT DEFAULT 'merge',
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_rejected_artefacts_folder ON rejected_artefacts(folder_id)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_rejected_artefacts_file   ON rejected_artefacts(file_id)')
+
+        # Migrations
+        try:
+            conn.execute('ALTER TABLE rules ADD COLUMN validation_id INTEGER DEFAULT 1')
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+
+        # =================== DEFAULT DATA ===================
+
+        # Insert default modules
+        conn.execute('''
+            INSERT OR IGNORE INTO modules (id, name, code, description) VALUES (1, 'Website module', 'WEBSITE', 'Default Workspace')
+        ''')
+
+        # ---- Auto-seed when DB is empty (no template.db available) ----
+        # If init_db() is being run on a fresh system with no template.db,
+        # still seed a baseline structure so the app is usable immediately:
+        #   - 1 Root folder, 1 Uploads folder (under module 1)
+        #   - 1 sample demo master_file (so the dashboard / master view loads)
+        #   - 1 sample processed_file (so the history view is non-empty)
+        # The user can replace/delete these as soon as they start using the app.
+        try:
+            cursor = conn.execute('SELECT COUNT(*) FROM folders')
+            folder_count = cursor.fetchone()[0]
+            if folder_count == 0:
+                # Use print() rather than logger.* because logging may not be
+                # configured yet when init_db() is first called from tests.
+                print("[init_db] Empty database detected - seeding default workspace structure.")
+                # Root + Uploads folders under module 1
+                cursor = conn.execute(
+                    'INSERT INTO folders (name, company_id, module_id, description, parent_id, path) VALUES (?, ?, ?, ?, ?, ?)',
+                    ('Root', 1, 1, 'Auto-seeded root', None, '/Root')
+                )
+                root_id = cursor.lastrowid
+                cursor = conn.execute(
+                    'INSERT INTO folders (name, company_id, module_id, description, parent_id, path) VALUES (?, ?, ?, ?, ?, ?)',
+                    ('Uploads', 1, 1, 'Default uploads folder', root_id, '/Root/Uploads')
+                )
+                uploads_id = cursor.lastrowid
+
+                # Sample demo folder + master file structure (so dashboard isn't empty)
+                cursor = conn.execute(
+                    'INSERT INTO folders (name, company_id, module_id, description, parent_id, path) VALUES (?, ?, ?, ?, ?, ?)',
+                    ('Demo Project', 1, 1, 'Demo project seeded by init_db()', uploads_id, '/Root/Uploads/Demo Project')
+                )
+                demo_id = cursor.lastrowid
+
+                # Sample master_files row (points to a placeholder .duckdb path)
+                # This is intentionally a relative path - actual data files are
+                # generated by the user when they upload.
+                conn.execute(
+                    '''INSERT INTO master_files
+                       (folder_id, company_id, module_id, db_path, sheet_name, columns,
+                        header_row, concat_columns, auto_sync, hidden_columns)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (demo_id, 1, 1,
+                     f'data/uploads/Demo_Project_{demo_id}.duckdb',
+                     'Sheet1', '[]', 1, '[]', 0, '[]')
+                )
+
+                # Sample processed_files row so the history view loads
+                conn.execute(
+                    '''INSERT INTO processed_files
+                       (filename, file_path, report_type, financial_year, month_name,
+                        month_number, year, source_primary_filename, total_rows, rules_used,
+                        sheets_data, company_id, module_id, validation, file_size, processing_time)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    ('welcome_sample.xlsx',
+                     'data/processed/welcome_sample.xlsx',
+                     'Sample Report', '2025', 'January', 1, 2025,
+                     'demo_primary.xlsx', 0, 0, '{}', 1, 1, 2,
+                     1024.0, '0.5s')
+                )
+
+                # Sample activity so the Activity Window isn't empty
+                conn.execute(
+                    '''INSERT INTO master_activities
+                       (folder_id, company_id, module_id, step_order, activity_type,
+                        target_column, payload_json, is_enabled, validation_status)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (demo_id, 1, 1, 10, 'WELCOME', None,
+                     '{"note": "Welcome - replace this demo activity with your own formulas."}',
+                     1, 'ok')
+                )
+                print("[init_db] Default workspace structure seeded.")
+        except Exception as seed_err:
+            print(f"[init_db] Auto-seed skipped due to: {seed_err}")
+
+        conn.commit()
     finally:
         try:
             conn.close()
         except Exception:
             pass
-    def column_exists(table, column):
-        try:
-            conn.execute(f"SELECT {column} FROM {table} LIMIT 1")
-            return True
-        except:
-            return False
-    
-    # Migrate existing tables to add company_id and module_id
-    tables_to_migrate = [
-        ("folders", ["company_id", "module_id"]),
-        ("files", ["company_id", "module_id"]),
-        ("master_files", ["company_id", "module_id"]),
-        ("rules", ["company_id", "module_id"]),
-        ("processed_files", ["company_id", "module_id"]),
-        ("recycle_bin", ["company_id", "module_id"])
-    ]
-    
-    for table, columns in tables_to_migrate:
-        for col in columns:
-            if not column_exists(table, col):
-                try:
-                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} INTEGER")
-                except sqlite3.OperationalError:
-                    pass
-    
-    # Migrate existing columns
-    migrations = [
-        ("rules", "processing_type", "TEXT DEFAULT 'both'"),
-        ("master_files", "rejected_files", "TEXT"),
-        ("processed_files", "file_size", "REAL"),
-        ("processed_files", "processing_time", "TEXT"),
-        ("users", "first_login", "INTEGER DEFAULT 1"),
-        ("users", "role_id", "INTEGER"),
-        ("master_files", "formulas", "TEXT"),
-        ("companies", "status", "TEXT DEFAULT 'active'"),
-        ("modules", "status", "TEXT DEFAULT 'active'"),
-        ("modules", "template_company_id", "INTEGER"),
-        ("modules", "readme_content", "TEXT"),
-        ("company_modules", "status", "TEXT DEFAULT 'active'"),
-        ("users", "status", "TEXT DEFAULT 'active'"),
-        ("super_admin", "status", "TEXT DEFAULT 'active'"),
-        ("folders", "description", "TEXT"),
-        ("folders", "path", "TEXT"),
-        ("files", "name", "TEXT"),
-        # ---- Duplicate detection (Concat) on master_file_configs ----
-        ("master_file_configs", "dedup_enabled",   "INTEGER DEFAULT 0"),
-        ("master_file_configs", "dedup_columns",   "TEXT"),
-        ("master_file_configs", "dedup_separator", "TEXT DEFAULT ' | '"),
-        ("master_file_configs", "updated_at",      "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-    ]
-    
-    for table, column, col_type in migrations:
-        if not column_exists(table, column):
-            try:
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-            except sqlite3.OperationalError:
-                pass
-
-    # ---- Rejected Artefacts table (downloadable full-file reject reports) ----
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS rejected_artefacts (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            folder_id       INTEGER NOT NULL,
-            file_id         INTEGER,
-            original_name   TEXT NOT NULL,
-            artefact_path   TEXT NOT NULL,
-            reject_reason   TEXT,
-            rejected_rows   INTEGER,
-            total_rows      INTEGER,
-            source          TEXT DEFAULT 'merge',
-            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_rejected_artefacts_folder ON rejected_artefacts(folder_id)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_rejected_artefacts_file   ON rejected_artefacts(file_id)')
-    
-    # Migrations
-    try:
-        conn.execute('ALTER TABLE rules ADD COLUMN validation_id INTEGER DEFAULT 1')
-    except sqlite3.OperationalError:
-        # Column already exists
-        pass
-    
-    # =================== DEFAULT DATA ===================
-    
-    # Insert default modules
-    conn.execute('''
-        INSERT OR IGNORE INTO modules (id, name, code, description) VALUES (1, 'Website module', 'WEBSITE', 'Default Workspace')
-    ''')
-                
-    conn.commit()
-    conn.close()
 
 # =================== HELPER FUNCTIONS ===================
 
