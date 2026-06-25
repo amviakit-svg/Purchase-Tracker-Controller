@@ -4,67 +4,124 @@ QUICKSTART — Purchase Tracker Controller (Windows / PowerShell)
 
 COPY-PASTE THIS WHOLE BLOCK into PowerShell:
 
-# 1. Get the code
+# ---- STEP 1: Open PowerShell in a folder where you want the project
+#              (your Desktop, for example)
+cd $env:USERPROFILE\Desktop
+
+# ---- STEP 2: Clone the repo
 git clone https://github.com/amviakit-svg/Purchase-Tracker-Controller.git
+
+# ---- STEP 3: cd INTO the cloned project. THIS IS THE MOST IMPORTANT STEP.
+#              Without this, "backend\requirements.txt" can't be found.
 cd Purchase-Tracker-Controller
 
-# 2. Install Python packages (NOTE: use "python -m pip", NOT just "pip")
+# ---- STEP 4: VERIFY you're in the right place. You should see the
+#              following files listed:
+dir
+#   - backend\
+#   - frontend\
+#   - deploy_template.db
+#   - DEPLOY.md
+#   - QUICKSTART.txt
+#   - .gitignore
+#   - README.md
+
+# ---- STEP 5: Install Python packages (NOTE: use "python -m pip", NOT just "pip")
 python -m pip install --upgrade pip
 python -m pip install -r backend\requirements.txt
 
-# 3. Start the server
+# ---- STEP 6: Start the server
 python backend\main.py
 
-# 4. Open your browser at:
+# ---- STEP 7: Open your browser at:
 #    http://localhost:5000
 
 ================================================================
-COMMON ERRORS & FIXES
+TROUBLESHOOTING: "No such file or directory" error from pip
 ================================================================
 
-ERROR: "pip : The term 'pip' is not recognized"
-  FIX: Use "python -m pip install -r backend\requirements.txt"
-       instead of "pip install ...".
+If you see:
+    ERROR: Could not install packages due to an OSError:
+    [Errno 2] No such file or directory: 'backend\requirements.txt'
 
-ERROR: "python : The term 'python' is not recognized"
+OR:
+    python -m pip install -r backend\requirements.txt
+    ERROR: No such file or directory: ...
+
+This means pip can't find `backend\requirements.txt`. Three possible causes:
+
+CAUSE 1 — You're not inside the project folder (most common).
+FIX:
+  Run this FIRST to check your current directory:
+    cd
+  It should print something like:
+    D:\Shivani Dua\Desktop\Purchase-Tracker-Controller
+  If it prints:
+    D:\Shivani Dua\Desktop\
+  You forgot to `cd` into the project. Run:
+    cd Purchase-Tracker-Controller
+  Then try the pip install again.
+
+CAUSE 2 — The git clone didn't pull all files (rare).
+FIX:
+  Check that backend\requirements.txt actually exists:
+    dir backend\
+  You should see requirements.txt listed. If not, run:
+    git pull origin main
+  Or re-clone:
+    cd ..
+    Remove-Item -Recurse -Force Purchase-Tracker-Controller
+    git clone https://github.com/amviakit-svg/Purchase-Tracker-Controller.git
+    cd Purchase-Tracker-Controller
+
+CAUSE 3 — Path with spaces or parentheses interfering (e.g.
+         `D:\Shivani Dua\Desktop\New folder (3)\Purchase-Tracker-Controller`).
+FIX:
+  Wrap the requirements.txt path in double quotes:
+    python -m pip install -r "backend\requirements.txt"
+
+  OR move the project to a path WITHOUT spaces or parentheses:
+    D:\Projects\Purchase-Tracker-Controller\
+
+  (Right-click the project folder in File Explorer → Cut → Paste into
+  D:\Projects\. Then `cd D:\Projects\Purchase-Tracker-Controller` and
+  retry.)
+
+================================================================
+TROUBLESHOOTING: "pip not recognized" error
+================================================================
+
+If pip is not recognized:
+  FIX: Use `python -m pip install ...` instead of just `pip install ...`.
+
+If `python` is also not recognized:
   FIX: Python is not installed OR not on PATH.
-       Install Python from https://www.python.org/downloads/
-       and CHECK "Add Python to PATH" during installation.
+       Install Python from https://www.python.org/downloads/ and CHECK
+       "Add Python to PATH" during installation.
 
-       Or use the full path:
-         & "C:\Users\<YourName>\AppData\Local\Programs\Python\Python311\python.exe" -m pip install -r backend\requirements.txt
-
-ERROR: "Address already in use" / Port 5000 busy
-  FIX: Open backend\main.py, find the last line that says
-       "uvicorn.run(app, host="0.0.0.0", port=5000)"
-       and change 5000 to 5001 or 8080.
-
-ERROR: After starting, UI shows "500 Internal Server Error"
-  FIX: Check data\logs\server_YYYYMMDD.log for the error.
-       Delete data\metadata.db and restart the server — it
-       will auto-regenerate from deploy_template.db.
-
-ERROR: Server starts but browser can't connect
-  FIX: Make sure you're opening http://localhost:5000
-       (not https, and check the port matches what main.py says).
-       If accessing from another machine, use http://<server-ip>:5000.
+  Or use the full path:
+    & "C:\Users\<YourName>\AppData\Local\Programs\Python\Python311\python.exe" -m pip install -r backend\requirements.txt
 
 ================================================================
-FOLDER NAMES WITH SPACES OR PARENTHESES
+TROUBLESHOOTING: Port 5000 already in use
 ================================================================
 
-If your project path is like:
-  D:\Shivani Dua\Desktop\New folder (3)\Purchase-Tracker-Controller
+Edit backend\main.py, find the last line:
+    uvicorn.run(app, host="0.0.0.0", port=5000)
+Change 5000 to e.g. 5001 or 8080, save, restart.
 
-PowerShell handles this correctly when commands are typed at the
-prompt — cd works, python works, pip works.
+================================================================
+TROUBLESHOOTING: After starting, UI shows "500 Internal Server Error"
+================================================================
 
-If you ever see weird "file not found" errors, wrap paths in quotes:
-  cd "D:\Shivani Dua\Desktop\New folder (3)\Purchase-Tracker-Controller"
-  python -m pip install -r "backend\requirements.txt"
-
-(With the -m flag python doesn't need the quoted path, but it's
-still safe practice.)
+1. Check data\logs\server_YYYYMMDD.log for the error.
+2. Verify deploy_template.db was copied to data\metadata.db:
+     dir data\
+   You should see BOTH deploy_template.db (outside data/) and
+   data\metadata.db.
+3. Force re-copy from template:
+     Remove-Item data\metadata.db
+     python backend\main.py
 
 ================================================================
 WHAT THE CLIENT GETS ON FIRST START
