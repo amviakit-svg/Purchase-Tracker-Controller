@@ -1,67 +1,51 @@
 # Deployment Guide — Purchase Tracker Controller
 
-This document explains exactly how to deploy this tool to another system
-(client machine / staging / production) so that **all your real data**
-flows over: master activities, saved configurations, folders, rules,
-processed files, and uploaded raw files.
+This document explains exactly how to deploy this tool to a client machine
+so that **all your real metadata flows over**: folders, master files,
+master activities, rules, processed files, and saved configurations.
+The client uploads their own files and runs their own processing on
+their machine — runtime data is **not** shipped.
 
 ---
 
 ## What's included in the deploy bundle
 
-There are **two artifacts** for a full deploy:
-
 | Artifact | Size | Where it lives | Purpose |
 |----------|------|----------------|---------|
-| `deploy_template.db` | 405 KB | Git (`/deploy_template.db`) | Full SQLite snapshot of your `data/metadata.db` — folders, master_files, master_activities, rules, processed_files, configurations |
-| `data/template_master_dbs/` | ~200 MB | NOT in Git (too big) | Full physical DuckDB masters + uploaded raw .xlsx + processed output .xlsx |
-| `deploy_bundle.zip` | ~180 MB | Built locally on source, shipped to client | Everything above in one zip |
+| `deploy_template.db` | ~400 KB | Git (`/deploy_template.db`) | Full SQLite snapshot of your `data/metadata.db`: folders, master_files, master_activities, rules, processed_files, configurations |
+| `data/template_master_dbs/<folder>/folder_<folder>_master.duckdb` | ~2 MB total | Git | 1 sample DuckDB per master file, 4 rows each — keeps the Master View "alive" on the client |
+| `data/uploads/` | (none) | NOT shipped | Client uploads their own files |
+| `data/processed/` | (none) | NOT shipped | Client runs their own processing |
 
-The `.gitignore` excludes runtime data (`data/uploads/`, `data/processed/`,
-`data/metadata.db`, `data/logs/`, etc.) but **commits** the deploy bundle
-files (`deploy_template.db` and the small `data/template_master_dbs/`
-sample). The full ~200 MB binary bundle is too large for GitHub — ship it
-via zip to the client instead.
+The total deploy bundle is **~2.5 MB** — small enough to live entirely in
+Git with no LFS needed.
 
 ---
 
 ## On the SOURCE machine (you, before deploy)
 
-### Step 1: Refresh the deploy template DB (so the client gets your latest data)
+### Step 1: Refresh the deploy template DB (so the client gets your latest metadata)
 
 ```cmd
-copy /Y data\metadata.db deploy_template.db
+python _build_template_only.py
 ```
 
-This copies your live `data/metadata.db` (which contains all folders,
-master_files, master_activities, rules, processed_files, etc.) into
-`deploy_template.db`, which the server reads on first launch.
+This script:
+1. Copies `data/metadata.db` → `deploy_template.db` (your full metadata)
+2. Builds `data/template_master_dbs/` with one tiny sample DuckDB per master file
+   (4 sample rows each — enough to keep the Master View alive on the client)
+3. Re-points `deploy_template.db.master_files.db_path` at the sample DuckDBs
+4. VACUUMs `deploy_template.db` to shrink it
 
-### Step 2: Build the full binary bundle
-
-```cmd
-python _build_bundle.py
-```
-
-This produces `deploy_bundle.zip` (~180 MB) at the project root. The zip
-contains:
-- `deploy_template.db` (405 KB)
-- `data/template_master_dbs/` — full physical DuckDB master files + full
-  uploads + full processed output (everything the client needs to mirror
-  your environment exactly)
-- `backend/` (FastAPI source code)
-- `frontend/` (HTML/JS source)
-
-### Step 3: Commit and push the code + template DB
+### Step 2: Commit and push the deploy bundle to GitHub
 
 ```cmd
-git add deploy_template.db
-git commit -m "Deploy: refresh template DB to latest state"
+git add deploy_template.db data\template_master_dbs
+git commit -m "Deploy: refresh template DB + sample master DuckDBs"
 git push origin main
 ```
 
-The 200 MB of binary is in `deploy_bundle.zip` — keep that on your
-machine, ship it to the client separately.
+This is the entire deploy. ~2.5 MB, no LFS needed, no zip transfer needed.
 
 ---
 
@@ -69,76 +53,76 @@ machine, ship it to the client separately.
 
 ### Step 1: Get the code
 
-Either:
-- `git clone https://github.com/amviakit-svg/Purchase-Tracker-Controller.git` (gets code + deploy_template.db only), OR
-- Unzip `deploy_bundle.zip` if you shipped the full bundle via file transfer.
+```cmd
+git clone https://github.com/amviakit-svg/Purchase-Tracker-Controller.git
+cd Purchase-Tracker-Controller
+```
+
+This brings in:
+- All `backend/` and `frontend/` code
+- `deploy_template.db` (~400 KB) — your full metadata snapshot
+- `data/template_master_dbs/` (~2 MB) — sample master DuckDBs
 
 ### Step 2: Install dependencies
 
 ```cmd
-cd Purchase-Tracker-Controller
 python -m venv venv
 venv\Scripts\pip install -r backend\requirements.txt
 ```
 
-### Step 3: If you used `git clone` only (not the zip), copy the binary bundle
-
-If you cloned the repo (which only has `deploy_template.db` and a small
-`data/template_master_dbs/` sample), you also need to extract the binary
-bundle to get the full master DuckDBs and uploaded/processed files:
-
-```cmd
-# In the repo root
-# Unzip deploy_bundle.zip on top of the repo, overwriting existing files
-# OR copy from a network share / SFTP drop / OneDrive:
-#   - data/template_master_dbs/  -> ./data/template_master_dbs/
-```
-
-The server automatically picks up everything in `data/template_master_dbs/`
-on first launch (via `startup_event()` in `backend/main.py`).
-
-### Step 4: Start the server
+### Step 3: Start the server
 
 ```cmd
 python backend\main.py
 ```
 
-The server:
-1. Sees no `data/metadata.db` → copies `deploy_template.db` → creates
+The server's `startup_event()` will:
+1. See no `data/metadata.db` exists → copies `deploy_template.db` → creates
    `data/metadata.db` with all your folders, master activities, rules,
-   configurations, processed files.
-2. Sees no `data/uploads/` → copies `data/template_master_dbs/` → creates
-   `data/uploads/` with all your uploaded raw files.
+   processed files, and saved configurations.
+2. See no `data/uploads/` exists → copies `data/template_master_dbs/` →
+   creates `data/uploads/` so the Master View has data to show.
 3. Runs `init_db()` to ensure schema migrations apply cleanly.
 
-### Step 5: Verify
+The client now sees:
+- ✅ All your folders (Root, Uploads, Demo Project, etc.)
+- ✅ All your master_files (with 4 sample rows of master data each)
+- ✅ All your saved master_activities (formulas, find/replace rules)
+- ✅ All your rules (Phase 1/2/3/4 for each validation)
+- ✅ All your processed_files history (the DB rows; the .xlsx files
+  themselves are not shipped — the client must re-run processing on
+  their own data)
+
+### Step 4: Verify
 
 ```cmd
 curl http://localhost:5000/api/processed/tree
 ```
 
-You should see JSON with `validation_name` entries for all 3 validations
-(1, 2, 3) and your full file counts.
+You should see JSON with `validation_name` entries for all 3 validations.
 
----
+### Step 5: Client uploads their own files
 
-## What if the client DOESN'T want GitHub?
+The client uses the UI to upload their Excel files. These land in
+`data/uploads/` and trigger master file regeneration.
 
-Skip the `git push`. Just ship `deploy_bundle.zip` directly to the client
-via SFTP, OneDrive, USB drive, etc. The client unzips it and runs Step 4
-above — no Git involved.
+### Step 6: Client runs processing
+
+The client clicks "Process" in the UI. The system runs all the rules
+(which came from your deploy) on their files. The output is written to
+`data/processed/` and `processed_files` DB rows are added.
 
 ---
 
 ## What if the client wants to EDIT and re-commit changes back?
 
 Have them:
-1. Edit the code in `backend/` and `frontend/`
+1. Edit code in `backend/` and `frontend/`
 2. Test locally
 3. `git add . && git commit -m "..."` (the deploy_template.db has been
    auto-regenerated from their runtime `data/metadata.db` after each
    `init_db()` runs, so it's always in sync)
-4. `git push` back to the GitHub repo (or your private Git server)
+4. `git push` back to the GitHub repo
 
 ---
 
@@ -146,9 +130,8 @@ Have them:
 
 | Question | Answer |
 |----------|--------|
-| What's the minimum needed for a working deploy? | `deploy_template.db` (405 KB) + `backend/` + `frontend/` |
-| What if I want the client to have all my files? | Ship `deploy_bundle.zip` (~180 MB) instead |
-| Where does `data/uploads/` come from? | Auto-created from `data/template_master_dbs/` on first start |
-| Where do my processed output .xlsx files come from? | Same — from `data/template_master_dbs/processed/` |
-| Where do my master DuckDBs come from? | Same — from `data/template_master_dbs/<folder_id>/` |
-| Can the client just `git clone` and run? | Yes, but they'll only get the demo sample. For full data, use the zip. |
+| What's in the deploy bundle? | `deploy_template.db` (full metadata, ~400 KB) + `data/template_master_dbs/` (1 sample DuckDB per master, ~2 MB) |
+| What's NOT in the deploy bundle? | Uploaded raw files, processed output files, runtime data — the client generates these themselves |
+| Total bundle size | ~2.5 MB |
+| How does the client get the bundle? | `git clone` (no separate file transfer needed) |
+| Can the client just `git clone` and run? | Yes! Server auto-restores everything from `deploy_template.db` on first start |

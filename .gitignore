@@ -43,8 +43,12 @@ data/master_files/          # Runtime DuckDB master file artifacts
 data/module_1/              # Runtime module-isolated storage
 
 # Deploy bundle (COMMITTED to git - used by startup_event on fresh deploys)
-# template.db              <- keep this tracked (DO NOT add to ignore)
-# data/template_master_dbs/ <- keep this tracked (DO NOT add to ignore)
+# deploy_template.db          <- keep this tracked (DO NOT add to ignore)
+# data/template_master_dbs/   <- keep this tracked (DO NOT add to ignore)
+
+# Local build artifacts (NOT committed)
+deploy_bundle.zip
+_build_template_only.py
 
 # Debug and test files
 debug_*.py
