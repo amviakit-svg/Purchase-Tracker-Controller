@@ -46,6 +46,17 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 import traceback
 
+# Make the project root importable so `from backend.X import Y` works
+# whether the user runs `python backend\main.py`, `python -m backend.main`,
+# or `python -m uvicorn backend.main:app`.
+# This is the standard cross-platform trick to make `from package.X` work
+# even when the project isn't pip-installed as a package.
+import os as _os
+import sys as _sys
+_PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+if _PROJECT_ROOT not in _sys.path:
+    _sys.path.insert(0, _PROJECT_ROOT)
+
 from backend.condition_evaluator import evaluate_condition_vectorized
 
 # ---- Smart Error Helper ----
