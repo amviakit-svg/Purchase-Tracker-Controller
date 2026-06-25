@@ -1,0 +1,86 @@
+================================================================
+QUICKSTART — Purchase Tracker Controller (Windows / PowerShell)
+================================================================
+
+COPY-PASTE THIS WHOLE BLOCK into PowerShell:
+
+# 1. Get the code
+git clone https://github.com/amviakit-svg/Purchase-Tracker-Controller.git
+cd Purchase-Tracker-Controller
+
+# 2. Install Python packages (NOTE: use "python -m pip", NOT just "pip")
+python -m pip install --upgrade pip
+python -m pip install -r backend\requirements.txt
+
+# 3. Start the server
+python backend\main.py
+
+# 4. Open your browser at:
+#    http://localhost:5000
+
+================================================================
+COMMON ERRORS & FIXES
+================================================================
+
+ERROR: "pip : The term 'pip' is not recognized"
+  FIX: Use "python -m pip install -r backend\requirements.txt"
+       instead of "pip install ...".
+
+ERROR: "python : The term 'python' is not recognized"
+  FIX: Python is not installed OR not on PATH.
+       Install Python from https://www.python.org/downloads/
+       and CHECK "Add Python to PATH" during installation.
+
+       Or use the full path:
+         & "C:\Users\<YourName>\AppData\Local\Programs\Python\Python311\python.exe" -m pip install -r backend\requirements.txt
+
+ERROR: "Address already in use" / Port 5000 busy
+  FIX: Open backend\main.py, find the last line that says
+       "uvicorn.run(app, host="0.0.0.0", port=5000)"
+       and change 5000 to 5001 or 8080.
+
+ERROR: After starting, UI shows "500 Internal Server Error"
+  FIX: Check data\logs\server_YYYYMMDD.log for the error.
+       Delete data\metadata.db and restart the server — it
+       will auto-regenerate from deploy_template.db.
+
+ERROR: Server starts but browser can't connect
+  FIX: Make sure you're opening http://localhost:5000
+       (not https, and check the port matches what main.py says).
+       If accessing from another machine, use http://<server-ip>:5000.
+
+================================================================
+FOLDER NAMES WITH SPACES OR PARENTHESES
+================================================================
+
+If your project path is like:
+  D:\Shivani Dua\Desktop\New folder (3)\Purchase-Tracker-Controller
+
+PowerShell handles this correctly when commands are typed at the
+prompt — cd works, python works, pip works.
+
+If you ever see weird "file not found" errors, wrap paths in quotes:
+  cd "D:\Shivani Dua\Desktop\New folder (3)\Purchase-Tracker-Controller"
+  python -m pip install -r "backend\requirements.txt"
+
+(With the -m flag python doesn't need the quoted path, but it's
+still safe practice.)
+
+================================================================
+WHAT THE CLIENT GETS ON FIRST START
+================================================================
+
+- All your folders (Root, Uploads, Demo Project, etc.)
+- All your master_files (with placeholder paths — the client
+  uploads their own .xlsx files which create real masters)
+- All your saved master_activities (formulas, find/replace, etc.)
+- All your rules (Phase 1/2/3/4 for each validation)
+- All your processed_files history (DB rows — the .xlsx files
+  themselves are NOT shipped; client regenerates by re-running
+  processing on their own uploaded data)
+
+The client uploads their own files via the UI. They run their own
+processing. The result files (.xlsx) and the master DuckDBs are
+generated locally on the client's machine — never shipped.
+
+================================================================

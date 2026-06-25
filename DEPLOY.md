@@ -8,52 +8,56 @@ their machine — runtime data is **not** shipped.
 
 ---
 
-## What's included in the deploy bundle
+## Prerequisites (one-time)
 
-| Artifact | Size | Where it lives | Purpose |
-|----------|------|----------------|---------|
-| `deploy_template.db` | ~400 KB | Git (`/deploy_template.db`) | Full SQLite snapshot of your `data/metadata.db`: folders, master_files, master_activities, rules, processed_files, configurations |
-| `data/template_master_dbs/<folder>/folder_<folder>_master.duckdb` | ~2 MB total | Git | 1 sample DuckDB per master file, 4 rows each — keeps the Master View "alive" on the client |
-| `data/uploads/` | (none) | NOT shipped | Client uploads their own files |
-| `data/processed/` | (none) | NOT shipped | Client runs their own processing |
+The client machine needs:
+- **Python 3.11+** installed
+- **Git** installed
 
-The total deploy bundle is **~2.5 MB** — small enough to live entirely in
-Git with no LFS needed.
+Verify with:
+```powershell
+python --version
+git --version
+```
+
+If either command says "not recognized", install Python from https://www.python.org/downloads/ (make sure to tick **"Add Python to PATH"** during installation), and Git from https://git-scm.com/download/win.
 
 ---
 
-## On the SOURCE machine (you, before deploy)
+## IMPORTANT: `pip` not found error
 
-### Step 1: Refresh the deploy template DB (so the client gets your latest metadata)
-
-```cmd
-python _build_template_only.py
+If you see this error on PowerShell:
+```
+pip : The term 'pip' is not recognized as the name of a cmdlet...
 ```
 
-This script:
-1. Copies `data/metadata.db` → `deploy_template.db` (your full metadata)
-2. Builds `data/template_master_dbs/` with one tiny sample DuckDB per master file
-   (4 sample rows each — enough to keep the Master View alive on the client)
-3. Re-points `deploy_template.db.master_files.db_path` at the sample DuckDBs
-4. VACUUMs `deploy_template.db` to shrink it
+This means Python is installed but its `pip.exe` is not on your shell's PATH. **Use the recommended `python -m pip` form instead**:
 
-### Step 2: Commit and push the deploy bundle to GitHub
-
-```cmd
-git add deploy_template.db data\template_master_dbs
-git commit -m "Deploy: refresh template DB + sample master DuckDBs"
-git push origin main
+```powershell
+python -m pip install -r backend\requirements.txt
 ```
 
-This is the entire deploy. ~2.5 MB, no LFS needed, no zip transfer needed.
+`python -m pip` invokes pip through Python itself, so it always works regardless of PATH configuration.
+
+**If `python` itself is not recognized**, use the full path:
+```powershell
+# Find your Python install (typically):
+& "C:\Users\<YourName>\AppData\Local\Programs\Python\Python311\python.exe" -m pip install -r backend\requirements.txt
+```
+
+**Note about paths with spaces or parentheses** (e.g. `D:\Shivani Dua\Desktop\New folder (3)\`):
+- Python, pip, and uvicorn all handle paths with spaces correctly — but make sure to quote paths that have spaces when passing them as arguments.
+- Avoid renaming project directories to ones with parentheses if possible (some older Python tools get confused). If you must, just be sure to use quotes around the path.
 
 ---
 
-## On the CLIENT machine (production deploy)
+## Deploy steps
 
 ### Step 1: Get the code
 
-```cmd
+Open PowerShell in the directory where you want the project (e.g. `D:\Shivani Dua\Desktop`) and run:
+
+```powershell
 git clone https://github.com/amviakit-svg/Purchase-Tracker-Controller.git
 cd Purchase-Tracker-Controller
 ```
@@ -61,77 +65,98 @@ cd Purchase-Tracker-Controller
 This brings in:
 - All `backend/` and `frontend/` code
 - `deploy_template.db` (~400 KB) — your full metadata snapshot
-- `data/template_master_dbs/` (~2 MB) — sample master DuckDBs
+- `DEPLOY.md`, `README.md`, etc.
 
-### Step 2: Install dependencies
+### Step 2: Install dependencies (USE `python -m pip`)
 
-```cmd
-python -m venv venv
-venv\Scripts\pip install -r backend\requirements.txt
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r backend\requirements.txt
 ```
+
+This installs FastAPI, DuckDB, pandas, openpyxl, and other Python packages the app needs.
 
 ### Step 3: Start the server
 
-```cmd
+```powershell
 python backend\main.py
 ```
 
+If everything is fine, you'll see logs like:
+```
+INFO:     Started server process [12345]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5000
+```
+
 The server's `startup_event()` will:
-1. See no `data/metadata.db` exists → copies `deploy_template.db` → creates
-   `data/metadata.db` with all your folders, master activities, rules,
-   processed files, and saved configurations.
-2. See no `data/uploads/` exists → copies `data/template_master_dbs/` →
-   creates `data/uploads/` so the Master View has data to show.
+1. See no `data/metadata.db` exists → copies `deploy_template.db` → creates `data/metadata.db` with all your folders, master activities, rules, processed files, and saved configurations.
+2. See no `data/uploads/` exists → creates an empty `data/uploads/` directory.
 3. Runs `init_db()` to ensure schema migrations apply cleanly.
+
+### Step 4: Open in browser
+
+Visit **http://localhost:5000** (or `http://<server-ip>:5000` if running on a different machine).
 
 The client now sees:
 - ✅ All your folders (Root, Uploads, Demo Project, etc.)
-- ✅ All your master_files (with 4 sample rows of master data each)
+- ✅ All your master_files (with `db_path` pointing at runtime paths the client will fill)
 - ✅ All your saved master_activities (formulas, find/replace rules)
 - ✅ All your rules (Phase 1/2/3/4 for each validation)
-- ✅ All your processed_files history (the DB rows; the .xlsx files
-  themselves are not shipped — the client must re-run processing on
-  their own data)
-
-### Step 4: Verify
-
-```cmd
-curl http://localhost:5000/api/processed/tree
-```
-
-You should see JSON with `validation_name` entries for all 3 validations.
+- ✅ All your processed_files history (DB rows; the .xlsx files themselves are not shipped — the client must re-run processing on their own data)
 
 ### Step 5: Client uploads their own files
 
-The client uses the UI to upload their Excel files. These land in
-`data/uploads/` and trigger master file regeneration.
+The client uses the UI to upload their Excel files. These land in `data/uploads/` and trigger master file regeneration.
 
 ### Step 6: Client runs processing
 
-The client clicks "Process" in the UI. The system runs all the rules
-(which came from your deploy) on their files. The output is written to
-`data/processed/` and `processed_files` DB rows are added.
+The client clicks "Process" in the UI. The system runs all the rules (which came from your deploy) on their files. The output is written to `data/processed/` and `processed_files` DB rows are added.
 
 ---
 
-## What if the client wants to EDIT and re-commit changes back?
+## What's in the deploy bundle
 
-Have them:
-1. Edit code in `backend/` and `frontend/`
-2. Test locally
-3. `git add . && git commit -m "..."` (the deploy_template.db has been
-   auto-regenerated from their runtime `data/metadata.db` after each
-   `init_db()` runs, so it's always in sync)
-4. `git push` back to the GitHub repo
+| Artifact | Size | Where it lives | Purpose |
+|----------|------|----------------|---------|
+| `deploy_template.db` | ~400 KB | Git (`/deploy_template.db`) | Full SQLite snapshot of your `data/metadata.db`: folders, master_files, master_activities, rules, processed_files, configurations |
+| `data/uploads/` | (none) | NOT shipped | Client uploads their own files |
+| `data/processed/` | (none) | NOT shipped | Client runs their own processing |
+| `data/master_files/` | (none) | NOT shipped | Generated by the client when they upload + merge |
+
+Total Git footprint: ~400 KB deploy_template.db + source code. Nothing in the data folder is ever shipped.
 
 ---
 
-## Summary
+## Step 6: Refreshing the deploy bundle (on the source machine)
 
-| Question | Answer |
-|----------|--------|
-| What's in the deploy bundle? | `deploy_template.db` (full metadata, ~400 KB) + `data/template_master_dbs/` (1 sample DuckDB per master, ~2 MB) |
-| What's NOT in the deploy bundle? | Uploaded raw files, processed output files, runtime data — the client generates these themselves |
-| Total bundle size | ~2.5 MB |
-| How does the client get the bundle? | `git clone` (no separate file transfer needed) |
-| Can the client just `git clone` and run? | Yes! Server auto-restores everything from `deploy_template.db` on first start |
+After making changes locally (saving new activities, rules, processing files, etc.):
+
+```powershell
+copy /Y data\metadata.db deploy_template.db
+git add deploy_template.db
+git commit -m "Deploy: refresh template DB"
+git push origin main
+```
+
+---
+
+## Troubleshooting
+
+### `pip` not recognized
+Use `python -m pip install -r backend\requirements.txt` instead.
+
+### `python` not recognized
+Use the full path: `& "C:\Users\<YourName>\AppData\Local\Programs\Python\Python311\python.exe" backend\main.py`
+
+### Port 5000 already in use
+Edit `backend\main.py` last line and change `port=5000` to another port (e.g. `5001`).
+
+### Server starts but UI shows errors
+1. Check the server logs in `data\logs\server_YYYYMMDD.log`
+2. Verify `deploy_template.db` was copied to `data\metadata.db` (you should see both files)
+3. Try `del data\metadata.db && python backend\main.py` to force re-copy from the template
+
+### Need to re-copy template DB without losing uploaded files
+The `data/metadata.db` is regenerated by the server each time it starts. The `deploy_template.db` is the source of truth and only changes when YOU push a new one to git.
