@@ -162,29 +162,43 @@ def normalize_concat(series):
     return series.fillna('').astype(str).str.strip().str.lower()
 
 
-def load_existing_concat_set(duck_conn, dedup_col_name=DEDUP_COL_NAME):
+def load_existing_concat_set(duck_conn, cols, sep=' | '):
     """
     Return a set of normalized concat values already present in master_data.
+    Ignores soft-deleted rows dynamically.
     """
-    if duck_conn is None:
+    if duck_conn is None or not cols:
         return set()
     try:
         tables = duck_conn.execute("SHOW TABLES").fetchall()
-        if (DEDUP_COL_NAME,) not in tables:
+        if ("master_data",) not in tables:
             return set()
-        # Check if column exists
-        cols_info = duck_conn.execute(f"PRAGMA table_info({dedup_col_name})").fetchall()
+        
+        # Check if columns exist
+        cols_info = duck_conn.execute("PRAGMA table_info(master_data)").fetchall()
         col_names = [c[1] for c in cols_info]
-        if 'value' not in col_names:
+        
+        if not all(c in col_names for c in cols):
             return set()
+            
+        where_clause = ""
+        if "__is_deleted" in col_names:
+            where_clause = "WHERE \"__is_deleted\" = FALSE OR \"__is_deleted\" IS NULL"
+            
+        # Build concat_ws properly
+        col_exprs = [f'"{c}"' for c in cols]
+        concat_expr = f"CONCAT_WS('{sep}', " + ", ".join(col_exprs) + ")"
+        
         rows = duck_conn.execute(
-            f"SELECT value FROM {dedup_col_name} WHERE value IS NOT NULL AND TRIM(value) <> ''"
+            f"SELECT {concat_expr} as val FROM master_data {where_clause}"
         ).fetchall()
+        
         result = set()
         for (v,) in rows:
-            if v is None:
-                continue
-            result.add(str(v).strip().lower())
+            if v is not None:
+                s = str(v).strip().lower()
+                if s:
+                    result.add(s)
         return result
     except Exception as e:
         logger.warning(f"load_existing_concat_set failed: {e}")

@@ -314,18 +314,7 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
                                     _sep = _dedup_cfg.get('dedup_separator') or ' | '
                                     _resolved_cols = resolve_dedup_columns(_dedup_cfg, df.columns.tolist())
                                     if _resolved_cols:
-                                        # First sync: seed the dedup table from existing master_data
-                                        if not (duck_conn.execute(
-                                            f"SELECT 1 FROM information_schema.tables WHERE table_name = '{DEDUP_COL_NAME}'"
-                                        ).fetchall()):
-                                            # Re-derive from existing rows in master_data
-                                            _existing = duck_conn.execute(
-                                                f"SELECT * FROM master_data"
-                                            ).fetchdf() if ("master_data",) in duck_conn.execute("SHOW TABLES").fetchall() else pd.DataFrame(columns=current_duckdb_cols)
-                                            ensure_dedup_table(duck_conn, DEDUP_COL_NAME)
-                                            if len(_existing) > 0 and all(c in _existing.columns for c in _resolved_cols):
-                                                populate_dedup_table(duck_conn, _existing, _resolved_cols, _sep, DEDUP_COL_NAME)
-                                        _existing_set = load_existing_concat_set(duck_conn, DEDUP_COL_NAME)
+                                        _existing_set = load_existing_concat_set(duck_conn, _resolved_cols, _sep)
                                         _dup_mask = detect_duplicate_rows(df, _existing_set, _resolved_cols, _sep)
                                         if _dup_mask.any():
                                             _matched_count = int(_dup_mask.sum())
@@ -359,15 +348,7 @@ def run_incremental_sync(folder_id: int, force_sync: bool = False, user_id: int 
 
                             duck_conn.execute("INSERT INTO master_data SELECT * FROM df")
                             
-                            try:
-                                _dedup_cfg = get_dedup_config(folder_id)
-                                if is_dedup_active(_dedup_cfg):
-                                    _resolved_cols = resolve_dedup_columns(_dedup_cfg, df.columns.tolist())
-                                    if _resolved_cols:
-                                        _sep = _dedup_cfg.get('dedup_separator') or ' | '
-                                        populate_dedup_table(duck_conn, df, _resolved_cols, _sep, DEDUP_COL_NAME)
-                            except Exception as _post_dedup_err:
-                                logger.warning(f"Failed to populate dedup table after insert: {_post_dedup_err}")
+                            pass # no need to populate dedup table, read directly from master_data
 
                             set_file_sync_status(file_id, 'synced', None)
                             try:

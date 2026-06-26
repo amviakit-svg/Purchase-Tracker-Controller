@@ -186,6 +186,16 @@ def init_db():
             )
         ''')
     
+        # Migrate sort_order column to folders
+        cursor = conn.execute("PRAGMA table_info(folders)")
+        f_cols = [row['name'] for row in cursor.fetchall()]
+        if 'sort_order' not in f_cols:
+            try:
+                conn.execute("ALTER TABLE folders ADD COLUMN sort_order INTEGER DEFAULT 0")
+                conn.commit()
+            except Exception:
+                pass
+
         # Files table
         conn.execute('''
             CREATE TABLE IF NOT EXISTS files (
@@ -598,7 +608,7 @@ def get_folders(company_id=None, module_id=None):
             rows = conn.execute(
                 '''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
                    FROM folders f WHERE f.company_id = ? AND f.module_id = ? 
-                   ORDER BY f.created_at DESC''',
+                   ORDER BY f.sort_order ASC, f.created_at DESC''',
                 (company_id, module_id)
             ).fetchall()
         elif module_id:
@@ -606,19 +616,21 @@ def get_folders(company_id=None, module_id=None):
             rows = conn.execute(
                 '''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
                    FROM folders f WHERE f.module_id = ? 
-                   ORDER BY f.created_at DESC''',
+                   ORDER BY f.sort_order ASC, f.created_at DESC''',
                 (module_id,)
             ).fetchall()
         elif company_id:
             rows = conn.execute(
                 '''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
                    FROM folders f WHERE f.company_id = ? 
-                   ORDER BY f.created_at DESC''',
+                   ORDER BY f.sort_order ASC, f.created_at DESC''',
                 (company_id,)
             ).fetchall()
         else:
-            rows = conn.execute('''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
-                                   FROM folders f ORDER BY f.created_at DESC''').fetchall()
+            rows = conn.execute(
+                '''SELECT f.*, (SELECT COUNT(1) FROM files fi WHERE fi.folder_id = f.id) as file_count 
+                   FROM folders f 
+                   ORDER BY f.sort_order ASC, f.created_at DESC''').fetchall()
         return [dict(row) for row in rows]
 
     finally:

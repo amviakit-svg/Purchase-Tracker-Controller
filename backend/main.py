@@ -802,6 +802,30 @@ async def api_get_folders(current_user: Optional[dict] = Depends(get_optional_us
     folders = get_folders(company_id=cid, module_id=mid)
     return {"success": True, "folders": folders}
 
+class FolderReorderItem(BaseModel):
+    id: int
+    sort_order: int
+
+@app.put("/api/folders/reorder")
+async def api_reorder_folders(items: list[FolderReorderItem], current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        cid, mid = _get_context(current_user)
+        from database import get_db_connection
+        conn = get_db_connection()
+        try:
+            # We must ensure the user only updates folders belonging to their context
+            for item in items:
+                conn.execute(
+                    "UPDATE folders SET sort_order = ? WHERE id = ? AND company_id = ? AND module_id = ?",
+                    (item.sort_order, item.id, cid, mid)
+                )
+            conn.commit()
+            return {"success": True}
+        finally:
+            conn.close()
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
 @app.delete("/api/folders/{folder_id}")
 async def api_delete_folder(folder_id: int, current_user: Optional[dict] = Depends(get_optional_user)):
     try:
@@ -1530,6 +1554,7 @@ async def merge_files(
             all_data = []
             rejected_files = []
             merged_count = 0
+            _existing_set = None
             
             for idx, file_info in enumerate(files):
                 try:
@@ -1648,81 +1673,80 @@ async def merge_files(
                     if is_dedup_active(_dedup_cfg):
                         _resolved_cols = resolve_dedup_columns(_dedup_cfg, df.columns.tolist())
                         if _resolved_cols:
-                            # Initialise / open the dedup lookup table once.
-                            # First file populates it; subsequent files compare against it.
-                            if merged_count == 0:
-                                ensure_dedup_table(conn, DEDUP_COL_NAME)
-                                populate_dedup_table(conn, df, _resolved_cols, _dedup_cfg['dedup_separator'], DEDUP_COL_NAME)
-                            else:
-                                _existing_set = load_existing_concat_set(conn, DEDUP_COL_NAME)
-                                _dup_mask = detect_duplicate_rows(
-                                    df, _existing_set, _resolved_cols, _dedup_cfg['dedup_separator']
+                            if _existing_set is None:
+                                _existing_set = load_existing_concat_set(conn, _resolved_cols, _dedup_cfg['dedup_separator'])
+                            
+                            _dup_mask = detect_duplicate_rows(
+                                df, _existing_set, _resolved_cols, _dedup_cfg['dedup_separator']
+                            )
+                            if _dup_mask.any():
+                                _matched_count = int(_dup_mask.sum())
+                                _reject_reason = (
+                                    f"Rejected: {_matched_count} row(s) in this file match an existing "
+                                    f"concat value built from columns {_resolved_cols} with separator "
+                                    f"'{_dedup_cfg['dedup_separator']}'."
                                 )
-                                if _dup_mask.any():
-                                    _matched_count = int(_dup_mask.sum())
-                                    _reject_reason = (
-                                        f"Rejected: {_matched_count} row(s) in this file match an existing "
-                                        f"concat value built from columns {_resolved_cols} with separator "
-                                        f"'{_dedup_cfg['dedup_separator']}'."
+                                # Write the artefact (full file + Status / Reject_Reason columns)
+                                _artefact_path = write_rejected_artefact(
+                                    df,
+                                    {**file_info, 'folder_id': folder_id_int},
+                                    _dup_mask,
+                                    _resolved_cols,
+                                    _dedup_cfg['dedup_separator'],
+                                    _reject_reason,
+                                )
+                                _artefact_id = None
+                                if _artefact_path:
+                                    _artefact_id = save_rejected_artefact(
+                                        folder_id=folder_id_int,
+                                        file_id=file_info.get('id'),
+                                        original_name=original_name,
+                                        artefact_path=_artefact_path,
+                                        reject_reason=_reject_reason,
+                                        rejected_rows=_matched_count,
+                                        total_rows=len(df),
+                                        source='merge',
                                     )
-                                    # Write the artefact (full file + Status / Reject_Reason columns)
-                                    _artefact_path = write_rejected_artefact(
-                                        df,
-                                        {**file_info, 'folder_id': folder_id_int},
-                                        _dup_mask,
-                                        _resolved_cols,
-                                        _dedup_cfg['dedup_separator'],
-                                        _reject_reason,
+                                # Mark this file as rejected in files table (best-effort)
+                                try:
+                                    _conn_files = get_db_connection()
+                                    _conn_files.execute(
+                                        "UPDATE files SET sync_status = 'rejected', sync_error = ? WHERE folder_id = ? AND original_name = ?",
+                                        (_reject_reason, folder_id_int, original_name),
                                     )
-                                    _artefact_id = None
-                                    if _artefact_path:
-                                        _artefact_id = save_rejected_artefact(
-                                            folder_id=folder_id_int,
-                                            file_id=file_info.get('id'),
-                                            original_name=original_name,
-                                            artefact_path=_artefact_path,
-                                            reject_reason=_reject_reason,
-                                            rejected_rows=_matched_count,
-                                            total_rows=len(df),
-                                            source='merge',
-                                        )
-                                    # Mark this file as rejected in files table (best-effort)
-                                    try:
-                                        _conn_files = get_db_connection()
-                                        _conn_files.execute(
-                                            "UPDATE files SET sync_status = 'rejected', sync_error = ? WHERE folder_id = ? AND original_name = ?",
-                                            (_reject_reason, folder_id_int, original_name),
-                                        )
-                                        _conn_files.commit()
-                                        _conn_files.close()
-                                    except Exception as _fsync_err:
-                                        logger.warning(f"Failed to mark file rejected (merge): {_fsync_err}")
-                                    # Add bell notification
-                                    try:
-                                        add_notification(
-                                            company_id, module_id, 'error',
-                                            f"File '{original_name}' rejected: {_matched_count} duplicate row(s) "
-                                            f"matched existing master on columns {_resolved_cols}.",
-                                            link=f"?folder={folder_id_int}",
-                                            user_id=None,
-                                        )
-                                    except Exception:
-                                        pass
-                                    _fid = file_info.get('id')
-                                    rejected_files.append({
-                                        "file": original_name,
-                                        "reason": _reject_reason,
-                                        "rejected_rows": _matched_count,
-                                        "total_rows": len(df),
-                                        "artefact_id": _artefact_id,
-                                        "file_id":               _fid,
-                                        "rejected_download_url": f"/api/files/{_fid}/rejected-download" if _fid else None,
-                                    })
-                                    # Do NOT add this file's data to the master.
-                                    continue
+                                    _conn_files.commit()
+                                    _conn_files.close()
+                                except Exception as _fsync_err:
+                                    logger.warning(f"Failed to mark file rejected (merge): {_fsync_err}")
+                                # Add bell notification
+                                try:
+                                    add_notification(
+                                        company_id, module_id, 'error',
+                                        f"File '{original_name}' rejected: {_matched_count} duplicate row(s) "
+                                        f"matched existing master on columns {_resolved_cols}.",
+                                        link=f"?folder={folder_id_int}",
+                                        user_id=None,
+                                    )
+                                except Exception:
+                                    pass
+                                _fid = file_info.get('id')
+                                rejected_files.append({
+                                    "file": original_name,
+                                    "reason": _reject_reason,
+                                    "rejected_rows": _matched_count,
+                                    "total_rows": len(df),
+                                    "artefact_id": _artefact_id,
+                                    "file_id":               _fid,
+                                    "rejected_download_url": f"/api/files/{_fid}/rejected-download" if _fid else None,
+                                })
+                                # Do NOT add this file's data to the master.
+                                continue
                                 # File is clean: append its concat values to the dedup set
                                 # so that the NEXT file (and subsequent sync cycles) see them.
-                                populate_dedup_table(conn, df, _resolved_cols, _dedup_cfg['dedup_separator'], DEDUP_COL_NAME)
+                                from backend.dedup_engine import build_concat, normalize_concat
+                                new_concat = build_concat(df, _resolved_cols, _dedup_cfg['dedup_separator'])
+                                normalized = normalize_concat(new_concat)
+                                _existing_set.update(normalized.dropna().tolist())
                     # --- END DEDUP CHECK ---
                     
                     all_data.append(df)
@@ -2764,7 +2788,7 @@ async def preview_master(
         if not result.empty:
             if "__row_fp" in all_cols and "__row_fp" in result.columns:
                 existing_fps = result["__row_fp"].tolist()
-                needs_recompute = all((v is None or v == "" or (isinstance(v, float) and pd.isna(v))) for v in existing_fps)
+                needs_recompute = any((v is None or v == "" or (isinstance(v, float) and pd.isna(v))) for v in existing_fps)
                 if needs_recompute:
                     # Re-compute in DuckDB using the same formula
                     user_cols = [c for c in all_cols if c not in {"__is_deleted", "__deleted_at", "__row_fp"}]
@@ -3539,7 +3563,35 @@ async def api_restore_master_rows(
             from backend.row_lifecycle import (
                 ensure_lifecycle_columns, restore_rows,
             )
+            from backend.database import get_dedup_config
+            from backend.dedup_engine import (
+                is_dedup_active, resolve_dedup_columns, load_existing_concat_set, detect_duplicate_rows
+            )
+            
             ensure_lifecycle_columns(conn)
+            
+            # --- DEDUP CHECK BEFORE RESTORE ---
+            _dedup_cfg = get_dedup_config(folder_id)
+            if is_dedup_active(_dedup_cfg):
+                all_cols = conn.execute("SELECT * FROM master_data LIMIT 0").fetchdf().columns.tolist()
+                _resolved_cols = resolve_dedup_columns(_dedup_cfg, all_cols)
+                if _resolved_cols:
+                    _sep = _dedup_cfg.get('dedup_separator') or ' | '
+                    
+                    # 1. Fetch the rows being restored
+                    placeholders = ",".join(["?"] * len(fps))
+                    restore_df = conn.execute(f'SELECT * FROM master_data WHERE "__row_fp" IN ({placeholders})', list(fps)).fetchdf()
+                    
+                    if not restore_df.empty:
+                        # 2. Load existing concat set of active rows
+                        _existing_set = load_existing_concat_set(conn, _resolved_cols, _sep)
+                        
+                        # 3. Detect duplicates
+                        _dup_mask = detect_duplicate_rows(restore_df, _existing_set, _resolved_cols, _sep)
+                        if _dup_mask.any():
+                            # Return 200 OK with success=False to avoid throwing exceptions in frontend apiCall
+                            return {"success": False, "message": "Data already exist in master file. Cannot restore duplicate rows."}
+            
             affected = restore_rows(conn, fps)
         finally:
             conn.close()

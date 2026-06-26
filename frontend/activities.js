@@ -36,14 +36,24 @@ function renderMasterActivities() {
     const emptyEl = document.getElementById('master-activities-empty');
     if (!container || !emptyEl) return;
 
+    const badge = document.getElementById('master-activities-count-badge');
+
     if (!__masterActivities || __masterActivities.length === 0) {
         container.innerHTML = '';
         container.classList.add('hidden');
         emptyEl.classList.remove('hidden');
+        if (badge) {
+            badge.textContent = '0';
+            badge.classList.add('hidden');
+        }
         return;
     }
     container.classList.remove('hidden');
     emptyEl.classList.add('hidden');
+    if (badge) {
+        badge.textContent = __masterActivities.length;
+        badge.classList.remove('hidden');
+    }
 
     const iconFor = (t) => {
         switch (t) {
