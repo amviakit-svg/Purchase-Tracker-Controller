@@ -374,25 +374,6 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                             </svg>
                         </button>
-
-                        <!-- Global Sync Indicator -->
-                        <div class="relative group ml-4" id="global-sync-container">
-                            <button class="flex items-center space-x-1 bg-white text-gray-700 text-sm font-medium py-1.5 px-3 rounded hover:bg-gray-100 transition-colors border border-gray-200" title="Background Sync Status">
-                                <svg id="global-sync-icon" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                </svg>
-                                <span id="global-sync-count" class="bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full ml-2">Idle</span>
-                            </button>
-                            <!-- Dropdown -->
-                            <div class="absolute right-0 mt-2 w-72 bg-white rounded-md shadow-lg border border-gray-200 z-50 hidden group-hover:block transition-opacity opacity-0 group-hover:opacity-100">
-                                <div class="px-4 py-2 border-b border-gray-200 bg-gray-50 rounded-t-md">
-                                    <h3 class="text-sm font-semibold text-gray-800">Files Syncing</h3>
-                                </div>
-                                <div id="global-sync-list" class="max-h-60 overflow-y-auto py-1">
-                                    <!-- Items go here -->
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div class="flex">
@@ -3396,9 +3377,21 @@
             } // Re-render to update checkboxes
         }
 
-        function refreshFileManager() {
-            loadFolders();
-            loadFiles(currentFolderId);
+        async function refreshFileManager() {
+            try {
+                // Show a loading toast or spin the icon
+                const btn = document.querySelector('button[onclick="refreshFileManager()"] svg');
+                if (btn) btn.classList.add('animate-spin');
+                
+                await loadFolders();
+                await loadFiles(currentFolderId);
+                
+                if (btn) btn.classList.remove('animate-spin');
+                showToast('File manager refreshed', 'success');
+            } catch (e) {
+                console.error('Refresh failed:', e);
+                showToast('Error refreshing files', 'error');
+            }
         }
 
         // Folder Actions
