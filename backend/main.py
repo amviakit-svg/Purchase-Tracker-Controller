@@ -2343,6 +2343,34 @@ async def get_company_activity_log_api(
         logger.error(f"Error getting company activity log: {e}")
         return {"success": False, "logs": []}
 
+@app.put("/api/master/{folder_id}/filter-mappings")
+async def update_filter_mappings(folder_id: int, request: Request, current_user: Optional[dict] = Depends(get_optional_user)):
+    cid, mid = _get_context(current_user)
+    master = get_master_file(folder_id)
+    if not master or master.get('company_id') != cid or master.get('module_id') != mid:
+        raise HTTPException(status_code=404, detail="Master file not found")
+        
+    data = await request.json()
+    mappings = data.get('filter_mappings', {})
+    
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "UPDATE master_files SET filter_mappings = ? WHERE folder_id = ?",
+            (json.dumps(mappings), folder_id)
+        )
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Error updating filter mappings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update filter mappings")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+            
+    return {"success": True, "message": "Filter mappings updated successfully"}
+
 @app.get("/api/master/{folder_id}")
 async def get_master_info(folder_id: int, current_user: Optional[dict] = Depends(get_optional_user)):
     cid, mid = _get_context(current_user)
@@ -6375,7 +6403,7 @@ def process_rules_background():
 
                     primary_df[col_name] = default_remark if default_remark else ''
 
-                    for remark_rule in reversed(remark_rules):
+                    for remark_rule in remark_rules:
                         remark_text = remark_rule.get('remark', '')
                         conditions = remark_rule.get('conditions', [])
 
@@ -6888,10 +6916,10 @@ def process_rules_background():
         final_output_filename = None
         if custom_filename:
             import re
-            safe_name = re.sub(r'[^\w\s-]', '', custom_filename).strip()
+            safe_name = re.sub(r'[^\w\s\-\(\)]', '', custom_filename).strip()
             ist_tz = timezone(timedelta(hours=5, minutes=30))
-            timestamp_ist = datetime.now(ist_tz).strftime("%d-%m-%Y_%I-%M-%p")
-            final_output_filename = f"{safe_name}_{timestamp_ist}.xlsx"
+            timestamp_ist = datetime.now(ist_tz).strftime("%d-%m-%Y %I-%M %p")
+            final_output_filename = f"{safe_name} {timestamp_ist}.xlsx"
         
         if parsed['parsed']:
             report_type = None
@@ -8706,24 +8734,8 @@ async def download_processed_file(file_id: int):
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="File not found on disk")
             
-        # Construct dynamic filename based on validation type
-        val_id = file.get('validation')
-        dt_str = "Unknown_Date"
-        created_at_str = file.get('created_at')
-        if created_at_str:
-            try:
-                from datetime import datetime
-                dt = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
-                dt_str = dt.strftime("%d-%m-%Y %H-%M-%S")
-            except:
-                pass
-
-        if val_id == 1:
-            dl_filename = f"GRN vs Vendor Invoice Reconciliation Report {dt_str}.xlsx"
-        elif val_id == 3:
-            dl_filename = f"Tally vs Vendor Invoice Reconciliation Report {dt_str}.xlsx"
-        else:
-            dl_filename = f"Vendor Invoice vs Tally Reconciliation Report {dt_str}.xlsx"
+        # Use the filename stored in the database, or fallback to the actual file name
+        dl_filename = file.get('filename') or os.path.basename(file_path)
         
         from starlette.responses import FileResponse as StarletteFileResponse
         return StarletteFileResponse(

@@ -20,7 +20,7 @@ Double-click **`start_server.bat`**. This will:
 - You can close the startup window immediately after it starts
 - The server will keep running until you restart your computer
 
-Then open your browser to: **http://localhost:8000**
+Then open your browser to: **http://localhost:5000**
 
 ### Option 3: Start with Browser Auto-Open
 Double-click **`start_background.vbs`**. This will:
@@ -36,9 +36,9 @@ taskkill /f /im python.exe
 ### Option 5: Command Line (For Developers)
 Open Command Prompt in the project folder and run:
 ```cmd
-venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+venv\Scripts\python -m uvicorn backend.main:app --host 0.0.0.0 --port 5000
 ```
-Then open your browser to: **http://localhost:8000**
+Then open your browser to: **http://localhost:5000**
 
 ---
 
@@ -53,12 +53,16 @@ Purchase Tracker Controller/
 │   ├── formula_engine.py  # Custom formula expression parser
 │   ├── auto_sync.py       # Debounced background DuckDB sync
 │   ├── filename_parser.py # Indian FY / month detection from filenames
+│   ├── dedup_engine.py    # Deduplication and row restoration logic
+│   ├── condition_evaluator.py # Core condition testing logic
+│   ├── if_condition_engine.py # Advanced IF condition parser
+│   ├── row_lifecycle.py   # Row lifecycle (deletion/restoration) management
 │   ├── seed.py            # One-time default-company/module/user seeder
 │   ├── migrate_file_paths.py  # One-shot path migration utility
 │   ├── update_readmes.py  # Module-level README generator
 │   └── requirements.txt    # Python dependencies
 ├── frontend/
-│   ├── index.html         # Single-page application UI (~5,400 lines)
+│   ├── index.html         # Single-page application UI (~13,000 lines)
 │   ├── activities.js      # Master-file activity steps viewer
 │   └── notif_logic.js     # Notifications + toasts
 ├── data/                  # Created on first run
@@ -92,15 +96,22 @@ Purchase Tracker Controller/
 - **File details** view showing sheets, rows, and columns
 - **Bulk operations**: Move, Delete, Multi-select
 - **Master File Creation**: Merge folder files into DuckDB for fast processing
+- **Deduplication Engine**: Robust duplicate detection and safe row restoration
 - **Auto-Sync** (optional): New files are appended and deleted files removed from the master in the background
 
-### 3. Rule Mapping (4 Phases)
+### 3. Multi-Validation Environments
+The application isolates rules and processes across three specialized validation pipelines:
+- **Validation 1:** GRN vs Vendor Invoice
+- **Validation 2:** Vendor Invoice vs Tally
+- **Validation 3:** Tally vs Vendor Invoice
+
+### 4. Rule Mapping (4 Phases)
 - **Phase 1**: Select primary data (File / Sheet / Column) and add extra fields (SUM / VLOOKUP)
 - **Phase 2**: Configure matching rules (VLOOKUP, SUMIF, COUNTIF, addition, subtraction, calculation chains)
 - **Phase 3**: Remarks and conditions
 - **Phase 4**: Summary & pivot configuration with chart options
 
-### 4. Activity Window
+### 5. Activity Window
 ETL-style persistent steps that survive across auto-sync cycles:
 - Formula columns (SUM, SUBTRACT, MULTIPLY, DIVIDE, PERCENTAGE, CONCAT, ABS, EXPRESSION, etc.)
 - SUMIF / COUNTIF / VLOOKUP / HLOOKUP across folders
@@ -109,7 +120,7 @@ ETL-style persistent steps that survive across auto-sync cycles:
 - Row Filter (AND / OR conditions)
 - Reorder, enable/disable, and dry-run each step
 
-### 5. Final Processing
+### 6. Final Processing
 - One-click execution of all configured rules
 - Source-file filter (include/exclude specific source files)
 - Phase-wise status tracking
@@ -136,7 +147,7 @@ ETL-style persistent steps that survive across auto-sync cycles:
 
 1. **Run first-time setup** by double-clicking `setup.bat` (only needed once)
 2. **Start the server** by double-clicking `start_server.bat`
-3. **Open browser** to `http://localhost:8000`
+3. **Open browser** to `http://localhost:5000`
 4. **Go to Upload & Files tab**
    - Create folders as needed
    - Upload Excel files via drag-and-drop
@@ -149,7 +160,7 @@ ETL-style persistent steps that survive across auto-sync cycles:
 6. **Configure Rules**
    - Phase 1: Select your primary data column
    - Phase 2: Add matching rules row by row
-   - Phase 3: Set up remarks (coming soon / optional)
+   - Phase 3: Configure condition-based remark rules and outputs (with rule duplication support)
    - Phase 4: Define pivot summaries
 7. **Run Processing**
    - Go to Final Processing tab
@@ -197,7 +208,7 @@ The product is feature-complete for its target use case but has these caveats:
 
 1. **Authentication is stubbed.** `get_current_active_user` and `require_role` in `backend/main.py` always return admin/1. The `bcrypt` / `python-jose` dependencies are declared in `requirements.txt` but the JWT/session flow is not wired up. Roles and page permissions are defined in the database but not enforced. The product is intended to be a single-user, local Windows tool.
 2. **No automated test suite.** There is no `pytest` test suite. A hand-rolled smoke test (`test_master.py` at the project root) exercises the master-file workflow using FastAPI's `TestClient` and can be run manually with `venv\Scripts\python test_master.py`. The `/health` endpoint is the primary runtime verification.
-3. **Windows-only startup scripts.** `start_server.bat`, `start_background.vbs`, and `install_service.bat` are Windows-only. For Linux/macOS, use `python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000` after creating a virtual environment.
+3. **Windows-only startup scripts.** `start_server.bat`, `start_background.vbs`, and `install_service.bat` are Windows-only. For Linux/macOS, use `python -m uvicorn backend.main:app --host 0.0.0.0 --port 5000` after creating a virtual environment.
 4. **Tailwind via CDN.** The frontend loads Tailwind from a CDN at runtime (no build step). The first page load requires internet access for the CDN to respond.
 5. **Very large rule sets** (hundreds of Phase 2 rules) may slow down the rule-loading screen due to sequential per-rule API calls.
 6. **Single-process.** The server runs as one uvicorn worker. No clustering, no queue, no multi-tenant isolation at the runtime level (database-level isolation only).

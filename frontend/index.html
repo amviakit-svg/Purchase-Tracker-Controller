@@ -696,9 +696,9 @@
 
             <!-- Validation Navigation -->
             <div class="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-4 w-fit">
-                <button onclick="switchValidation(1)" id="val-1-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md bg-white shadow-sm text-gray-900">Validation 1</button>
-                <button onclick="switchValidation(2)" id="val-2-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Validation 2</button>
-                <button onclick="switchValidation(3)" id="val-3-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Validation 3</button>
+                <button onclick="switchValidation(1)" id="val-1-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md bg-white shadow-sm text-gray-900">Validation 1 - (GRN vs Vendor Invoice)</button>
+                <button onclick="switchValidation(2)" id="val-2-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Validation 2 - (Vendor Invoice vs Tally)</button>
+                <button onclick="switchValidation(3)" id="val-3-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Validation 3 - (Tally vs Vendor Invoice)</button>
             </div>
 
             <!-- Validation Environment Container -->
@@ -908,9 +908,9 @@
                 <!-- Validation Selector -->
                 <div class="flex justify-center mb-8">
                     <div class="inline-flex bg-gray-100 p-1 rounded-xl space-x-1">
-                        <button onclick="switchFinalValidation(1)" id="final-val-1-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">Validation 1</button>
-                        <button onclick="switchFinalValidation(2)" id="final-val-2-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors bg-white shadow-sm text-gray-900">Validation 2</button>
-                        <button onclick="switchFinalValidation(3)" id="final-val-3-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">Validation 3</button>
+                        <button onclick="switchFinalValidation(1)" id="final-val-1-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">Validation 1 - (GRN vs Vendor Invoice)</button>
+                        <button onclick="switchFinalValidation(2)" id="final-val-2-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors bg-white shadow-sm text-gray-900">Validation 2 - (Vendor Invoice vs Tally)</button>
+                        <button onclick="switchFinalValidation(3)" id="final-val-3-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">Validation 3 - (Tally vs Vendor Invoice)</button>
                     </div>
                 </div>
 
@@ -1000,40 +1000,6 @@
                 <!-- Validation 2: Existing Steps -->
                 <div id="validation-content-2">
 
-                <!-- Step 1: Generate Primary Data -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
-                    <div class="flex items-center justify-between mb-6">
-                        <div>
-                            <h3 class="text-xl font-semibold text-gray-900">Step 1: Generate Primary Data</h3>
-                            <p class="text-gray-600 mt-1 text-sm">Generate the base file containing unique IDs from your Phase 1 configuration.</p>
-                        </div>
-                        <button onclick="generatePrimaryData()" id="phase4-generate-primary-btn" class="bg-indigo-600 text-white font-medium py-2 px-6 rounded-lg hover:bg-indigo-700 transition-colors inline-flex items-center gap-2">
-                            <span id="phase4-generate-spinner" class="spinner-sm hidden"></span>
-                            <span id="phase4-generate-text">Generate Primary Data</span>
-                        </button>
-                    </div>
-
-                    <!-- Collapsible Preview -->
-                    <div id="phase4-primary-preview-container" class="hidden">
-                        <button onclick="togglePrimaryPreview()" class="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900 mb-2 w-full text-left bg-gray-50 p-2 rounded-t-lg border border-gray-200">
-                            <svg id="preview-collapse-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                            <span>Primary Data Preview</span>
-                            <span id="phase4-unique-count" class="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1 rounded-full ml-2">0 unique values</span>
-                        </button>
-                        
-                        <div id="phase4-primary-preview-content" class="bg-white border-b border-l border-r border-gray-200 rounded-b-lg p-4 overflow-x-auto">
-                            <table class="min-w-full text-sm">
-                                <thead>
-                                    <tr id="phase4-primary-preview-header">
-                                        <!-- Headers generated dynamically -->
-                                    </tr>
-                                </thead>
-                                <tbody id="phase4-primary-preview-body"></tbody>
-                            </table>
-                            <div id="phase4-primary-download-container" class="mt-4"></div>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Step 2: Ready to Process -->
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
@@ -1044,8 +1010,8 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
                         </div>
-                        <h3 class="text-xl font-semibold text-gray-900 mb-2">Step 2: Ready to Process</h3>
-                        <p class="text-gray-600 max-w-md mx-auto">All configured rules will be executed in sequence: Phase 2 → Phase 3 → Phase 4</p>
+                        <h3 class="text-xl font-semibold text-gray-900 mb-2">Ready to Process Validation 2</h3>
+                        <p class="text-gray-600 max-w-md mx-auto">All configured rules will be executed in sequence: Phase 1 → Phase 2 → Phase 3 → Phase 4</p>
                     </div>
 
                     <div class="max-w-4xl mx-auto mb-8 bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
@@ -1074,69 +1040,9 @@
                         </div>
                     </div>
 
-                    <!-- Source File Name Filter -->
-                    <div class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
-                        <div class="flex items-center justify-between mb-3">
-                            <h4 class="text-sm font-semibold text-gray-900">Filter by Source File</h4>
-                            <div class="flex items-center space-x-2 text-xs">
-                                <button onclick="selectAllSourceFiles()" class="text-blue-600 hover:text-blue-800 font-medium">Select All</button>
-                                <span class="text-gray-300">|</span>
-                                <button onclick="clearAllSourceFiles()" class="text-red-600 hover:text-red-800 font-medium">Clear All</button>
-                            </div>
-                        </div>
-                        
-                        <div id="source-file-filter-container" class="max-h-52 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1 bg-gray-50">
-                            <p class="text-xs text-gray-500 text-center py-2">Loading source files...</p>
-                        </div>
-                        
-                        <div class="mt-2 flex items-center justify-between">
-                            <span id="source-file-selected-count" class="text-xs text-gray-600 font-medium">0 of 0 selected</span>
-                            <span class="text-xs text-gray-400 italic">All source files are selected by default</span>
-                        </div>
-                    </div>
-
-                    <!-- Custom Filename Input -->
-                    <div class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
-                        <label class="block text-sm font-semibold text-gray-900 mb-2">Output File Details <span class="text-red-500">*</span></label>
-                        <p class="text-xs text-gray-500 mb-3">Select Month and Year. The file name will be fixed as "Validation 2 Processed file [Month] [Year]".</p>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700 mb-1">Month</label>
-                                <select id="output-month" class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    <option value="">Select Month</option>
-                                    <option value="January">January</option>
-                                    <option value="February">February</option>
-                                    <option value="March">March</option>
-                                    <option value="April">April</option>
-                                    <option value="May">May</option>
-                                    <option value="June">June</option>
-                                    <option value="July">July</option>
-                                    <option value="August">August</option>
-                                    <option value="September">September</option>
-                                    <option value="October">October</option>
-                                    <option value="November">November</option>
-                                    <option value="December">December</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700 mb-1">Year</label>
-                                <select id="output-year" class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    <option value="">Select Year</option>
-                                    <option value="2023">2023</option>
-                                    <option value="2024">2024</option>
-                                    <option value="2025">2025</option>
-                                    <option value="2026">2026</option>
-                                    <option value="2027">2027</option>
-                                    <option value="2028">2028</option>
-                                    <option value="2029">2029</option>
-                                    <option value="2030">2030</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
 
                     <button onclick="processAllRules()" id="process-btn" class="w-full bg-blue-600 text-white text-lg font-semibold py-4 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center space-x-3">
-                        <span>Process All Rules</span>
+                        <span>Process Validation 2 rules</span>
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                         </svg>
@@ -1219,26 +1125,7 @@
                         </div>
 
 
-                        <!-- Source File Name Filter -->
-                        <div class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
-                            <div class="flex items-center justify-between mb-3">
-                                <h4 class="text-sm font-semibold text-gray-900">Filter by Source File</h4>
-                                <div class="flex items-center space-x-2 text-xs">
-                                    <button onclick="selectAllSourceFiles(3)" class="text-blue-600 hover:text-blue-800 font-medium">Select All</button>
-                                    <span class="text-gray-300">|</span>
-                                    <button onclick="clearAllSourceFiles(3)" class="text-red-600 hover:text-red-800 font-medium">Clear All</button>
-                                </div>
-                            </div>
-                            
-                            <div id="source-file-filter-container-3" class="max-h-52 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1 bg-gray-50">
-                                <p class="text-xs text-gray-500 text-center py-2">Loading source files...</p>
-                            </div>
-                            
-                            <div class="mt-2 flex items-center justify-between">
-                                <span id="source-file-selected-count-3" class="text-xs text-gray-600 font-medium">0 of 0 selected</span>
-                                <span class="text-xs text-gray-400 italic">All source files are selected by default</span>
-                            </div>
-                        </div>
+
 
                         <!-- Process Action -->
                         <div class="text-center">
@@ -4446,6 +4333,12 @@
                 bodyEl.innerHTML = statsCols.map(col => {
                     const isProtected = col.column === 'Source_File_Name';
                     const rowClass = col.hidden ? 'opacity-50 bg-gray-50' : '';
+                    let mappings = {};
+                    try {
+                        mappings = JSON.parse(masterData.filter_mappings || '{}');
+                    } catch (e) {}
+                    const currentRole = Object.keys(mappings).find(key => mappings[key] === col.column) || '';
+                    
                     return `
                     <tr class="${rowClass}">
                         <td class="px-3 py-2 text-sm text-gray-900 font-medium ${col.hidden ? 'line-through text-gray-500' : ''}">${col.column}</td>
@@ -4477,6 +4370,11 @@
                                     </svg>
                                 </button>`
                             }
+                            <select onchange="updateColumnFilterMapping('${col.column.replace(/'/g, "\\'")}', this.value)" class="ml-2 text-xs border border-gray-300 rounded px-1 py-1 outline-none focus:ring-1 ring-blue-500 bg-white">
+                                <option value="">No Filter Role</option>
+                                <option value="Period" ${currentRole === 'Period' ? 'selected' : ''}>Map as Period</option>
+                                <option value="OrderID" ${currentRole === 'OrderID' ? 'selected' : ''}>Map as Order ID</option>
+                            </select>
                         </td>
                     </tr>
                 `}).join('');
@@ -4485,6 +4383,35 @@
                 console.error('Error loading stats:', error);
                 const bodyEl = document.getElementById('master-stats-body');
                 if (bodyEl) bodyEl.innerHTML = '<tr><td colspan="6" class="px-3 py-2 text-sm text-red-500 text-center">Failed to load statistics. Please try again.</td></tr>';
+            }
+        }
+
+        async function updateColumnFilterMapping(columnName, role) {
+            try {
+                let mappings = {};
+                try { mappings = JSON.parse(masterData.filter_mappings || '{}'); } catch(e){}
+                
+                // Remove this column from any existing role
+                for (let key in mappings) {
+                    if (mappings[key] === columnName) delete mappings[key];
+                }
+                
+                // Add to new role if selected
+                if (role) mappings[role] = columnName;
+                
+                const data = await apiCall(`/api/master/${currentFolderId}/filter-mappings`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ filter_mappings: mappings })
+                });
+                
+                if (data.success) {
+                    masterData.filter_mappings = JSON.stringify(mappings);
+                    showToast('Filter mapping saved successfully', 'success');
+                } else {
+                    showToast('Failed to save mapping', 'error');
+                }
+            } catch (error) {
+                showToast(error.message || 'Error saving filter mapping', 'error');
             }
         }
 
@@ -5181,9 +5108,12 @@
                     const saveText = document.getElementById('phase1-save-text');
                     if (saveText) saveText.textContent = 'Regenerate Primary Data';
 
-                    document.getElementById('phase4-primary-preview-container').classList.remove('hidden');
-                    document.getElementById('phase4-primary-preview-content').classList.add('hidden'); // collapse by default
-                    document.getElementById('preview-collapse-icon').classList.add('-rotate-90');
+                    const previewContainer = document.getElementById('phase4-primary-preview-container');
+                    if (previewContainer) {
+                        previewContainer.classList.remove('hidden');
+                        document.getElementById('phase4-primary-preview-content').classList.add('hidden'); // collapse by default
+                        document.getElementById('preview-collapse-icon').classList.add('-rotate-90');
+                    }
                     
                     // Add download button
                     const downloadBtn = document.createElement('div');
@@ -5209,7 +5139,9 @@
                         generateBtnText.textContent = 'Regenerate Primary Data';
                     }
                     
-                    await loadPrimaryPreview(config.primary_file, config.column, config.fields || []);
+                    if (previewContainer) {
+                        await loadPrimaryPreview(config.primary_file, config.column, config.fields || []);
+                    }
                 }
             } catch (e) {
                 console.error('Error loading Phase 4 primary preview state:', e);
@@ -7856,7 +7788,7 @@
                     // sequence indicator remains visible to the user.
                 }
                 if (value === selectedValue || col === selectedValue) found = true;
-                html += `<option value="${value}" ${value === selectedValue ? 'selected' : ''}>${label}</option>`;
+                html += `<option value="${value}" ${(value === selectedValue || col === selectedValue) ? 'selected' : ''}>${label}</option>`;
             });
             if (selectedValue && !found) {
                 html += `<option value="${selectedValue}" class="text-red-500" selected>${selectedValue} (Missing from Phase 1)</option>`;
@@ -7886,11 +7818,18 @@
                         <span class="text-sm font-medium text-gray-700">Remark Text:</span>
                         <input type="text" class="remark-text w-64 border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g. Order Validated" maxlength="100">
                     </div>
-                    <button onclick="deleteRemarkRule(${ruleId})" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                        </svg>
-                    </button>
+                    <div class="flex items-center space-x-1">
+                        <button onclick="duplicateRemarkRule(${ruleId})" title="Duplicate Rule" class="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path>
+                            </svg>
+                        </button>
+                        <button onclick="deleteRemarkRule(${ruleId})" title="Delete Rule" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Conditions Container -->
@@ -7920,6 +7859,75 @@
             }
         }
 
+        function duplicateRemarkRule(ruleId) {
+            const originalRuleDiv = document.getElementById(`remark-rule-${ruleId}`);
+            if (!originalRuleDiv) return;
+            
+            const clone = originalRuleDiv.cloneNode(true);
+            
+            // Generate new Rule ID
+            const newRuleId = Date.now() + Math.floor(Math.random() * 1000);
+            clone.id = `remark-rule-${newRuleId}`;
+            
+            // Update inline onclick handlers for the rule
+            const deleteBtn = clone.querySelector(`button[onclick="deleteRemarkRule(${ruleId})"]`);
+            if (deleteBtn) deleteBtn.setAttribute('onclick', `deleteRemarkRule(${newRuleId})`);
+            
+            const duplicateBtn = clone.querySelector(`button[onclick="duplicateRemarkRule(${ruleId})"]`);
+            if (duplicateBtn) duplicateBtn.setAttribute('onclick', `duplicateRemarkRule(${newRuleId})`);
+            
+            const addCondBtn = clone.querySelector(`button[onclick="addConditionRow(${ruleId})"]`);
+            if (addCondBtn) addCondBtn.setAttribute('onclick', `addConditionRow(${newRuleId})`);
+            
+            // Update condition rows
+            const originalConds = Array.from(originalRuleDiv.querySelectorAll('.condition-row'));
+            const clonedConds = Array.from(clone.querySelectorAll('.condition-row'));
+            
+            clonedConds.forEach((condClone, index) => {
+                const origCond = originalConds[index];
+                if (!origCond) return;
+                
+                const oldCondId = origCond.id.replace('condition-', '');
+                const newCondId = conditionCounter++;
+                
+                condClone.id = `condition-${newCondId}`;
+                
+                const delBtn = condClone.querySelector(`button[onclick="deleteConditionRow(${oldCondId})"]`);
+                if (delBtn) delBtn.setAttribute('onclick', `deleteConditionRow(${newCondId})`);
+                
+                const opSelect = condClone.querySelector('.cond-operator');
+                if (opSelect) opSelect.setAttribute('onchange', `onConditionChange(${newCondId})`);
+                
+                const vtypeSelect = condClone.querySelector('.cond-vtype');
+                if (vtypeSelect) vtypeSelect.setAttribute('onchange', `onConditionChange(${newCondId})`);
+                
+                // cloneNode does not copy the current state of form elements, so we copy them manually
+                const origSelects = origCond.querySelectorAll('select');
+                const cloneSelects = condClone.querySelectorAll('select');
+                origSelects.forEach((s, i) => {
+                    if (cloneSelects[i]) cloneSelects[i].value = s.value;
+                });
+                
+                const origInputs = origCond.querySelectorAll('input');
+                const cloneInputs = condClone.querySelectorAll('input');
+                origInputs.forEach((input, i) => {
+                    if (cloneInputs[i]) cloneInputs[i].value = input.value;
+                });
+            });
+            
+            // Restore rule level inputs
+            const origRemarkInput = originalRuleDiv.querySelector('.remark-text');
+            const clonedRemarkInput = clone.querySelector('.remark-text');
+            if (origRemarkInput && clonedRemarkInput) {
+                clonedRemarkInput.value = origRemarkInput.value;
+            }
+            
+            // Insert after original
+            originalRuleDiv.insertAdjacentElement('afterend', clone);
+            
+            showToast('Remark rule duplicated', 'success');
+        }
+
         function addConditionRow(ruleId) {
             const container = document.querySelector(`#remark-rule-${ruleId} .conditions-container`);
             const condId = conditionCounter++;
@@ -7933,10 +7941,7 @@
                 <span class="text-xs font-medium text-gray-500 w-6">IF</span>
                 <select class="cond-column w-32 text-xs border border-gray-300 rounded px-2 py-1.5">
                     <option value="">Column</option>
-                    ${phase2Cols.map(col => {
-                        const label = col === 'Order ID' ? (window.primaryValueColumnName || 'Order ID') : col;
-                        return `<option value="${col}">${label}</option>`;
-                    }).join('')}
+                    ${getColumnOptionsHtml('', phase2Cols)}
                 </select>
                 <select class="cond-operator w-40 text-xs border border-gray-300 rounded px-2 py-1.5" onchange="onConditionChange(${condId})">
                     ${IF_AGG_OPTIONS.map(o => `<option value="${o.v}">${o.label}</option>`).join('')}
@@ -7967,11 +7972,7 @@
             const valueContainer = condDiv.querySelector('.cond-value-container');
             const phase2Cols = getPhase2Columns();
             
-            let colOptions = '<option value="">Select Column</option>';
-            phase2Cols.forEach(col => {
-                const label = col === 'Order ID' ? (window.primaryValueColumnName || 'Order ID') : col;
-                colOptions += `<option value="${col}">${label}</option>`;
-            });
+            let colOptions = '<option value="">Select Column</option>' + getColumnOptionsHtml('', phase2Cols);
             
             const aggDef = IF_AGG_OPTIONS.find(o => o.v === operator) || {};
             
@@ -8396,11 +8397,18 @@
                                 <input type="text" class="remark-text w-64 border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
                                     placeholder="e.g. Order Validated" maxlength="100" value="${rule.remark || ''}">
                             </div>
-                            <button onclick="deleteRemarkRule(${ruleId})" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                </svg>
-                            </button>
+                            <div class="flex items-center space-x-1">
+                                <button onclick="duplicateRemarkRule(${ruleId})" title="Duplicate Rule" class="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50 transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="deleteRemarkRule(${ruleId})" title="Delete Rule" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                         <div class="conditions-container space-y-2">
                             ${conditionsHtml}
@@ -9229,7 +9237,11 @@
                 let totalRows = 0;
                 let lastDateStr = 'Never';
                 let maxDate = 0;
-                let valName = `Validation ${i} Report`;
+                let valName;
+                if (i === 1) valName = "Validation 1 - (GRN vs Vendor Invoice)";
+                else if (i === 2) valName = "Validation 2 - (Vendor Invoice vs Tally)";
+                else if (i === 3) valName = "Validation 3 - (Tally vs Vendor Invoice)";
+                else valName = `Validation ${i}`;
                 
                 const valNode = tree.find(n => n.validation_id === i || n.validation_name.includes(i.toString()));
                 if (valNode) {
@@ -9934,28 +9946,9 @@
                 
                 // Get selected source files
                 let selectedSourceFiles = [];
-                if (vid !== 1) {
-                    selectedSourceFiles = getSelectedSourceFiles(vid);
-                    if (selectedSourceFiles.length === 0) {
-                        if (btn) btn.disabled = false;
-                        if (spinner) spinner.classList.add('hidden');
-                        showToast('Please select at least one source file', 'error');
-                        return;
-                    }
-                }
+                // Validation 1, 2, 3 no longer use source file selectors in UI.
                 
-                // Validate custom output filename (Only required for Validation 2 now)
-                const monthInput = document.getElementById(`output-month${suffix}`);
-                const yearInput = document.getElementById(`output-year${suffix}`);
-                const month = monthInput ? monthInput.value : '';
-                const year = yearInput ? yearInput.value : '';
-                
-                if (vid === 2 && (!month || !year)) {
-                    if (btn) btn.disabled = false;
-                    if (spinner) spinner.classList.add('hidden');
-                    showToast('Please select both Month and Year', 'error');
-                    return;
-                }
+
                 
                 const now = new Date();
                 const pad = (n) => n.toString().padStart(2, '0');
@@ -9963,11 +9956,11 @@
                 
                 let customFilename;
                 if (vid === 1) {
-                    customFilename = `GRN vs Vendor Invoice Reconciliation Report ${dtStr}`;
+                    customFilename = `Validation 1 - (GRN vs Vendor Invoice)`;
                 } else if (vid === 3) {
-                    customFilename = `Tally vs Vendor Invoice Reconciliation Report ${dtStr}`;
+                    customFilename = `Validation 3 - (Tally vs Vendor Invoice)`;
                 } else {
-                    customFilename = `Vendor Invoice vs Tally Reconciliation Report ${dtStr}`;
+                    customFilename = `Validation 2 - (Vendor Invoice vs Tally)`;
                 }
                 
                 // Reset all statuses
@@ -9981,11 +9974,57 @@
                 if(p3Stat) p3Stat.textContent = 'Pending';
                 if(p4Stat) p4Stat.textContent = 'Pending';
                 
+                // Automate Phase 1 logic for Validation 2
+                if (vid === 2) {
+                    if (p1Stat) p1Stat.textContent = 'Running...';
+                    try {
+                        const p1Data = await apiCall(`/api/rules/1?validation_id=${vid}`);
+                        if (!p1Data.success || !p1Data.rules || p1Data.rules.length === 0) {
+                            throw new Error("No Phase 1 rule found. Please configure and save Phase 1 first.");
+                        }
+                        
+                        const p1Rule = p1Data.rules[p1Data.rules.length - 1];
+                        let p1Config = JSON.parse(p1Rule.config);
+                        
+                        const generateForm = new FormData();
+                        generateForm.append('file_id', p1Config.file_id);
+                        generateForm.append('sheet_name', p1Config.sheet_name);
+                        generateForm.append('column_name', p1Config.column);
+                        generateForm.append('header_row', 1);
+                        generateForm.append('fields', JSON.stringify(p1Config.fields || []));
+                        generateForm.append('validation_id', vid);
+
+                        const genData = await apiCall('/api/primary/generate', { method: 'POST', body: generateForm });
+                        if (!genData || !genData.success) {
+                            throw new Error('Failed to generate primary data: ' + (genData?.detail || 'Unknown error'));
+                        }
+
+                        p1Config.primary_file = genData.primary_file;
+                        p1Config.total_unique = genData.total_unique;
+                        
+                        const updateForm = new FormData();
+                        updateForm.append('phase', 1);
+                        updateForm.append('config', JSON.stringify(p1Config));
+                        updateForm.append('validation_id', vid);
+                        
+                        const updateData = await apiCall('/api/rules', { method: 'POST', body: updateForm });
+                        if (!updateData || !updateData.success) {
+                            throw new Error('Failed to update Phase 1 rule with generated file');
+                        }
+                        
+                        if (p1Stat) p1Stat.textContent = 'Completed';
+                    } catch (e) {
+                        if (btn) btn.disabled = false;
+                        if (spinner) spinner.classList.add('hidden');
+                        showToast(e.message, 'error');
+                        if (p1Stat) p1Stat.textContent = 'Failed';
+                        return;
+                    }
+                }
+
                 // Start background processing with selected source files
                 const formData = new FormData();
-                if (vid !== 1) {
-                    formData.append('selected_source_files', JSON.stringify(selectedSourceFiles));
-                }
+                // All validations leave selected_source_files empty (backend defaults to all files)
                 formData.append('custom_filename', customFilename);
                 formData.append('force', force);
                 formData.append('validation_id', vid);

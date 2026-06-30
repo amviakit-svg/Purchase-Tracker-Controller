@@ -63,6 +63,10 @@ echo Health check: http://localhost:5000/health
 echo Press Ctrl+C to stop
 echo.
 
+:: ---- START USER PORTAL (VITE DEV SERVER) ----
+echo Starting User Portal Frontend (Vite)...
+start "User Portal Frontend" cmd /c "cd user-frontend && npm run dev"
+
 :: ---- AUTO-RESTART WRAPPER ----
 :RESTART_LOOP
 

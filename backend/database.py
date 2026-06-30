@@ -278,6 +278,13 @@ def init_db():
                 conn.commit()
             except Exception:
                 pass
+                
+        if 'filter_mappings' not in cols:
+            try:
+                conn.execute("ALTER TABLE master_files ADD COLUMN filter_mappings TEXT DEFAULT '{}'")
+                conn.commit()
+            except Exception:
+                pass
 
         # Master Activities table (Activity Window - ETL-style persistent steps)
         # Captures user-applied transformations (formulas, find/replace, column ops)
@@ -2211,11 +2218,11 @@ def get_processed_tree(company_id=None, module_id=None):
         
             val_id = r.get('validation')
             if val_id == 1:
-                val_name = "Validation 1 Report"
+                val_name = "Validation 1 - (GRN vs Vendor Invoice)"
             elif val_id == 2:
-                val_name = "Validation 2 Report"
+                val_name = "Validation 2 - (Vendor Invoice vs Tally)"
             elif val_id == 3:
-                val_name = "Validation 3 Report"
+                val_name = "Validation 3 - (Tally vs Vendor Invoice)"
             else:
                 val_name = f"Validation {val_id} Report" if val_id else "Other Reports"
             
