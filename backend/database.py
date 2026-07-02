@@ -472,7 +472,7 @@ def init_db():
 
         # Insert default modules
         conn.execute('''
-            INSERT OR IGNORE INTO modules (id, name, code, description) VALUES (1, 'Website module', 'WEBSITE', 'Default Workspace')
+            INSERT OR IGNORE INTO modules (id, name, code, description) VALUES (1, 'E-Retail', 'WEBSITE', 'Default Workspace')
         ''')
 
         # ---- Auto-seed when DB is empty (no template.db available) ----

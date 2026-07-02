@@ -2,10 +2,12 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 export async function apiCall(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
+    const moduleId = localStorage.getItem('module_id') || "1";
     try {
         const response = await fetch(url, {
             headers: {
                 'Content-Type': 'application/json',
+                'X-Module-ID': String(moduleId),
                 ...options.headers,
             },
             ...options,
@@ -16,12 +18,15 @@ export async function apiCall(endpoint, options = {}) {
             let errorData = null;
             try {
                 errorData = await response.json();
-                errorMsg = errorData.detail || errorData.message || errorMsg;
+                errorMsg = errorData.detail || errorData.message || errorData.reason || errorData.error || errorMsg;
             } catch (e) {
                 const text = await response.text();
                 if (text) errorMsg = text.substring(0, 100);
             }
-            throw new Error(errorMsg);
+            const error = new Error(errorMsg);
+            error.data = errorData;
+            error.status = response.status;
+            throw error;
         }
 
         return await response.json();
@@ -34,26 +39,33 @@ export async function apiCall(endpoint, options = {}) {
 // Ensure FormData works correctly without Content-Type override
 export async function apiCallForm(endpoint, formData) {
     const url = `${API_BASE_URL}${endpoint}`;
+    const moduleId = localStorage.getItem('module_id') || "1";
     try {
         const response = await fetch(url, {
             method: 'POST',
+            headers: {
+                'X-Module-ID': String(moduleId)
+            },
             body: formData,
         });
 
         if (!response.ok) {
             let errorMsg = `Server error ${response.status}`;
+            let errorData = null;
             try {
-                const errorData = await response.json();
-                errorMsg = errorData.detail || errorData.message || errorMsg;
+                errorData = await response.json();
+                errorMsg = errorData.detail || errorData.message || errorData.reason || errorData.error || errorMsg;
             } catch (e) {
                 // Ignore
             }
-            throw new Error(errorMsg);
+            const error = new Error(errorMsg);
+            error.data = errorData;
+            error.status = response.status;
+            throw error;
         }
 
         return await response.json();
     } catch (error) {
-        console.error('API Error:', error);
         throw error;
     }
 }

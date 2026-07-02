@@ -110,7 +110,7 @@
                     </div>
                     <h1 class="text-xl font-bold text-gray-900" id="tool-header-title">Purchase Tracker Controller</h1>
                     <select id="local-module-select" onchange="changeLocalModule(this.value)" class="ml-4 px-3 py-1 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="1">Website module</option>
+                        <option value="1">E-Retail</option>
                     </select>
                     <button onclick="showCreateModuleModal()" class="ml-2 px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors" title="Create New Module">
                         + New
@@ -250,8 +250,8 @@
                 <div class="lg:col-span-1">
                     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                         <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                            <h3 class="text-sm font-semibold text-gray-900">Financial Years</h3>
-                            <span class="text-xs text-gray-500">Indian FY (Apr-Mar)</span>
+                            <h3 class="text-sm font-semibold text-gray-900">Validation Report</h3>
+                            <span class="text-xs text-gray-500"></span>
                         </div>
                         <div id="processed-tree-container" class="p-2 max-h-[600px] overflow-y-auto">
                             <p class="text-sm text-gray-500 text-center py-8">Click Refresh to load processed files</p>
@@ -4725,21 +4725,25 @@
                 document.getElementById('phase-4-btn').textContent = "Phase 4: Summary";
             }
 
-            
             // Reload all phases for the new validation only if it's the first time
             if (isFirstLoad && !document.getElementById('page-rules').classList.contains('hidden')) {
                 loadSavedPhase1().then(async () => {
+                    // Ensure GLOBAL_PHASE1_COLUMNS is populated BEFORE downstream UI renders
+                    if (typeof getPhase1Columns === 'function') {
+                        await getPhase1Columns();
+                    }
+                    
                     if (window.currentValidation === 2) {
                         await loadSavedPhase2();
                     }
                     await loadSavedPhase3();
                     await loadSavedPhase4();
                 });
-            }
-            
-            // Unconditionally refresh the GLOBAL_PHASE1_COLUMNS for the active tab
-            if (typeof getPhase1Columns === 'function') {
-                getPhase1Columns();
+            } else {
+                // If not first load, just refresh columns asynchronously
+                if (typeof getPhase1Columns === 'function') {
+                    getPhase1Columns();
+                }
             }
         }
         function switchPhase(phase) {
@@ -5737,27 +5741,38 @@
             const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
             
             let primaryFiles = [];
-            if (primaryData.success && primaryData.files && primaryData.files.length > 0) {
-                const sorted = primaryData.files.sort((a, b) => new Date(b.created) - new Date(a.created));
-                const latest = sorted[0];
+            let hasPhase1Rules = false;
+            let columnName = 'Primary Data';
+            let totalUnique = '';
+            
+            if (rulesData.success && rulesData.rules && rulesData.rules.length > 0) {
+                hasPhase1Rules = true;
+                const latestRule = rulesData.rules[rulesData.rules.length - 1];
+                try {
+                    const config = JSON.parse(latestRule.config);
+                    if (config.column) columnName = config.column;
+                    if (config.total_unique) totalUnique = ` (${config.total_unique.toLocaleString()} unique)`;
+                } catch(e) {}
+            }
+            window.primaryValueColumnName = columnName;
+
+            if ((primaryData.success && primaryData.files && primaryData.files.length > 0) || hasPhase1Rules) {
+                let realName = 'Awaiting File Upload';
+                let filePath = '';
                 
-                let columnName = 'Primary Data';
-                let totalUnique = '';
-                if (rulesData.success && rulesData.rules && rulesData.rules.length > 0) {
-                    const latestRule = rulesData.rules[rulesData.rules.length - 1];
-                    try {
-                        const config = JSON.parse(latestRule.config);
-                        if (config.column) columnName = config.column;
-                        if (config.total_unique) totalUnique = ` (${config.total_unique.toLocaleString()} unique)`;
-                    } catch(e) {}
+                if (primaryData.success && primaryData.files && primaryData.files.length > 0) {
+                    const sorted = primaryData.files.sort((a, b) => new Date(b.created) - new Date(a.created));
+                    const latest = sorted[0];
+                    realName = latest.name;
+                    filePath = latest.path;
                 }
                 
                 primaryFiles = [{
                     id: `primary_latest`,
                     original_name: `Primary file${totalUnique}`,
                     is_primary: true,
-                    file_path: latest.path,
-                    real_name: latest.name
+                    file_path: filePath,
+                    real_name: realName
                 }];
             }
 
@@ -7062,31 +7077,38 @@
             const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
             
             let primaryFiles = [];
-            if (primaryData.success && primaryData.files && primaryData.files.length > 0) {
-                // Sort by creation date (newest first) and take only the LATEST one
-                const sorted = primaryData.files.sort((a, b) => new Date(b.created) - new Date(a.created));
-                const latest = sorted[0];
+            let hasPhase1Rules = false;
+            let columnName = 'Primary Data';
+            let totalUnique = '';
+            
+            if (rulesData.success && rulesData.rules && rulesData.rules.length > 0) {
+                hasPhase1Rules = true;
+                const latestRule = rulesData.rules[rulesData.rules.length - 1];
+                try {
+                    const config = JSON.parse(latestRule.config);
+                    if (config.column) columnName = config.column;
+                    if (config.total_unique) totalUnique = ` (${config.total_unique.toLocaleString()} unique)`;
+                } catch(e) {}
+            }
+            window.primaryValueColumnName = columnName;
+
+            if ((primaryData.success && primaryData.files && primaryData.files.length > 0) || hasPhase1Rules) {
+                let realName = 'Awaiting File Upload';
+                let filePath = '';
                 
-                // Get column name from the rule config
-                let columnName = 'Primary Data';
-                let totalUnique = '';
-                if (rulesData.success && rulesData.rules && rulesData.rules.length > 0) {
-                    // Get the latest rule
-                    const latestRule = rulesData.rules[rulesData.rules.length - 1];
-                    try {
-                        const config = JSON.parse(latestRule.config);
-                        if (config.column) columnName = config.column;
-                        if (config.total_unique) totalUnique = ` (${config.total_unique.toLocaleString()} unique)`;
-                    } catch(e) {}
+                if (primaryData.success && primaryData.files && primaryData.files.length > 0) {
+                    const sorted = primaryData.files.sort((a, b) => new Date(b.created) - new Date(a.created));
+                    const latest = sorted[0];
+                    realName = latest.name;
+                    filePath = latest.path;
                 }
-                window.primaryValueColumnName = columnName;
                 
                 primaryFiles = [{
                     id: `primary_latest`,
                     original_name: `Primary file${totalUnique}`,
                     is_primary: true,
-                    file_path: latest.path,
-                    real_name: latest.name
+                    file_path: filePath,
+                    real_name: realName
                 }];
             }
 
@@ -9147,6 +9169,10 @@
             `;
             
             tree.forEach((valNode, valIdx) => {
+                if (valNode.validation_name.includes("Validation 1")) valNode.validation_name = "GRN vs Vendor Invoice";
+                else if (valNode.validation_name.includes("Validation 2")) valNode.validation_name = "Vendor Invoice vs Tally";
+                else if (valNode.validation_name.includes("Validation 3")) valNode.validation_name = "Tally vs Vendor Invoice";
+                
                 const valName = valNode.validation_name;
                 
                 // Calculate total files for this Validation node
@@ -9230,105 +9256,33 @@
                 return;
             }
 
-            let html = '<div class="grid grid-cols-1 md:grid-cols-3 gap-6 p-4">';
+            let targetValIdx = 0;
+            let targetFyIdx = 0;
+            let targetMnIdx = 0;
             
-            for (let i = 1; i <= 3; i++) {
-                let fileCount = 0;
-                let totalRows = 0;
-                let lastDateStr = 'Never';
-                let maxDate = 0;
-                let valName;
-                if (i === 1) valName = "Validation 1 - (GRN vs Vendor Invoice)";
-                else if (i === 2) valName = "Validation 2 - (Vendor Invoice vs Tally)";
-                else if (i === 3) valName = "Validation 3 - (Tally vs Vendor Invoice)";
-                else valName = `Validation ${i}`;
+            // Try to find Validation 1
+            const val1Idx = tree.findIndex(n => n.validation_id === 1 || (n.validation_name && n.validation_name.includes("GRN vs Vendor Invoice")));
+            
+            if (val1Idx !== -1 && tree[val1Idx].years && tree[val1Idx].years.length > 0) {
+                targetValIdx = val1Idx;
+                targetFyIdx = tree[targetValIdx].years.length - 1;
                 
-                const valNode = tree.find(n => n.validation_id === i || n.validation_name.includes(i.toString()));
-                if (valNode) {
-                    valName = valNode.validation_name;
-                    valNode.years.forEach(fy => {
-                        fy.months.forEach(mn => {
-                            if(mn.files) {
-                                fileCount += mn.files.length;
-                                mn.files.forEach(f => {
-                                    if (f.total_rows) totalRows += f.total_rows;
-                                    if (f.created_at) {
-                                        try {
-                                            const parts = f.created_at.split(' ');
-                                            const dParts = parts[0].split('-');
-                                            const tParts = parts[1].split(':');
-                                            const dateObj = new Date(dParts[0], dParts[1]-1, dParts[2], tParts[0], tParts[1], tParts[2]);
-                                            if (dateObj.getTime() > maxDate) {
-                                                maxDate = dateObj.getTime();
-                                                lastDateStr = `${dParts[2]}-${dParts[1]}-${dParts[0]}`;
-                                            }
-                                        } catch(e) {}
-                                    }
-                                });
-                            }
-                        });
-                    });
+                if (tree[targetValIdx].years[targetFyIdx].months && tree[targetValIdx].years[targetFyIdx].months.length > 0) {
+                    targetMnIdx = tree[targetValIdx].years[targetFyIdx].months.length - 1;
                 }
-                
-                let icon = '';
-                if (i === 1) {
-                    icon = `<svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>`;
-                } else if (i === 2) {
-                    icon = `<svg class="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>`;
-                } else {
-                    icon = `<svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>`;
+            } else if (tree[0].years && tree[0].years.length > 0) {
+                targetFyIdx = tree[0].years.length - 1;
+                if (tree[0].years[targetFyIdx].months && tree[0].years[targetFyIdx].months.length > 0) {
+                    targetMnIdx = tree[0].years[targetFyIdx].months.length - 1;
                 }
-
-                const color = i === 1 ? 'blue' : (i === 2 ? 'purple' : 'green');
-
-                html += `
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col items-center justify-center text-center transition-all hover:shadow-md hover:border-${color}-300 relative overflow-hidden">
-                        <div class="absolute inset-0 bg-gradient-to-br from-transparent to-${color}-50 opacity-50 pointer-events-none"></div>
-                        <div class="w-16 h-16 rounded-full bg-${color}-50 flex items-center justify-center mb-4 z-10 shadow-sm border border-${color}-100">
-                            ${icon}
-                        </div>
-                        <h4 class="text-lg font-semibold text-gray-800 mb-2 z-10">${valName}</h4>
-                        <div class="text-4xl font-bold text-${color}-600 mb-1 z-10 tracking-tight">${fileCount}</div>
-                        <p class="text-sm font-medium text-gray-500 mb-4 z-10">Total Processed Files</p>
-                        
-                        <div class="w-full pt-4 border-t border-gray-100 flex justify-between items-center z-10">
-                            <div class="flex flex-col items-start">
-                                <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Total Rows</span>
-                                <span class="text-sm font-semibold text-gray-700">${totalRows.toLocaleString()}</span>
-                            </div>
-                            <div class="flex flex-col items-end">
-                                <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Last Run</span>
-                                <span class="text-sm font-semibold text-gray-700">${lastDateStr}</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
             }
             
-            html += '</div>';
-            
-            // Add charts container
-            html += `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 mt-2">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        <h4 class="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Processing Trends</h4>
-                        <div class="h-64 w-full relative">
-                            <canvas id="dashboardTrendChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        <h4 class="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Data Volume (Rows)</h4>
-                        <div class="h-64 w-full relative">
-                            <canvas id="dashboardVolumeChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            container.innerHTML = html;
-            
-            // Render charts after a short delay to ensure DOM is ready
-            setTimeout(() => renderDashboardCharts(tree), 50);
+            // Expand the tree nodes so the selected item is visible
+            document.querySelectorAll('.val-children-container, .fy-children-container').forEach(el => el.classList.remove('hidden'));
+            document.querySelectorAll('svg[id^="val-icon-"], svg[id^="fy-icon-"]').forEach(el => el.classList.add('rotate-90'));
+
+            // Select the most recent month
+            selectMonth(targetValIdx, targetFyIdx, targetMnIdx);
         }
         
         let dashboardTrendChartInstance = null;
@@ -13066,7 +13020,7 @@
         async function deleteCurrentModule() {
             const moduleId = localStorage.getItem('module_id') || "1";
             if (moduleId === "1") {
-                alert("Cannot delete the Website module.");
+                alert("Cannot delete the E-Retail module.");
                 return;
             }
             
@@ -13184,6 +13138,11 @@ async function val13LoadAndSave() {
                 if (typeof getPhase1Columns === 'function') await getPhase1Columns();
                 if (typeof resequenceOutputColumns === 'function') resequenceOutputColumns();
                 
+                // Refresh subsequent UI phases so synced columns reflect in dropdowns immediately
+                if (typeof loadAvailableColumnsForSummary === 'function') await loadAvailableColumnsForSummary();
+                if (typeof loadSavedPhase2 === 'function') await loadSavedPhase2();
+                if (typeof loadSavedPhase3 === 'function') await loadSavedPhase3();
+                
                 document.getElementById('val13-phase1-load-text').textContent = 'Synced & Saved!';
                 showToast('Master file synced and saved successfully!', 'success');
                 setTimeout(() => {
@@ -13223,8 +13182,14 @@ async function val13LoadFileHeadersSilent(folderId) {
             window.GLOBAL_PHASE1_COLUMNS = val13CurrentColumns;
             val13RenderColumns();
             document.getElementById('val13-phase1-preview-section').classList.remove('hidden');
-            if (typeof getPhase1Columns === 'function') await getPhase1Columns();
+            // We intentionally do NOT call getPhase1Columns() here, because that would 
+            // fetch the old saved rule from the backend and overwrite our newly populated GLOBAL_PHASE1_COLUMNS.
             if (typeof resequenceOutputColumns === 'function') resequenceOutputColumns();
+            
+            // Refresh subsequent UI phases
+            if (typeof loadAvailableColumnsForSummary === 'function') await loadAvailableColumnsForSummary();
+            if (typeof loadSavedPhase2 === 'function') await loadSavedPhase2();
+            if (typeof loadSavedPhase3 === 'function') await loadSavedPhase3();
         }
     } catch(e) {
         console.error(e);

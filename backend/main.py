@@ -263,7 +263,7 @@ async def create_local_module(module: ModuleCreate):
 async def delete_local_module(module_id: int):
     # Prevent deleting the default module (ID 1)
     if module_id == 1:
-        return JSONResponse(status_code=400, content={"success": False, "error": "Cannot delete the Website module."})
+        return JSONResponse(status_code=400, content={"success": False, "error": "Cannot delete the E-Retail module."})
         
     conn = get_db_connection()
     try:
@@ -1019,7 +1019,8 @@ async def upload_file(
                 add_notification(cid, mid, "duplicate_upload", f"Duplicate file '{original_filename}' upload attempted.", user_id=uid)
                 
                 err = format_storage_error("file_exists", {"name": original_filename, "prompt_replace": True})
-                return JSONResponse(status_code=409, content=err)
+                # Returning 200 instead of 409 to prevent the browser from logging native network errors
+                return JSONResponse(status_code=200, content=err)
             else:
                 # We are replacing. Move old file to recycle bin and delete DB record.
                 import time
@@ -3523,24 +3524,24 @@ async def api_delete_master_rows(
 
         # AUTO-CAPTURE: ROW_DELETE activity (persists so auto-sync keeps them deleted)
         activity_id = None
-        try:
-            cid_d = (current_user or {}).get('company_id') or master.get('company_id')
-            mid_d = (current_user or {}).get('module_id') or master.get('module_id')
-            # Append to payload (so multiple deletes accumulate) and write
-            payload = {
-                "fingerprints": fps,
-                "deleted_count": int(affected),
-                "source": "user",
-            }
-            _create_activity_from_action(
-                folder_id=folder_id, action_type='ROW_DELETE',
-                payload=payload, target_column=None,
-                company_id=cid_d, module_id=mid_d,
-                master_file_id=master.get('id'),
-                user_id=current_user.get('user_id') if current_user else None,
-            )
-        except Exception as _e:
-            logger.warning(f'Auto-capture ROW_DELETE failed: {_e}')
+        # try:
+        #     cid_d = (current_user or {}).get('company_id') or master.get('company_id')
+        #     mid_d = (current_user or {}).get('module_id') or master.get('module_id')
+        #     # Append to payload (so multiple deletes accumulate) and write
+        #     payload = {
+        #         "fingerprints": fps,
+        #         "deleted_count": int(affected),
+        #         "source": "user",
+        #     }
+        #     _create_activity_from_action(
+        #         folder_id=folder_id, action_type='ROW_DELETE',
+        #         payload=payload, target_column=None,
+        #         company_id=cid_d, module_id=mid_d,
+        #         master_file_id=master.get('id'),
+        #         user_id=current_user.get('user_id') if current_user else None,
+        #     )
+        # except Exception as _e:
+        #     logger.warning(f'Auto-capture ROW_DELETE failed: {_e}')
 
         return {
             "success": True,
@@ -4247,7 +4248,7 @@ async def apply_master_formula(
                 conn.close()
                 raise HTTPException(status_code=422, detail="SUM requires at least 1 column")
             # Build: TRY_CAST("col1" AS DOUBLE) + TRY_CAST("col2" AS DOUBLE) + ...
-            expr = f"ROUND({' + '.join(f'TRY_CAST(\"{c}\" AS DOUBLE)' for c in cols)}, 2)"
+            expr = f"ROUND({' + '.join(f'COALESCE(TRY_CAST(\"{c}\" AS DOUBLE), 0)' for c in cols)}, 2)"
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -4258,7 +4259,7 @@ async def apply_master_formula(
                 conn.close()
                 raise HTTPException(status_code=422, detail="-SUM requires at least 1 column")
             # Build: -(TRY_CAST("col1" AS DOUBLE) + ... )
-            expr = f"ROUND(-({' + '.join(f'TRY_CAST(\"{c}\" AS DOUBLE)' for c in cols)}), 2)"
+            expr = f"ROUND(-({' + '.join(f'COALESCE(TRY_CAST(\"{c}\" AS DOUBLE), 0)' for c in cols)}), 2)"
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -4268,7 +4269,7 @@ async def apply_master_formula(
             if len(cols) != 2:
                 conn.close()
                 raise HTTPException(status_code=422, detail="SUBTRACT requires exactly 2 columns")
-            expr = f'ROUND(TRY_CAST("{cols[0]}" AS DOUBLE) - TRY_CAST("{cols[1]}" AS DOUBLE), 2)'
+            expr = f'ROUND(COALESCE(TRY_CAST("{cols[0]}" AS DOUBLE), 0) - COALESCE(TRY_CAST("{cols[1]}" AS DOUBLE), 0), 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -4278,7 +4279,7 @@ async def apply_master_formula(
             if len(cols) != 2:
                 conn.close()
                 raise HTTPException(status_code=422, detail="MULTIPLY requires exactly 2 columns")
-            expr = f'ROUND(TRY_CAST("{cols[0]}" AS DOUBLE) * TRY_CAST("{cols[1]}" AS DOUBLE), 2)'
+            expr = f'ROUND(COALESCE(TRY_CAST("{cols[0]}" AS DOUBLE), 0) * COALESCE(TRY_CAST("{cols[1]}" AS DOUBLE), 0), 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -4289,7 +4290,7 @@ async def apply_master_formula(
                 conn.close()
                 raise HTTPException(status_code=422, detail="DIVIDE requires exactly 2 columns")
             # Handle div-by-zero: CASE WHEN denominator = 0 OR NULL THEN 0 ELSE numerator/denominator END
-            expr = f'ROUND(CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE) END, 2)'
+            expr = f'ROUND(CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE COALESCE(TRY_CAST("{cols[0]}" AS DOUBLE), 0) / TRY_CAST("{cols[1]}" AS DOUBLE) END, 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -4299,7 +4300,7 @@ async def apply_master_formula(
             if len(cols) != 2:
                 conn.close()
                 raise HTTPException(status_code=422, detail="PERCENTAGE requires exactly 2 columns (part, whole)")
-            expr = f'ROUND(CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE (TRY_CAST("{cols[0]}" AS DOUBLE) / TRY_CAST("{cols[1]}" AS DOUBLE)) * 100 END, 2)'
+            expr = f'ROUND(CASE WHEN TRY_CAST("{cols[1]}" AS DOUBLE) = 0 OR TRY_CAST("{cols[1]}" AS DOUBLE) IS NULL THEN 0 ELSE (COALESCE(TRY_CAST("{cols[0]}" AS DOUBLE), 0) / TRY_CAST("{cols[1]}" AS DOUBLE)) * 100 END, 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -4309,7 +4310,7 @@ async def apply_master_formula(
             if len(cols) != 1:
                 conn.close()
                 raise HTTPException(status_code=422, detail="ABS requires exactly 1 column")
-            expr = f'ROUND(ABS(TRY_CAST("{cols[0]}" AS DOUBLE)), 2)'
+            expr = f'ROUND(ABS(COALESCE(TRY_CAST("{cols[0]}" AS DOUBLE), 0)), 2)'
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" DOUBLE'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -4321,7 +4322,8 @@ async def apply_master_formula(
                 raise HTTPException(status_code=422, detail="CONCAT requires at least 2 columns")
             # Build concatenation with a space separator and coalesce nulls
             separator = constant_value if constant_value else ' '
-            expr = f" || '{separator}' || ".join(f"COALESCE(CAST(\"{c}\" AS VARCHAR), '')" for c in cols)
+            cols_str = ', '.join(f"NULLIF(\"{c}\", '')" for c in cols)
+            expr = f"CONCAT_WS('{separator}', {cols_str})"
             sql = f'ALTER TABLE master_data ADD COLUMN "{column_name}" VARCHAR'
             conn.execute(sql)
             sql = f'UPDATE master_data SET "{column_name}" = {expr}'
@@ -8297,66 +8299,93 @@ async def preview_processed_file(file_id: int):
         if not os.path.exists(file['file_path']):
             raise HTTPException(status_code=404, detail="File not found on disk")
         
-        try:
-            df = pd.read_excel(file['file_path'], sheet_name='Summary', header=None)
-        except Exception:
-            df = pd.read_excel(file['file_path'], sheet_name=0, header=None)
-        
         sections = []
         current_section = None
         
-        for idx, row in df.iterrows():
-            val = str(row[0]) if pd.notna(row[0]) else ''
-            if val.startswith('▓▓▓') and val.endswith('▓▓▓'):
-                if current_section:
-                    sections.append(current_section)
-                current_section = {
-                    'name': val.replace('▓▓▓', '').replace('▓▓▓', '').strip(),
-                    'headers': [],
-                    'data': []
-                }
-            elif current_section and not current_section['headers']:
-                # Read headers - keep all columns including empty ones for alignment
-                header_row = row.tolist()
-                # Only keep non-empty headers, but remember their positions
-                headers = []
-                for c in header_row:
-                    if pd.notna(c) and str(c).strip():
-                        headers.append(str(c).strip())
-                    else:
-                        headers.append('')  # Keep empty placeholder for alignment
-                # Remove trailing empty headers
-                while headers and headers[-1] == '':
-                    headers.pop()
-                current_section['headers'] = headers
-                current_section['header_count'] = len(headers)
-            elif current_section:
-                # Read data row aligned to headers
-                row_list = row.tolist()
-                data_row = []
-                header_count = current_section.get('header_count', len(current_section['headers']))
-                
-                for i in range(header_count):
-                    if i < len(row_list):
-                        cell = row_list[i]
-                        if pd.notna(cell):
-                            # Format numeric values with comma and 2 decimals
-                            if isinstance(cell, (int, float)):
-                                if cell == int(cell):
-                                    data_row.append(f"{cell:,.2f}")
-                                else:
-                                    data_row.append(f"{cell:,.2f}")
-                            else:
-                                data_row.append(str(cell))
+        # First try to read 'Results' sheet as requested by user
+        try:
+            df = pd.read_excel(file['file_path'], sheet_name='Results', header=0)
+            
+            headers = [str(col) for col in df.columns]
+            data_rows = []
+            
+            for _, row in df.iterrows():
+                row_data = []
+                for val in row:
+                    if pd.notna(val):
+                        if isinstance(val, (int, float)):
+                            row_data.append(f"{val:,.2f}")
                         else:
-                            data_row.append('')  # Empty cell placeholder
+                            row_data.append(str(val))
                     else:
-                        data_row.append('')  # Missing cell placeholder
+                        row_data.append('')
+                data_rows.append(row_data)
                 
-                # Skip completely empty rows (but keep Grand Total rows even if some values are empty)
-                is_grand_total = any('Grand Total' in str(v) for v in data_row if v)
-                if is_grand_total or any(v != '' for v in data_row):
-                    current_section['data'].append(data_row)
+            sections = [{
+                'name': 'Results Data',
+                'headers': headers,
+                'data': data_rows
+            }]
+            
+        except Exception:
+            # Fallback to the old Summary sheet parser if Results sheet is missing
+            try:
+                df = pd.read_excel(file['file_path'], sheet_name='Summary', header=None)
+            except Exception:
+                df = pd.read_excel(file['file_path'], sheet_name=0, header=None)
+            
+            for idx, row in df.iterrows():
+                val = str(row[0]) if pd.notna(row[0]) else ''
+                if val.startswith('▓▓▓') and val.endswith('▓▓▓'):
+                    if current_section:
+                        sections.append(current_section)
+                    current_section = {
+                        'name': val.replace('▓▓▓', '').replace('▓▓▓', '').strip(),
+                        'headers': [],
+                        'data': []
+                    }
+                elif current_section and not current_section['headers']:
+                    # Read headers - keep all columns including empty ones for alignment
+                    header_row = row.tolist()
+                    # Only keep non-empty headers, but remember their positions
+                    headers = []
+                    for c in header_row:
+                        if pd.notna(c) and str(c).strip():
+                            headers.append(str(c).strip())
+                        else:
+                            headers.append('')  # Keep empty placeholder for alignment
+                    # Remove trailing empty headers
+                    while headers and headers[-1] == '':
+                        headers.pop()
+                    current_section['headers'] = headers
+                    current_section['header_count'] = len(headers)
+                elif current_section:
+                    # Read data row aligned to headers
+                    row_list = row.tolist()
+                    data_row = []
+                    header_count = current_section.get('header_count', len(current_section['headers']))
+                    
+                    for i in range(header_count):
+                        if i < len(row_list):
+                            cell = row_list[i]
+                            if pd.notna(cell):
+                                # Format numeric values with comma and 2 decimals
+                                if isinstance(cell, (int, float)):
+                                    if cell == int(cell):
+                                        data_row.append(f"{cell:,.2f}")
+                                    else:
+                                        data_row.append(f"{cell:,.2f}")
+                                else:
+                                    data_row.append(str(cell))
+                            else:
+                                data_row.append('')  # Empty cell placeholder
+                        else:
+                            data_row.append('')  # Missing cell placeholder
+                    
+                    # Skip completely empty rows (but keep Grand Total rows even if some values are empty)
+                    is_grand_total = any('Grand Total' in str(v) for v in data_row if v)
+                    if is_grand_total or any(v != '' for v in data_row):
+                        current_section['data'].append(data_row)
         
         if current_section:
             sections.append(current_section)

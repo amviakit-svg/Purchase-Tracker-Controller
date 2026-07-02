@@ -630,37 +630,40 @@ def _apply_formula_activity(duck_conn, act, company_id=None, module_id=None):
         cols = payload.get('source_columns') or []
         if formula_type == 'SUM':
             if len(cols) < 1: raise ValueError("SUM requires at least 1 column")
-            expr = f"ROUND({' + '.join(f'TRY_CAST({_safe_sql_ident(c)} AS DOUBLE)' for c in cols)}, 2)"
+            expr = f"ROUND({' + '.join(f'COALESCE(TRY_CAST({_safe_sql_ident(c)} AS DOUBLE), 0)' for c in cols)}, 2)"
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == '-SUM':
             if len(cols) < 1: raise ValueError("-SUM requires at least 1 column")
-            expr = f"ROUND(-({' + '.join(f'TRY_CAST({_safe_sql_ident(c)} AS DOUBLE)' for c in cols)}), 2)"
+            expr = f"ROUND(-({' + '.join(f'COALESCE(TRY_CAST({_safe_sql_ident(c)} AS DOUBLE), 0)' for c in cols)}), 2)"
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'SUBTRACT':
             if len(cols) != 2: raise ValueError("SUBTRACT requires exactly 2 columns")
-            expr = f'ROUND(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) - TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE), 2)'
+            expr = f'ROUND(COALESCE(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE), 0) - COALESCE(TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE), 0), 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'MULTIPLY':
             if len(cols) != 2: raise ValueError("MULTIPLY requires exactly 2 columns")
-            expr = f'ROUND(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) * TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE), 2)'
+            expr = f'ROUND(COALESCE(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE), 0) * COALESCE(TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE), 0), 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'DIVIDE':
             if len(cols) != 2: raise ValueError("DIVIDE requires exactly 2 columns")
-            expr = f'ROUND(CASE WHEN TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) = 0 OR TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) IS NULL THEN 0 ELSE TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) / TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) END, 2)'
+            expr = f'ROUND(CASE WHEN TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) = 0 OR TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) IS NULL THEN 0 ELSE COALESCE(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE), 0) / TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) END, 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'PERCENTAGE':
             if len(cols) != 2: raise ValueError("PERCENTAGE requires exactly 2 columns")
-            expr = f'ROUND(CASE WHEN TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) = 0 OR TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) IS NULL THEN 0 ELSE (TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE) / TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE)) * 100 END, 2)'
+            expr = f'ROUND(CASE WHEN TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) = 0 OR TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE) IS NULL THEN 0 ELSE (COALESCE(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE), 0) / TRY_CAST({_safe_sql_ident(cols[1])} AS DOUBLE)) * 100 END, 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'ABS':
             if len(cols) != 1: raise ValueError("ABS requires exactly 1 column")
-            expr = f'ROUND(ABS(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE)), 2)'
+            expr = f'ROUND(ABS(COALESCE(TRY_CAST({_safe_sql_ident(cols[0])} AS DOUBLE), 0)), 2)'
             _ensure_column(duck_conn, 'master_data', col_name, 'DOUBLE')
         elif formula_type == 'CONCAT':
             if len(cols) < 2: raise ValueError("CONCAT requires at least 2 columns")
             separator = payload.get('constant_value')
             if separator is None: separator = ' '
-            expr = f" || '{_sql_escape(separator)[1:-1]}' || ".join(f"COALESCE(CAST({_safe_sql_ident(c)} AS VARCHAR), '')" for c in cols)
+            # CONCAT_WS automatically skips NULLs. We use NULLIF to treat empty strings as NULL so they are skipped too.
+            sep_escaped = _sql_escape(separator)[1:-1]
+            cols_expr = ", ".join(f"NULLIF(CAST({_safe_sql_ident(c)} AS VARCHAR), '')" for c in cols)
+            expr = f"CONCAT_WS('{sep_escaped}', {cols_expr})"
             _ensure_column(duck_conn, 'master_data', col_name, 'VARCHAR')
             
         duck_conn.execute(f"UPDATE master_data SET {col_ident} = ({expr})")
