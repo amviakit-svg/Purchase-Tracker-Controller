@@ -5906,60 +5906,59 @@ def process_rules_background():
         primary_key_column = p1_config.get('column', 'Order ID')
         
         primary_df = None
-        if primary_generated_filename:
-            primary_path = get_primary_file_path(primary_generated_filename, cid, mid)
-            if os.path.exists(primary_path):
-                primary_df = read_primary_file(primary_generated_filename, cid, mid)
+        filter_sources = processing_status.get("filter_sources")
+        if primary_generated_filename and not filter_sources:
+            # Force Validation 1 and 3 to always regenerate primary data dynamically
+            if vid not in (1, 3):
+                primary_path = get_primary_file_path(primary_generated_filename, cid, mid)
+                if os.path.exists(primary_path):
+                    primary_df = read_primary_file(primary_generated_filename, cid, mid)
+        
+        if primary_df is None or filter_sources or vid in (1, 3):
+            try:
+                f_id = p1_config.get('file_id')
+                
+                if filter_sources and len(filter_sources) > 0 and str(filter_sources[0]).isdigit():
+                    selected_f_id = filter_sources[0]
+                    if p1_config.get('is_master') or (isinstance(f_id, str) and f_id.startswith('master_')):
+                        f_id = f'master_{selected_f_id}'
+                    else:
+                        f_id = selected_f_id
+                    
+                elif p1_config.get('is_master') and str(f_id).isdigit():
+                    f_id = f'master_{f_id}'
+                
+                from primary_data import generate_primary_data
+                primary_res = generate_primary_data(
+                    file_id=f_id,
+                    sheet_name=p1_config.get('sheet_name', ''),
+                    column_name=p1_config.get('column', ''),
+                    header_row=p1_config.get('header_row', 1),
+                    sales_amount_column=p1_config.get('sales_amount_column'),
+                    fields=p1_config.get('fields'),
+                    validation_id=vid
+                )
+                if primary_res and 'file_path' in primary_res:
+                    path = primary_res['file_path']
+                    if path.endswith('.csv'):
+                        primary_df = pd.read_csv(path, dtype=str, low_memory=False)
+                    else:
+                        primary_df = pd.read_excel(path, dtype=str)
+            except Exception as e:
+                logger.error(f'Error generating primary data on the fly: {e}')
+                error_msg_primary = str(e)
         
         if primary_df is None:
-            if vid in (1, 3):
-                try:
-                    f_id = p1_config.get('file_id')
-                    if p1_config.get('is_master') and str(f_id).isdigit():
-                        f_id = f'master_{f_id}'
-                    
-                    from primary_data import generate_primary_data
-                    primary_res = generate_primary_data(
-                        file_id=f_id,
-                        sheet_name=p1_config.get('sheet_name', ''),
-                        column_name=p1_config.get('column', ''),
-                        header_row=p1_config.get('header_row', 1),
-                        sales_amount_column=p1_config.get('sales_amount_column'),
-                        fields=p1_config.get('fields'),
-                        validation_id=vid
-                    )
-                    if primary_res and 'file_path' in primary_res:
-                        path = primary_res['file_path']
-                        if path.endswith('.csv'):
-                            primary_df = pd.read_csv(path, dtype=str, low_memory=False)
-                        else:
-                            primary_df = pd.read_excel(path, dtype=str)
-                except Exception as e:
-                    logger.error(f'Error generating primary data on the fly: {e}')
-            
-            if primary_df is None:
-                processing_status["result"] = {"success": False, "message": "Primary data file not found or could not be generated."}
+            final_msg = error_msg_primary if 'error_msg_primary' in locals() else "Primary data file not found or could not be generated."
+            with processing_lock:
+                processing_status["error"] = final_msg
+                processing_status["result"] = {"success": False, "message": final_msg}
                 processing_status["is_processing"] = False
                 processing_status["progress"] = "error"
-                return
+            return
         
         # ---- NEW: Apply Source File Name Filter ----
-        filter_sources = processing_status.get("filter_sources")
-        if filter_sources and len(filter_sources) > 0:
-            before_count = len(primary_df)
-            primary_df = primary_df[primary_df['Source_File_Name'].astype(str).isin(filter_sources)]
-            after_count = len(primary_df)
-            logger.info(f"Filtered primary data: {before_count} -> {after_count} rows "
-                        f"based on {len(filter_sources)} selected source files")
-            
-            if after_count == 0:
-                processing_status["result"] = {
-                    "success": False,
-                    "message": f"No primary data rows matched the {len(filter_sources)} selected source files"
-                }
-                processing_status["is_processing"] = False
-                processing_status["progress"] = "completed"
-                return
+        # Removed because filter_sources (folder IDs/names) do not directly match Source_File_Name (file names)
         # ---- END NEW ----
         
         with processing_lock:
@@ -6122,6 +6121,14 @@ def process_rules_background():
                 ext_sheet = r.get('extract_sheet', 'Sheet1')
                 ext_col = r.get('extract_column')
                 if isinstance(ext_col, str): ext_col = ext_col.strip()
+                
+                filter_sources = processing_status.get("filter_sources")
+                if filter_sources and len(filter_sources) > 0 and str(filter_sources[0]).isdigit():
+                    selected_f_id = filter_sources[0]
+                    if isinstance(sec_file_id, str) and sec_file_id.startswith('master_'):
+                        sec_file_id = f'master_{selected_f_id}'
+                    if isinstance(ext_file_id, str) and ext_file_id.startswith('master_'):
+                        ext_file_id = f'master_{selected_f_id}'
                 
                 sec_df = get_file_df(sec_file_id, sec_sheet) if sec_file_id and not str(sec_file_id).startswith('primary_') else None
                 
@@ -6964,24 +6971,40 @@ def process_rules_background():
         if custom_primary_label and custom_primary_label != 'Order ID':
             export_df = export_df.rename(columns={'Order ID': custom_primary_label})
         
-        # --- NUMERIC FORMATTING: Convert and round numeric columns ---
-        # Identify columns that appear to be numeric (from Phase 2 calculations, sumif, etc.)
-        numeric_cols = set()
+        # --- NUMERIC FORMATTING: Safely convert numeric cells without destroying text ---
+        import re
+        
+        comma_cols = set()
         for col in export_df.columns:
             if col in ('Order ID', custom_primary_label, 'Source_File_Name', 'Unique_ID'):
                 continue
-            sample_vals = export_df[col].dropna().head(20).astype(str)
-            # Heuristic: if most non-empty values look numeric (digits, commas, dots, minus)
-            numeric_count = sample_vals.str.match(r'^-?[\d,]+\.?\d*$').sum()
-            if numeric_count > len(sample_vals) * 0.5:
-                numeric_cols.add(col)
+            
+            non_na = export_df[col].dropna()
+            if len(non_na) > 0:
+                s_vals = non_na.astype(str).str.strip().str.replace(',', '')
+                num_count = s_vals.str.match(r'^-?\d+\.?\d*$').sum()
+                if num_count == len(non_na):
+                    comma_cols.add(col)
         
-        # Convert identified numeric columns to float and round to 2 decimals
-        for col in numeric_cols:
-            export_df[col] = pd.to_numeric(
-                export_df[col].astype(str).str.replace(',', '').str.strip(),
-                errors='coerce'
-            ).round(2)
+        def safe_numeric_convert(val):
+            if pd.isna(val):
+                return val
+            s_val = str(val).strip().replace(',', '')
+            # Match purely numeric strings (integers or floats)
+            if re.match(r'^-?\d+\.?\d*$', s_val):
+                try:
+                    f = float(s_val)
+                    if f.is_integer():
+                        return int(f)
+                    return round(f, 2)
+                except ValueError:
+                    return val
+            return val
+
+        # Apply safe conversion to all columns except identifiers
+        for col in export_df.columns:
+            if col not in ('Order ID', custom_primary_label, 'Source_File_Name', 'Unique_ID'):
+                export_df[col] = export_df[col].apply(safe_numeric_convert)
         
         sheets_data = {'Results': len(export_df)}
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
@@ -6996,15 +7019,20 @@ def process_rules_background():
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = Border(bottom=Side(style='medium', color='1F4E79'))
             
-            # Write data rows with number formatting for numeric columns
+            # Write data rows with number formatting for numeric cells
             from openpyxl.utils.dataframe import dataframe_to_rows
             for row_idx, row_data in enumerate(dataframe_to_rows(export_df, index=False, header=False), 2):
                 for col_idx, value in enumerate(row_data, 1):
                     col_name = export_df.columns[col_idx - 1]
                     cell = ws_results.cell(row=row_idx, column=col_idx, value=value)
-                    if col_name in numeric_cols and isinstance(value, (int, float)):
-                        cell.number_format = '#,##0.00'
-                        cell.alignment = Alignment(horizontal='right', vertical='center')
+                    
+                    if pd.notna(value) and isinstance(value, (int, float)) and type(value) is not bool:
+                        if col_name in comma_cols:
+                            if isinstance(value, float):
+                                cell.number_format = '#,##0.00'
+                            else:
+                                cell.number_format = '#,##0'
+                            cell.alignment = Alignment(horizontal='right', vertical='center')
             
             # Auto-fit columns
             _autofit_columns_fast(ws_results, sample_rows=50)
@@ -7207,9 +7235,9 @@ def process_rules_background():
                 "financial_year": str(sanitize_val(financial_year)) if sanitize_val(financial_year) is not None else "",
                 "processing_time": str(f"{elapsed:.1f}s"),
                 "status": "completed",
-                "filtered": bool(filter_sources is not None),
-                "filter_count": int(len(filter_sources)) if filter_sources else 0,
-                "total_rows_before_filter": int(before_count) if filter_sources else int(len(primary_df)),
+                "filtered": False,
+                "filter_count": 0,
+                "total_rows_before_filter": int(len(primary_df)),
                 "summary_count": int(len(summary_sheets)),
                 "phase4_errors": [str(x) for x in phase4_errors] if phase4_errors else None
             }
@@ -8313,7 +8341,9 @@ async def preview_processed_file(file_id: int):
                 row_data = []
                 for val in row:
                     if pd.notna(val):
-                        if isinstance(val, (int, float)):
+                        if type(val).__name__ in ['bool', 'bool_'] or isinstance(val, bool):
+                            row_data.append(str(val))
+                        elif isinstance(val, (int, float)):
                             row_data.append(f"{val:,.2f}")
                         else:
                             row_data.append(str(val))
@@ -8328,67 +8358,127 @@ async def preview_processed_file(file_id: int):
             }]
             
         except Exception:
-            # Fallback to the old Summary sheet parser if Results sheet is missing
-            try:
-                df = pd.read_excel(file['file_path'], sheet_name='Summary', header=None)
-            except Exception:
-                df = pd.read_excel(file['file_path'], sheet_name=0, header=None)
+            pass
             
-            for idx, row in df.iterrows():
-                val = str(row[0]) if pd.notna(row[0]) else ''
-                if val.startswith('▓▓▓') and val.endswith('▓▓▓'):
-                    if current_section:
-                        sections.append(current_section)
-                    current_section = {
-                        'name': val.replace('▓▓▓', '').replace('▓▓▓', '').strip(),
+        summary_sections = []
+        try:
+            summary_df = pd.read_excel(file['file_path'], sheet_name='Summary', header=None)
+            sum_current_section = None
+            
+            for idx, row in summary_df.iterrows():
+                val = str(row[0]).strip().upper() if pd.notna(row[0]) else ''
+                
+                # Check for section start: Contains "▓▓▓" or is exactly "SUMMARY"
+                is_section_start = ('▓▓▓' in val) or (val == 'SUMMARY')
+                
+                if is_section_start:
+                    if sum_current_section and sum_current_section['data']:
+                        summary_sections.append(sum_current_section)
+                    
+                    clean_name = val.replace('▓▓▓', '').strip()
+                    if not clean_name:
+                        clean_name = "SUMMARY"
+                        
+                    sum_current_section = {
+                        'name': clean_name,
                         'headers': [],
                         'data': []
                     }
-                elif current_section and not current_section['headers']:
-                    # Read headers - keep all columns including empty ones for alignment
-                    header_row = row.tolist()
-                    # Only keep non-empty headers, but remember their positions
-                    headers = []
-                    for c in header_row:
-                        if pd.notna(c) and str(c).strip():
-                            headers.append(str(c).strip())
-                        else:
-                            headers.append('')  # Keep empty placeholder for alignment
-                    # Remove trailing empty headers
-                    while headers and headers[-1] == '':
-                        headers.pop()
-                    current_section['headers'] = headers
-                    current_section['header_count'] = len(headers)
-                elif current_section:
-                    # Read data row aligned to headers
-                    row_list = row.tolist()
-                    data_row = []
-                    header_count = current_section.get('header_count', len(current_section['headers']))
+                    continue
+                
+                if sum_current_section:
+                    # Get non-empty cells in the row
+                    non_empty_cells = [str(c).strip() for c in row.tolist() if pd.notna(c) and str(c).strip()]
                     
-                    for i in range(header_count):
-                        if i < len(row_list):
-                            cell = row_list[i]
-                            if pd.notna(cell):
-                                # Format numeric values with comma and 2 decimals
-                                if isinstance(cell, (int, float)):
-                                    if cell == int(cell):
+                    if not sum_current_section['headers']:
+                        # Looking for a header row: Must have at least 2 columns OR not be a "Generated:" junk row
+                        if len(non_empty_cells) >= 2 or (len(non_empty_cells) == 1 and not non_empty_cells[0].startswith('Generated:')):
+                            sum_current_section['headers'] = non_empty_cells
+                            sum_current_section['header_count'] = len(non_empty_cells)
+                    else:
+                        # We have headers, so this is data
+                        if not non_empty_cells:
+                            continue # Skip empty rows
+                            
+                        # Only add if the first column is not empty
+                        if pd.notna(row[0]) and str(row[0]).strip():
+                            row_list = row.tolist()
+                            data_row = []
+                            header_count = sum_current_section.get('header_count', len(sum_current_section['headers']))
+                            
+                            for i in range(header_count):
+                                if i < len(row_list):
+                                    cell = row_list[i]
+                                    if pd.notna(cell):
+                                        if isinstance(cell, (int, float)):
+                                            data_row.append(f"{cell:,.2f}")
+                                        else:
+                                            data_row.append(str(cell).strip())
+                                    else:
+                                        data_row.append("")
+                                else:
+                                    data_row.append("")
+                            sum_current_section['data'].append(data_row)
+                            
+            if sum_current_section and sum_current_section['data']:
+                summary_sections.append(sum_current_section)
+                
+        except Exception as e:
+            logger.error(f"Error reading summary sheet: {e}")
+            
+        if not sections and not summary_sections:
+            try:
+                df = pd.read_excel(file['file_path'], sheet_name=0, header=None)
+                current_section = None
+                for idx, row in df.iterrows():
+                    val = str(row[0]) if pd.notna(row[0]) else ''
+                    if val.startswith('▓▓▓') and val.endswith('▓▓▓'):
+                        if current_section:
+                            sections.append(current_section)
+                        current_section = {
+                            'name': val.replace('▓▓▓', '').replace('▓▓▓', '').strip(),
+                            'headers': [],
+                            'data': []
+                        }
+                    elif current_section and not current_section['headers']:
+                        header_row = row.tolist()
+                        headers = []
+                        for c in header_row:
+                            if pd.notna(c) and str(c).strip():
+                                headers.append(str(c).strip())
+                            else:
+                                headers.append('')
+                        while headers and headers[-1] == '':
+                            headers.pop()
+                        current_section['headers'] = headers
+                        current_section['header_count'] = len(headers)
+                    elif current_section:
+                        row_list = row.tolist()
+                        data_row = []
+                        header_count = current_section.get('header_count', len(current_section['headers']))
+                        
+                        for i in range(header_count):
+                            if i < len(row_list):
+                                cell = row_list[i]
+                                if pd.notna(cell):
+                                    if type(cell).__name__ in ['bool', 'bool_'] or isinstance(cell, bool):
+                                        data_row.append(str(cell))
+                                    elif isinstance(cell, (int, float)):
                                         data_row.append(f"{cell:,.2f}")
                                     else:
-                                        data_row.append(f"{cell:,.2f}")
+                                        data_row.append(str(cell))
                                 else:
-                                    data_row.append(str(cell))
+                                    data_row.append('')
                             else:
-                                data_row.append('')  # Empty cell placeholder
-                        else:
-                            data_row.append('')  # Missing cell placeholder
-                    
-                    # Skip completely empty rows (but keep Grand Total rows even if some values are empty)
-                    is_grand_total = any('Grand Total' in str(v) for v in data_row if v)
-                    if is_grand_total or any(v != '' for v in data_row):
-                        current_section['data'].append(data_row)
-        
-        if current_section:
-            sections.append(current_section)
+                                data_row.append('')
+                        
+                        is_grand_total = any('Grand Total' in str(v) for v in data_row if v)
+                        if is_grand_total or any(v != '' for v in data_row):
+                            current_section['data'].append(data_row)
+                if current_section:
+                    sections.append(current_section)
+            except Exception:
+                pass
         
         return {
             "success": True,
@@ -8399,7 +8489,8 @@ async def preview_processed_file(file_id: int):
                 "created_at": file['created_at'],
                 "total_rows": file['total_rows']
             },
-            "sections": sections
+            "sections": sections,
+            "summary_sections": summary_sections
         }
     except HTTPException as he:
         raise he
@@ -9081,3 +9172,83 @@ def _enrich_files_with_rejected_artefact(files: list) -> list:
         except Exception:
             pass
     return files
+
+
+# ==========================================
+# Settings API (Dynamic Filters & Cards)
+# ==========================================
+
+from backend.database import get_dynamic_filters, save_dynamic_filter, delete_dynamic_filter, get_dynamic_cards, save_dynamic_card, delete_dynamic_card
+
+@app.get('/api/settings/filters')
+async def api_get_dynamic_filters(current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        module_id = current_user.get('module_id', 1) if current_user else 1
+        filters = get_dynamic_filters(module_id)
+        return {'success': True, 'filters': filters}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
+@app.post('/api/settings/filters')
+async def api_save_dynamic_filter(request: Request, current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        data = await request.json()
+        module_id = current_user.get('module_id', 1) if current_user else 1
+        fid = save_dynamic_filter(
+            module_id,
+            data.get('field_name'),
+            data.get('filter_type'),
+            data.get('validation_id'),
+            data.get('target_column'),
+            data.get('is_active', 1),
+            data.get('id')
+        )
+        return {'success': True, 'id': fid}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
+@app.delete('/api/settings/filters/{filter_id}')
+async def api_delete_dynamic_filter(filter_id: int, current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        module_id = current_user.get('module_id', 1) if current_user else 1
+        delete_dynamic_filter(filter_id, module_id)
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
+@app.get('/api/settings/cards')
+async def api_get_dynamic_cards(current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        module_id = current_user.get('module_id', 1) if current_user else 1
+        cards = get_dynamic_cards(module_id)
+        return {'success': True, 'cards': cards}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
+@app.post('/api/settings/cards')
+async def api_save_dynamic_card(request: Request, current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        data = await request.json()
+        module_id = current_user.get('module_id', 1) if current_user else 1
+        cid = save_dynamic_card(
+            module_id,
+            data.get('card_name'),
+            data.get('calc_type'),
+            data.get('validation_id'),
+            data.get('target_column'),
+            data.get('sub_calc'),
+            data.get('is_active', 1),
+            data.get('id')
+        )
+        return {'success': True, 'id': cid}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
+@app.delete('/api/settings/cards/{card_id}')
+async def api_delete_dynamic_card(card_id: int, current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        module_id = current_user.get('module_id', 1) if current_user else 1
+        delete_dynamic_card(card_id, module_id)
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}

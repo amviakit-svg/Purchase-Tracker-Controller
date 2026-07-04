@@ -461,6 +461,56 @@ def init_db():
         conn.execute('CREATE INDEX IF NOT EXISTS idx_rejected_artefacts_folder ON rejected_artefacts(folder_id)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_rejected_artefacts_file   ON rejected_artefacts(file_id)')
 
+        # ---- Dynamic UI Settings ----
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS dynamic_filters (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id       INTEGER,
+                field_name      TEXT NOT NULL,
+                filter_type     TEXT NOT NULL,
+                validation_id   INTEGER,
+                target_column   TEXT,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS dynamic_cards (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id       INTEGER,
+                card_name       TEXT NOT NULL,
+                calc_type       TEXT NOT NULL,
+                validation_id   INTEGER,
+                target_column   TEXT,
+                sub_calc        TEXT,
+                is_active       INTEGER DEFAULT 1,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Seed defaults if empty
+        cursor = conn.cursor()
+        cursor.execute("SELECT count(*) FROM dynamic_filters")
+        if cursor.fetchone()[0] == 0:
+            default_filters = [
+                (1, 'Period', 'Dropdown', None, None, 1),
+                (1, 'Order ID', 'Search', None, None, 1),
+                (1, 'Variance', 'Dropdown', None, None, 1)
+            ]
+            cursor.executemany("INSERT INTO dynamic_filters (module_id, field_name, filter_type, validation_id, target_column, is_active) VALUES (?, ?, ?, ?, ?, ?)", default_filters)
+            
+        cursor.execute("SELECT count(*) FROM dynamic_cards")
+        if cursor.fetchone()[0] == 0:
+            default_cards = [
+                (1, 'GRN Amount', 'Sum', 1, 'amount', 'Orders Matched', 1),
+                (1, 'Vendor Invoice Amount', 'Sum', 2, 'amount', 'Orders Matched', 1),
+                (1, 'Tally Amount', 'Sum', 3, 'amount', 'Orders Matched', 1)
+            ]
+            cursor.executemany("INSERT INTO dynamic_cards (module_id, card_name, calc_type, validation_id, target_column, sub_calc, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)", default_cards)
+        
+        conn.commit()
+
         # Migrations
         try:
             conn.execute('ALTER TABLE rules ADD COLUMN validation_id INTEGER DEFAULT 1')
@@ -3201,3 +3251,89 @@ def get_rejected_artefact_by_id(artefact_id):
             conn.close()
         except Exception:
             pass
+
+# ==========================================
+# Dynamic UI Settings (Filters and Cards)
+# ==========================================
+
+def get_dynamic_filters(module_id=1):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM dynamic_filters 
+            WHERE module_id = ? 
+            ORDER BY id ASC
+        ''', (module_id,))
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+def save_dynamic_filter(module_id, field_name, filter_type, validation_id, target_column, is_active=1, filter_id=None):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        if filter_id:
+            cursor.execute('''
+                UPDATE dynamic_filters
+                SET field_name = ?, filter_type = ?, validation_id = ?, target_column = ?, is_active = ?
+                WHERE id = ? AND module_id = ?
+            ''', (field_name, filter_type, validation_id, target_column, is_active, filter_id, module_id))
+        else:
+            cursor.execute('''
+                INSERT INTO dynamic_filters (module_id, field_name, filter_type, validation_id, target_column, is_active)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (module_id, field_name, filter_type, validation_id, target_column, is_active))
+        conn.commit()
+        return cursor.lastrowid or filter_id
+    finally:
+        conn.close()
+
+def delete_dynamic_filter(filter_id, module_id=1):
+    conn = get_db_connection()
+    try:
+        conn.execute('DELETE FROM dynamic_filters WHERE id = ? AND module_id = ?', (filter_id, module_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_dynamic_cards(module_id=1):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM dynamic_cards 
+            WHERE module_id = ? 
+            ORDER BY id ASC
+        ''', (module_id,))
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+def save_dynamic_card(module_id, card_name, calc_type, validation_id, target_column, sub_calc, is_active=1, card_id=None):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        if card_id:
+            cursor.execute('''
+                UPDATE dynamic_cards
+                SET card_name = ?, calc_type = ?, validation_id = ?, target_column = ?, sub_calc = ?, is_active = ?
+                WHERE id = ? AND module_id = ?
+            ''', (card_name, calc_type, validation_id, target_column, sub_calc, is_active, card_id, module_id))
+        else:
+            cursor.execute('''
+                INSERT INTO dynamic_cards (module_id, card_name, calc_type, validation_id, target_column, sub_calc, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (module_id, card_name, calc_type, validation_id, target_column, sub_calc, is_active))
+        conn.commit()
+        return cursor.lastrowid or card_id
+    finally:
+        conn.close()
+
+def delete_dynamic_card(card_id, module_id=1):
+    conn = get_db_connection()
+    try:
+        conn.execute('DELETE FROM dynamic_cards WHERE id = ? AND module_id = ?', (card_id, module_id))
+        conn.commit()
+    finally:
+        conn.close()

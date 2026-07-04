@@ -130,6 +130,9 @@
                     <button onclick="switchTab('recycle')" id="tab-recycle" class="tab-inactive px-4 py-5 text-sm font-medium transition-colors" title="Recycle Bin">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
+                    <button onclick="switchTab('settings')" id="tab-settings" class="tab-inactive px-4 py-5 text-sm font-medium transition-colors" title="Settings">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    </button>
                 </nav>
             </div>
         </div>
@@ -1185,6 +1188,73 @@
                     <div id="final-processed-history-container">
                         <p class="text-sm text-gray-500 text-center py-8">Click Refresh to load processed file history</p>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SETTINGS (FILTER & CARD MANAGEMENT) ==================== -->
+        <div id="page-settings" class="page-content hidden">
+            <div class="mb-6 flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Settings</h2>
+                    <p class="text-gray-600 mt-1">Manage User Portal dynamic filters and cards</p>
+                </div>
+            </div>
+
+            <!-- Filter Management -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-semibold text-gray-800">Filter Management</h3>
+                    <button onclick="addDynamicFilterRow()" class="flex items-center space-x-2 bg-blue-600 text-white text-sm font-medium py-1.5 px-3 rounded hover:bg-blue-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span>Add Filter</span>
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field Name</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filter Type</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Validation Setup</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Processed Column</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Visibility</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="settings-filters-body" class="bg-white divide-y divide-gray-200">
+                            <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">Loading filters...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Card Management -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-semibold text-gray-800">Card Management</h3>
+                    <button onclick="addDynamicCardRow()" class="flex items-center space-x-2 bg-purple-600 text-white text-sm font-medium py-1.5 px-3 rounded hover:bg-purple-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span>Add Card</span>
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Card Name</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calculation Type</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Validation Setup</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Processed Column</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub-calc (Opt)</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Visibility</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="settings-cards-body" class="bg-white divide-y divide-gray-200">
+                            <tr><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500">Loading cards...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -2634,6 +2704,8 @@
                 startDashboardAutoRefresh();
             } else if (tabName === 'recycle') {
                 loadRecycleBin();
+            } else if (tabName === 'settings') {
+                loadSettings();
                 stopDashboardAutoRefresh();
             }
         }
@@ -9548,7 +9620,7 @@
                 document.body.appendChild(modal);
             }
             
-            const sections = data.sections || [];
+            const sections = data.summary_sections || [];
             let summaryHtml = '';
             
             // Responsive table wrapper with horizontal scroll
@@ -13232,6 +13304,227 @@ function val13RenderColumns() {
         container.appendChild(row);
     });
 }
+
+        // ==================== SETTINGS (FILTER & CARD MANAGEMENT) ====================
+        async function loadSettings() {
+            try {
+                // Load Filters
+                const filterRes = await apiCall('/api/settings/filters');
+                const filtersBody = document.getElementById('settings-filters-body');
+                if(filterRes && filterRes.filters) {
+                    filtersBody.innerHTML = '';
+                    filterRes.filters.forEach(f => renderDynamicFilterRow(f));
+                }
+                
+                // Load Cards
+                const cardRes = await apiCall('/api/settings/cards');
+                const cardsBody = document.getElementById('settings-cards-body');
+                if(cardRes && cardRes.cards) {
+                    cardsBody.innerHTML = '';
+                    cardRes.cards.forEach(c => renderDynamicCardRow(c));
+                }
+            } catch (err) {
+                console.error('Failed to load settings', err);
+            }
+        }
+
+        function renderDynamicFilterRow(filter = {}) {
+            const tbody = document.getElementById('settings-filters-body');
+            const tr = document.createElement('tr');
+            const fid = filter.id || 'new_' + Date.now();
+            tr.id = 'filter_row_' + fid;
+            tr.innerHTML = `
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <input type="text" class="filter-name bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Field Name" value="${filter.field_name || ''}">
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <select class="filter-type bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
+                        <option value="Search" ${filter.filter_type==='Search'?'selected':''}>Search</option>
+                        <option value="Dropdown" ${filter.filter_type==='Dropdown'?'selected':''}>Dropdown</option>
+                        <option value="Range" ${filter.filter_type==='Range'?'selected':''}>Range</option>
+                        <option value="Date" ${filter.filter_type==='Date'?'selected':''}>Date</option>
+                    </select>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <select class="filter-validation bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
+                        <option value="">Global (All)</option>
+                        <option value="1" ${filter.validation_id===1?'selected':''}>Validation 1</option>
+                        <option value="2" ${filter.validation_id===2?'selected':''}>Validation 2</option>
+                        <option value="3" ${filter.validation_id===3?'selected':''}>Validation 3</option>
+                    </select>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <input type="text" class="filter-target bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Target Column (Optional)" value="${filter.target_column || ''}">
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-center">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" class="sr-only peer filter-active" ${filter.is_active || filter.is_active===undefined ? 'checked' : ''}>
+                      <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-center space-x-2">
+                    <button onclick="saveDynamicFilter('${fid}')" class="text-green-600 hover:text-green-900"><i class="fas fa-save"></i></button>
+                    <button onclick="deleteDynamicFilter('${fid}')" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                </td>
+            `;
+            if (!filter.id) {
+                if(tbody.querySelector('td[colspan]')) tbody.innerHTML = '';
+                tbody.appendChild(tr);
+            } else {
+                tbody.appendChild(tr);
+            }
+        }
+
+        async function saveDynamicFilter(fid) {
+            const tr = document.getElementById('filter_row_' + fid);
+            const name = tr.querySelector('.filter-name').value;
+            const type = tr.querySelector('.filter-type').value;
+            const val = tr.querySelector('.filter-validation').value;
+            const target = tr.querySelector('.filter-target').value;
+            const active = tr.querySelector('.filter-active').checked ? 1 : 0;
+            
+            const payload = {
+                field_name: name,
+                filter_type: type,
+                validation_id: val ? parseInt(val) : null,
+                target_column: target || null,
+                is_active: active
+            };
+            
+            if(!String(fid).startsWith('new_')) {
+                payload.id = parseInt(fid);
+            }
+            
+            try {
+                await apiCall('/api/settings/filters', { method: 'POST', body: JSON.stringify(payload) });
+                showToast('Filter saved successfully', 'success');
+                loadSettings();
+            } catch(e) {
+                showToast('Error saving filter', 'error');
+            }
+        }
+
+        async function deleteDynamicFilter(fid) {
+            if(String(fid).startsWith('new_')) {
+                document.getElementById('filter_row_' + fid).remove();
+                return;
+            }
+            if(confirm('Delete this filter?')) {
+                try {
+                    await apiCall('/api/settings/filters/' + fid, { method: 'DELETE' });
+                    showToast('Filter deleted', 'success');
+                    loadSettings();
+                } catch(e) {
+                    showToast('Error deleting filter', 'error');
+                }
+            }
+        }
+        
+        function addDynamicFilterRow() {
+            renderDynamicFilterRow({});
+        }
+
+        function renderDynamicCardRow(card = {}) {
+            const tbody = document.getElementById('settings-cards-body');
+            const tr = document.createElement('tr');
+            const cid = card.id || 'new_' + Date.now();
+            tr.id = 'card_row_' + cid;
+            tr.innerHTML = `
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <input type="text" class="card-name bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Card Name" value="${card.card_name || ''}">
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <select class="card-calc bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
+                        <option value="Sum" ${card.calc_type==='Sum'?'selected':''}>Sum</option>
+                        <option value="Count" ${card.calc_type==='Count'?'selected':''}>Count</option>
+                        <option value="Average" ${card.calc_type==='Average'?'selected':''}>Average</option>
+                        <option value="Subtotal" ${card.calc_type==='Subtotal'?'selected':''}>Subtotal</option>
+                    </select>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <select class="card-validation bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
+                        <option value="">Global (All)</option>
+                        <option value="1" ${card.validation_id===1?'selected':''}>Validation 1</option>
+                        <option value="2" ${card.validation_id===2?'selected':''}>Validation 2</option>
+                        <option value="3" ${card.validation_id===3?'selected':''}>Validation 3</option>
+                    </select>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <input type="text" class="card-target bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Target Column" value="${card.target_column || ''}">
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <input type="text" class="card-subcalc bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Sub-calc label" value="${card.sub_calc || ''}">
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-center">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" class="sr-only peer card-active" ${card.is_active || card.is_active===undefined ? 'checked' : ''}>
+                      <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-center space-x-2">
+                    <button onclick="saveDynamicCard('${cid}')" class="text-green-600 hover:text-green-900"><i class="fas fa-save"></i></button>
+                    <button onclick="deleteDynamicCard('${cid}')" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                </td>
+            `;
+            if (!card.id) {
+                if(tbody.querySelector('td[colspan]')) tbody.innerHTML = '';
+                tbody.appendChild(tr);
+            } else {
+                tbody.appendChild(tr);
+            }
+        }
+
+        async function saveDynamicCard(cid) {
+            const tr = document.getElementById('card_row_' + cid);
+            const name = tr.querySelector('.card-name').value;
+            const type = tr.querySelector('.card-calc').value;
+            const val = tr.querySelector('.card-validation').value;
+            const target = tr.querySelector('.card-target').value;
+            const subcalc = tr.querySelector('.card-subcalc').value;
+            const active = tr.querySelector('.card-active').checked ? 1 : 0;
+            
+            const payload = {
+                card_name: name,
+                calc_type: type,
+                validation_id: val ? parseInt(val) : null,
+                target_column: target || null,
+                sub_calc: subcalc || null,
+                is_active: active
+            };
+            
+            if(!String(cid).startsWith('new_')) {
+                payload.id = parseInt(cid);
+            }
+            
+            try {
+                await apiCall('/api/settings/cards', { method: 'POST', body: JSON.stringify(payload) });
+                showToast('Card saved successfully', 'success');
+                loadSettings();
+            } catch(e) {
+                showToast('Error saving card', 'error');
+            }
+        }
+
+        async function deleteDynamicCard(cid) {
+            if(String(cid).startsWith('new_')) {
+                document.getElementById('card_row_' + cid).remove();
+                return;
+            }
+            if(confirm('Delete this card?')) {
+                try {
+                    await apiCall('/api/settings/cards/' + cid, { method: 'DELETE' });
+                    showToast('Card deleted', 'success');
+                    loadSettings();
+                } catch(e) {
+                    showToast('Error deleting card', 'error');
+                }
+            }
+        }
+        
+        function addDynamicCardRow() {
+            renderDynamicCardRow({});
+        }
+
     </script>
 </body>
 </html>

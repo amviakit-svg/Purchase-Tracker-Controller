@@ -3,19 +3,36 @@ import { useParams, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { UploadCloud, Trash2, RotateCcw, Search, Download, CheckSquare, Table2, FileSpreadsheet, Loader2, Database } from 'lucide-react';
-import { apiCall, apiCallForm } from '../api';
+import { apiCall, apiCallForm, API_BASE_URL } from '../api';
 
 export default function FolderView() {
   const { id } = useParams();
   const { fetchNotifications, folders } = useOutletContext() || {};
-  const [folderData, setFolderData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [folderData, setFolderData] = useState(() => {
+    try { const c = localStorage.getItem(`folderData_${id}`); if (c) return JSON.parse(c); } catch(e) {}
+    return null;
+  });
+
+  const [files, setFiles] = useState([]);
+  const syncPollingRef = useRef(null);
   
-  // Data lists
-  const [masterRows, setMasterRows] = useState([]);
-  const [deletedRows, setDeletedRows] = useState([]);
-  const [columns, setColumns] = useState([]);
+  const [masterRows, setMasterRows] = useState(() => {
+    try { const c = localStorage.getItem(`masterRows_${id}`); if (c) return JSON.parse(c); } catch(e) {}
+    return [];
+  });
+  
+  const [deletedRows, setDeletedRows] = useState(() => {
+    try { const c = localStorage.getItem(`deletedRows_${id}`); if (c) return JSON.parse(c); } catch(e) {}
+    return [];
+  });
+  
+  const [columns, setColumns] = useState(() => {
+    try { const c = localStorage.getItem(`columns_${id}`); if (c) return JSON.parse(c); } catch(e) {}
+    return [];
+  });
+  
+  const [loading, setLoading] = useState(!localStorage.getItem(`masterRows_${id}`));
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Selections
   const [selectedMaster, setSelectedMaster] = useState(new Set());
@@ -27,20 +44,29 @@ export default function FolderView() {
     try {
       setLoading(true);
       const meta = await apiCall(`/master/${id}`);
-      setFolderData(meta.master || { folder_id: id });
+      const newFolderData = meta.master || { folder_id: id };
+      setFolderData(newFolderData);
+      try { localStorage.setItem(`folderData_${id}`, JSON.stringify(newFolderData)); } catch(e) {}
       
       const searchParam = query ? `&search=${encodeURIComponent(query)}` : '';
       const rows = await apiCall(`/master/${id}/preview?limit=100${searchParam}`);
       if (rows.success && rows.data) {
         setMasterRows(rows.data);
+        try { localStorage.setItem(`masterRows_${id}`, JSON.stringify(rows.data)); } catch(e) {}
+        
         if (rows.data.length > 0) {
            const cols = Object.keys(rows.data[0]).filter(k => k !== '_row_fp' && k !== '_deleted_at');
-           setColumns(cols); // Show all columns
+           setColumns(cols);
+           try { localStorage.setItem(`columns_${id}`, JSON.stringify(cols)); } catch(e) {}
         }
       }
       
       const deleted = await apiCall(`/master/${id}/rows/deleted`);
-      if (deleted.success) setDeletedRows(deleted.data || []);
+      if (deleted.success) {
+          const dRows = deleted.data || [];
+          setDeletedRows(dRows);
+          try { localStorage.setItem(`deletedRows_${id}`, JSON.stringify(dRows)); } catch(e) {}
+      }
 
     } catch (e) {
       toast.error('Failed to load master data');
@@ -48,6 +74,35 @@ export default function FolderView() {
       setLoading(false);
     }
   };
+
+  const fetchFiles = async () => {
+    try {
+      const data = await apiCall(`/files/${id}`);
+      if (data && data.success) {
+        setFiles(data.files);
+        // Polling logic
+        const needsPolling = data.files.some(f => f.sync_status === 'in_processing' || f.sync_status === 'pending');
+        if (needsPolling) {
+           if (!syncPollingRef.current) {
+               syncPollingRef.current = setInterval(fetchFiles, 2000);
+           }
+        } else {
+           if (syncPollingRef.current) {
+               clearInterval(syncPollingRef.current);
+               syncPollingRef.current = null;
+           }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load files", e);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (syncPollingRef.current) clearInterval(syncPollingRef.current);
+    };
+  }, []);
 
   // When folder ID changes, reset selections and search
   useEffect(() => {
@@ -60,9 +115,51 @@ export default function FolderView() {
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchFolderData(searchTerm);
+      fetchFiles();
     }, 400); // 400ms debounce
     return () => clearTimeout(timer);
   }, [searchTerm, id]);
+
+  const forceRetrySync = async (fileId) => {
+    if (!window.confirm("Are you sure you want to force this file to retry syncing?")) return;
+    try {
+        toast.info("Scheduling file for sync...");
+        const res = await apiCall(`/files/${fileId}/retry-sync`, { method: 'POST' });
+        if (res && res.success) {
+            toast.success("File scheduled for sync.");
+            fetchFiles();
+        } else {
+            toast.error(res ? res.error : "Failed to retry sync");
+        }
+    } catch (e) {
+        toast.error("Error: " + e.message);
+    }
+  };
+
+  const getSyncStatusBadge = (file) => {
+      if (!file.sync_status || file.sync_status === 'pending') {
+          return <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full flex items-center space-x-1" title="Pending Sync"><span>Pending</span></span>;
+      }
+      if (file.sync_status === 'in_processing') {
+          return <button onClick={(e) => { e.stopPropagation(); forceRetrySync(file.id); }} className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full flex items-center space-x-1 cursor-pointer hover:bg-yellow-200 transition-colors border border-yellow-200 shadow-sm" title="Syncing... Click to force retry if stuck"><Loader2 size={12} className="animate-spin" /><span>Syncing...</span></button>;
+      }
+      if (file.sync_status === 'synced') {
+          return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full flex items-center space-x-1" title="Synced to Master File"><span>Synced</span></span>;
+      }
+      if (file.sync_status === 'rejected') {
+          const err = (file.sync_error || "Unknown Error");
+          return <button onClick={(e) => { e.stopPropagation(); forceRetrySync(file.id); }} className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full flex items-center space-x-1 cursor-pointer hover:bg-red-200 transition-colors border border-red-200 shadow-sm" title={`Sync Failed: ${err} - Click to retry`}><span>Rejected - Retry ⟳</span></button>;
+      }
+      return null;
+  };
+
+  const getSyncStatusMessage = (file) => {
+      if (!file.sync_status || file.sync_status === 'pending') return 'Pending Sync';
+      if (file.sync_status === 'in_processing') return 'Syncing...';
+      if (file.sync_status === 'synced') return 'Synced to Master File';
+      if (file.sync_status === 'rejected') return `Sync Failed: ${file.sync_error || "Unknown Error"}`;
+      return '';
+  };
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -101,6 +198,7 @@ export default function FolderView() {
                   loading: 'Replacing file...',
                   success: () => {
                     fetchFolderData();
+                    fetchFiles();
                     if (fetchNotifications) fetchNotifications();
                     return "File replaced successfully!";
                   },
@@ -132,8 +230,9 @@ export default function FolderView() {
 
     toast.promise(uploadProcess(), {
       loading: `Uploading and checking rules for ${file.name}...`,
-      success: () => {
+      success: (res) => {
         fetchFolderData();
+        fetchFiles();
         if (fetchNotifications) fetchNotifications();
         if (fileInputRef.current) fileInputRef.current.value = '';
         return `${file.name} successfully verified and saved to master!`;
@@ -252,25 +351,82 @@ export default function FolderView() {
         <p className="text-gray-500 dark:text-gray-400 mt-2">Manage synced master data, upload new files, and restore deleted records.</p>
       </div>
 
-      {/* Upload Zone */}
-      <div 
-        onClick={handleUploadClick}
-        className="glass-card rounded-2xl p-8 mb-8 border-2 border-dashed border-blue-300 dark:border-blue-900/50 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all cursor-pointer group flex flex-col items-center justify-center text-center"
-      >
-        <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
-          <UploadCloud size={32} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        {/* Upload Zone */}
+        <div 
+          onClick={handleUploadClick}
+          className="glass-card rounded-2xl p-8 border-2 border-dashed border-blue-300 dark:border-blue-900/50 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all cursor-pointer group flex flex-col items-center justify-center text-center h-[300px]"
+        >
+          <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+            <UploadCloud size={32} />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Upload to {masterName}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">
+            Click to browse or drag and drop files here. Files will undergo deduplication and rule checks automatically.
+          </p>
+          <input 
+            type="file" 
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden" 
+            accept=".csv,.xlsx,.xls"
+          />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Upload to {masterName}</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">
-          Click to browse or drag and drop files here. Files will undergo deduplication and rule checks automatically.
-        </p>
-        <input 
-          type="file" 
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          className="hidden" 
-          accept=".csv,.xlsx,.xls"
-        />
+
+        {/* File Manager */}
+        <div className="glass-card rounded-2xl flex flex-col h-[300px]">
+          <div className="p-4 border-b border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50 shrink-0">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center">
+               File Manager
+            </h3>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {files.length === 0 ? (
+               <p className="text-gray-500 text-sm text-center py-8">No files uploaded yet</p>
+            ) : (
+               files.map(file => {
+                   const formatFileSize = (bytes) => {
+                       if (bytes === 0) return '0 Bytes';
+                       const k = 1024;
+                       const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                       const i = Math.floor(Math.log(bytes) / Math.log(k));
+                       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                   };
+                   const rowsInfo = (file.rejected_artefact_rows != null && file.rejected_artefact_total != null)
+                     ? ` (${file.rejected_artefact_rows}/${file.rejected_artefact_total} rows flagged)`
+                     : '';
+                   const host = API_BASE_URL.replace('/api', '');
+                   const fullDownloadUrl = file.rejected_download_url 
+                        ? (file.rejected_download_url.startsWith('http') 
+                            ? file.rejected_download_url 
+                            : `${host}${file.rejected_download_url}`)
+                        : '';
+
+                   return (
+                     <div key={file.id} className="file-row flex flex-col space-y-2 p-3 rounded-lg border border-gray-100 dark:border-zinc-800 hover:border-gray-200 dark:hover:border-zinc-700 transition-all bg-white dark:bg-zinc-900/50">
+                        <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.original_name}</p>
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    <p className="text-xs text-gray-500">{formatFileSize(file.size)} • {file.sheet_count} sheets</p>
+                                    {getSyncStatusBadge(file)}
+                                </div>
+                                <p className="text-xs text-gray-400 mt-1">Uploaded by: {file.uploaded_by_name || 'System'}</p>
+                                <p className="text-xs text-gray-500 mt-0.5 truncate" title={getSyncStatusMessage(file)}>Status Info: {getSyncStatusMessage(file)}</p>
+                            </div>
+                        </div>
+                        {file.rejected_artefact_id && file.rejected_download_url && (
+                            <a href={fullDownloadUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center space-x-1 px-3 py-1.5 text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg border border-red-200 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors w-fit">
+                                <Download size={14} />
+                                <span>Download Rejected Rows {rowsInfo}</span>
+                            </a>
+                        )}
+                     </div>
+                   );
+               })
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Master Data Preview */}

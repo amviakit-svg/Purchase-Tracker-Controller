@@ -1,16 +1,22 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+export const API_BASE_URL = 'http://localhost:5000/api';
 
 export async function apiCall(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     const moduleId = localStorage.getItem('module_id') || "1";
+    const fetchOptions = { ...options };
+    if (fetchOptions.skipCache) {
+        fetchOptions.cache = 'no-store';
+        delete fetchOptions.skipCache;
+    }
+
     try {
         const response = await fetch(url, {
             headers: {
                 'Content-Type': 'application/json',
                 'X-Module-ID': String(moduleId),
-                ...options.headers,
+                ...fetchOptions.headers,
             },
-            ...options,
+            ...fetchOptions,
         });
 
         if (!response.ok) {

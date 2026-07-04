@@ -185,8 +185,8 @@ def load_existing_concat_set(duck_conn, cols, sep=' | '):
         if "__is_deleted" in col_names:
             where_clause = "WHERE \"__is_deleted\" = FALSE OR \"__is_deleted\" IS NULL"
             
-        # Build concat_ws properly
-        col_exprs = [f'"{c}"' for c in cols]
+        # Build concat_ws properly with regex to trim all whitespace (spaces, tabs, newlines) to match Pandas .str.strip()
+        col_exprs = [f"REGEXP_REPLACE(CAST(\"{c}\" AS VARCHAR), '^[ \\t\\n\\r]+|[ \\t\\n\\r]+$', '', 'g')" for c in cols]
         concat_expr = f"CONCAT_WS('{sep}', " + ", ".join(col_exprs) + ")"
         
         rows = duck_conn.execute(

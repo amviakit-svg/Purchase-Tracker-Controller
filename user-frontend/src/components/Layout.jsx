@@ -119,8 +119,8 @@ export default function Layout({ theme, toggleTheme }) {
                 const newModule = e.target.value;
                 localStorage.setItem('module_id', newModule);
                 setSelectedModule(newModule);
-                // Navigate gracefully without triggering a race-condition render of the old route
-                navigate('/');
+                // Hard reload to completely reset state and caches across the app
+                window.location.href = '/';
               }}
               className="appearance-none bg-white/40 dark:bg-zinc-800/40 hover:bg-white dark:hover:bg-zinc-800 text-xs font-semibold rounded-full pl-3 pr-7 py-1.5 border border-gray-200/50 dark:border-zinc-700/50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 dark:text-gray-300 shadow-sm transition-all cursor-pointer backdrop-blur-md w-28 truncate"
             >
