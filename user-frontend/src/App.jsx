@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import Layout from './components/Layout';
 import RunRecon from './pages/RunRecon';
 import FolderView from './pages/FolderView';
+import RecycleBin from './pages/RecycleBin';
 
 function App() {
   const [theme, setTheme] = useState('dark');
@@ -28,6 +29,7 @@ function App() {
           <Route index element={<RunRecon />} />
           <Route path="recon" element={<RunRecon />} />
           <Route path="folder/:id" element={<FolderView />} />
+          <Route path="recycle-bin" element={<RecycleBin />} />
         </Route>
       </Routes>
     </BrowserRouter>

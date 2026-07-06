@@ -1,12 +1,19 @@
 export const API_BASE_URL = 'http://localhost:5000/api';
 
 export async function apiCall(endpoint, options = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
+    let url = `${API_BASE_URL}${endpoint}`;
     const moduleId = localStorage.getItem('module_id') || "1";
     const fetchOptions = { ...options };
     if (fetchOptions.skipCache) {
         fetchOptions.cache = 'no-store';
         delete fetchOptions.skipCache;
+    }
+
+    // Always bust cache for GET requests to prevent cross-module cache pollution
+    // since the browser doesn't know to Vary by X-Module-ID header
+    if (!fetchOptions.method || fetchOptions.method.toUpperCase() === 'GET') {
+        const separator = url.includes('?') ? '&' : '?';
+        url = `${url}${separator}_t=${Date.now()}`;
     }
 
     try {

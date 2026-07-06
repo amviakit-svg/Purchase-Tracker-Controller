@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Database, Sun, Moon, Loader2, Bell, FileDown, CheckCircle, XCircle, Info } from 'lucide-react';
+import { LayoutDashboard, Database, Sun, Moon, Loader2, Bell, FileDown, CheckCircle, XCircle, Info, Trash2 } from 'lucide-react';
 import { apiCall } from '../api';
 
 export default function Layout({ theme, toggleTheme }) {
@@ -183,7 +183,20 @@ export default function Layout({ theme, toggleTheme }) {
         </nav>
 
         {/* Footer / Theme Toggle */}
-        <div className="p-4 border-t border-gray-200 dark:border-zinc-800">
+        <div className="p-4 border-t border-gray-200 dark:border-zinc-800 space-y-2">
+          <NavLink
+            to="/recycle-bin"
+            className={({ isActive }) =>
+              `flex w-full items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-medium'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'
+              }`
+            }
+          >
+            <span className="font-medium">Recycle Bin</span>
+            <Trash2 size={16} />
+          </NavLink>
           <button
             onClick={toggleTheme}
             className="flex w-full items-center justify-between px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"

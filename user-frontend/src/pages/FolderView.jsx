@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useOutletContext } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { UploadCloud, Trash2, RotateCcw, Search, Download, CheckSquare, Table2, FileSpreadsheet, Loader2, Database } from 'lucide-react';
+import { UploadCloud, Trash2, RotateCcw, Search, Download, CheckSquare, Table2, FileSpreadsheet, Loader2, Database, Eye, X } from 'lucide-react';
 import { apiCall, apiCallForm, API_BASE_URL } from '../api';
 
 export default function FolderView() {
@@ -39,6 +39,31 @@ export default function FolderView() {
   
   const fileInputRef = useRef(null);
   const searchInputRef = useRef(null);
+
+  // File Details Modal State
+  const [isFileDetailsModalOpen, setIsFileDetailsModalOpen] = useState(false);
+  const [selectedFileDetails, setSelectedFileDetails] = useState(null);
+
+  const handleViewFile = async (fileId) => {
+    try {
+      const data = await apiCall(`/files/${fileId}/details`);
+      setSelectedFileDetails(data?.file?.sheets_detail || []);
+      setIsFileDetailsModalOpen(true);
+    } catch (err) {
+      toast.error('Failed to load file details');
+    }
+  };
+
+  const handleDeleteFile = async (fileId) => {
+    if (!window.confirm("Are you sure you want to delete this uploaded file?")) return;
+    try {
+      await apiCall(`/files/${fileId}`, { method: 'DELETE' });
+      toast.success("File deleted successfully");
+      fetchFiles();
+    } catch (err) {
+      toast.error(err.message || "Failed to delete file");
+    }
+  };
 
   const fetchFolderData = async (query = '') => {
     try {
@@ -166,88 +191,85 @@ export default function FolderView() {
   };
 
   const handleFileChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const selectedFiles = Array.from(e.target.files);
+    if (!selectedFiles.length) return;
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('folder_id', id);
-    
-    // Create an object URL in case it fails and we need to let the user download the failed file
-    const fileObjectURL = URL.createObjectURL(file);
-    
-    const uploadProcess = async () => {
-      try {
-        const res = await apiCallForm('/upload', formData);
+    for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('folder_id', id);
         
-        // Handle soft errors returned as 200 OK
-        if (res && res.success === false && res.error_code === 'file_exists') {
-          // Use a non-blocking toast for replacement
-          toast.warning("File already exists", {
-            description: res.reason || 'A file with this name is already in the folder.',
-            duration: 10000,
-            action: {
-              label: "Replace File",
-              onClick: () => {
-                const retryFormData = new FormData();
-                retryFormData.append('file', file);
-                retryFormData.append('folder_id', id);
-                retryFormData.append('replace', 'true');
-                
-                toast.promise(apiCallForm('/upload', retryFormData), {
-                  loading: 'Replacing file...',
-                  success: () => {
-                    fetchFolderData();
-                    fetchFiles();
-                    if (fetchNotifications) fetchNotifications();
-                    return "File replaced successfully!";
-                  },
-                  error: (err) => err.message || "Failed to replace file"
-                });
-              }
-            },
-            cancel: {
-              label: "Cancel",
-              onClick: () => toast.info("Upload cancelled")
+        const uploadProcess = async () => {
+          try {
+            const res = await apiCallForm('/upload', formData);
+            
+            // Handle soft errors returned as 200 OK
+            if (res && res.success === false && res.error_code === 'file_exists') {
+              // Use a non-blocking toast for replacement
+              toast.warning(`File already exists: ${file.name}`, {
+                description: res.reason || 'A file with this name is already in the folder.',
+                duration: 10000,
+                action: {
+                  label: "Replace File",
+                  onClick: () => {
+                    const retryFormData = new FormData();
+                    retryFormData.append('file', file);
+                    retryFormData.append('folder_id', id);
+                    retryFormData.append('replace', 'true');
+                    
+                    toast.promise(apiCallForm('/upload', retryFormData), {
+                      loading: `Replacing ${file.name}...`,
+                      success: () => {
+                        fetchFolderData();
+                        fetchFiles();
+                        if (fetchNotifications) fetchNotifications();
+                        return `${file.name} replaced successfully!`;
+                      },
+                      error: (err) => err.message || `Failed to replace ${file.name}`
+                    });
+                  }
+                },
+                cancel: {
+                  label: "Cancel",
+                  onClick: () => toast.info(`Upload cancelled for ${file.name}`)
+                }
+              });
+              // Throw a silent error so the outer promise toast doesn't show a red failure
+              throw new Error('SILENT_CONFLICT');
             }
-          });
-          // Throw a silent error so the outer promise toast doesn't show a red failure
-          throw new Error('SILENT_CONFLICT');
-        }
 
-        // If another type of soft error occurred
-        if (res && res.success === false) {
-          throw new Error(res.message || res.reason || 'Failed to upload file');
-        }
+            // If another type of soft error occurred
+            if (res && res.success === false) {
+              throw new Error(res.message || res.reason || 'Failed to upload file');
+            }
 
-        return res;
-      } catch (err) {
-        // Handle hard HTTP errors (like 500)
-        if (err.message === 'SILENT_CONFLICT') throw err;
-        throw err;
-      }
-    };
+            return res;
+          } catch (err) {
+            // Handle hard HTTP errors (like 500)
+            if (err.message === 'SILENT_CONFLICT') throw err;
+            throw err;
+          }
+        };
 
-    toast.promise(uploadProcess(), {
-      loading: `Uploading and checking rules for ${file.name}...`,
-      success: (res) => {
-        fetchFolderData();
-        fetchFiles();
-        if (fetchNotifications) fetchNotifications();
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return `${file.name} successfully verified and saved to master!`;
-      },
-      error: (err) => {
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        if (err.message === 'SILENT_CONFLICT') {
-          return 'Please confirm replacement in the notification popup.';
-        }
-        if (fetchNotifications) fetchNotifications();
-        return `Upload rejected: ${err.message}`;
-      }
-    });
+        toast.promise(uploadProcess(), {
+          loading: `Uploading and checking rules for ${file.name}...`,
+          success: (res) => {
+            fetchFolderData();
+            fetchFiles();
+            if (fetchNotifications) fetchNotifications();
+            return `${file.name} successfully verified and saved to master!`;
+          },
+          error: (err) => {
+            if (err.message === 'SILENT_CONFLICT') {
+              return `Please confirm replacement for ${file.name}.`;
+            }
+            if (fetchNotifications) fetchNotifications();
+            return `Upload rejected for ${file.name}: ${err.message}`;
+          }
+        });
+    }
 
-    e.target.value = null; // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const toggleMasterSelection = (rowId) => {
@@ -255,6 +277,14 @@ export default function FolderView() {
     if (newSet.has(rowId)) newSet.delete(rowId);
     else newSet.add(rowId);
     setSelectedMaster(newSet);
+  };
+
+  const toggleSelectAllMaster = () => {
+    if (masterRows.length > 0 && selectedMaster.size === masterRows.length) {
+      setSelectedMaster(new Set());
+    } else {
+      setSelectedMaster(new Set(masterRows.map(r => r._row_fp)));
+    }
   };
 
   const handleBulkDelete = async () => {
@@ -370,6 +400,7 @@ export default function FolderView() {
             onChange={handleFileChange}
             className="hidden" 
             accept=".csv,.xlsx,.xls"
+            multiple
           />
         </div>
 
@@ -415,12 +446,22 @@ export default function FolderView() {
                                 <p className="text-xs text-gray-500 mt-0.5 truncate" title={getSyncStatusMessage(file)}>Status Info: {getSyncStatusMessage(file)}</p>
                             </div>
                         </div>
-                        {file.rejected_artefact_id && file.rejected_download_url && (
-                            <a href={fullDownloadUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center space-x-1 px-3 py-1.5 text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg border border-red-200 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors w-fit">
-                                <Download size={14} />
-                                <span>Download Rejected Rows {rowsInfo}</span>
-                            </a>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          {file.rejected_artefact_id && file.rejected_download_url && (
+                              <a href={fullDownloadUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center space-x-1 px-3 py-1.5 text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg border border-red-200 dark:border-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors w-fit">
+                                  <Download size={14} />
+                                  <span>Download Rejected Rows {rowsInfo}</span>
+                              </a>
+                          )}
+                          <button onClick={() => handleViewFile(file.id)} className="inline-flex items-center justify-center space-x-1 px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg border border-blue-200 dark:border-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors w-fit">
+                            <Eye size={14} />
+                            <span>View Details</span>
+                          </button>
+                          <button onClick={() => handleDeleteFile(file.id)} className="inline-flex items-center justify-center space-x-1 px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors w-fit">
+                            <Trash2 size={14} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                      </div>
                    );
                })
@@ -476,7 +517,12 @@ export default function FolderView() {
             <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-zinc-800/80 dark:text-gray-400 sticky top-0 z-10 shadow-sm">
               <tr>
                 <th className="px-4 py-3 w-12 text-center bg-gray-50 dark:bg-zinc-800">
-                  <CheckSquare size={16} className="text-gray-400 inline" />
+                  <input 
+                    type="checkbox" 
+                    checked={masterRows.length > 0 && selectedMaster.size === masterRows.length}
+                    onChange={toggleSelectAllMaster}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 dark:bg-zinc-700 dark:border-zinc-600 cursor-pointer"
+                  />
                 </th>
                 <th className="px-4 py-3 bg-gray-50 dark:bg-zinc-800">ID</th>
                 {columns.map(c => {
@@ -587,6 +633,55 @@ export default function FolderView() {
           </table>
         </div>
       </motion.div>
+
+      {/* File Details Modal */}
+      <AnimatePresence>
+        {isFileDetailsModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            >
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50 flex justify-between items-center shrink-0">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+                  <FileSpreadsheet className="mr-2 text-blue-500" size={20} /> File Details
+                </h3>
+                <button
+                  onClick={() => setIsFileDetailsModalOpen(false)}
+                  className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-200 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto">
+                {selectedFileDetails && selectedFileDetails.length > 0 ? (
+                  <div className="grid gap-4">
+                    {selectedFileDetails.map((sheet, i) => (
+                      <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900/50">
+                        <div className="font-medium text-gray-900 dark:text-white">{sheet.name}</div>
+                        <div className="flex space-x-6 text-sm text-gray-500 dark:text-gray-400">
+                          <span className="flex flex-col items-center">
+                            <span className="font-bold text-gray-700 dark:text-gray-300">{sheet.rows}</span>
+                            <span>Rows</span>
+                          </span>
+                          <span className="flex flex-col items-center">
+                            <span className="font-bold text-gray-700 dark:text-gray-300">{sheet.columns}</span>
+                            <span>Columns</span>
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No details available.</p>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

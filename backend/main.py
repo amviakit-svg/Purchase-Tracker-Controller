@@ -8362,69 +8362,72 @@ async def preview_processed_file(file_id: int):
             
         summary_sections = []
         try:
-            summary_df = pd.read_excel(file['file_path'], sheet_name='Summary', header=None)
-            sum_current_section = None
-            
-            for idx, row in summary_df.iterrows():
-                val = str(row[0]).strip().upper() if pd.notna(row[0]) else ''
+            # First load excel file to check available sheets
+            xls = pd.ExcelFile(file['file_path'])
+            if 'Summary' in xls.sheet_names:
+                summary_df = pd.read_excel(xls, sheet_name='Summary', header=None)
+                sum_current_section = None
                 
-                # Check for section start: Contains "▓▓▓" or is exactly "SUMMARY"
-                is_section_start = ('▓▓▓' in val) or (val == 'SUMMARY')
-                
-                if is_section_start:
-                    if sum_current_section and sum_current_section['data']:
-                        summary_sections.append(sum_current_section)
+                for idx, row in summary_df.iterrows():
+                    val = str(row[0]).strip().upper() if pd.notna(row[0]) else ''
                     
-                    clean_name = val.replace('▓▓▓', '').strip()
-                    if not clean_name:
-                        clean_name = "SUMMARY"
+                    # Check for section start: Contains "▓▓▓" or is exactly "SUMMARY"
+                    is_section_start = ('▓▓▓' in val) or (val == 'SUMMARY')
+                    
+                    if is_section_start:
+                        if sum_current_section and sum_current_section['data']:
+                            summary_sections.append(sum_current_section)
                         
-                    sum_current_section = {
-                        'name': clean_name,
-                        'headers': [],
-                        'data': []
-                    }
-                    continue
-                
-                if sum_current_section:
-                    # Get non-empty cells in the row
-                    non_empty_cells = [str(c).strip() for c in row.tolist() if pd.notna(c) and str(c).strip()]
+                        clean_name = val.replace('▓▓▓', '').strip()
+                        if not clean_name:
+                            clean_name = "SUMMARY"
+                            
+                        sum_current_section = {
+                            'name': clean_name,
+                            'headers': [],
+                            'data': []
+                        }
+                        continue
                     
-                    if not sum_current_section['headers']:
-                        # Looking for a header row: Must have at least 2 columns OR not be a "Generated:" junk row
-                        if len(non_empty_cells) >= 2 or (len(non_empty_cells) == 1 and not non_empty_cells[0].startswith('Generated:')):
-                            sum_current_section['headers'] = non_empty_cells
-                            sum_current_section['header_count'] = len(non_empty_cells)
-                    else:
-                        # We have headers, so this is data
-                        if not non_empty_cells:
-                            continue # Skip empty rows
-                            
-                        # Only add if the first column is not empty
-                        if pd.notna(row[0]) and str(row[0]).strip():
-                            row_list = row.tolist()
-                            data_row = []
-                            header_count = sum_current_section.get('header_count', len(sum_current_section['headers']))
-                            
-                            for i in range(header_count):
-                                if i < len(row_list):
-                                    cell = row_list[i]
-                                    if pd.notna(cell):
-                                        if isinstance(cell, (int, float)):
-                                            data_row.append(f"{cell:,.2f}")
+                    if sum_current_section:
+                        # Get non-empty cells in the row
+                        non_empty_cells = [str(c).strip() for c in row.tolist() if pd.notna(c) and str(c).strip()]
+                        
+                        if not sum_current_section['headers']:
+                            # Looking for a header row: Must have at least 2 columns OR not be a "Generated:" junk row
+                            if len(non_empty_cells) >= 2 or (len(non_empty_cells) == 1 and not non_empty_cells[0].startswith('Generated:')):
+                                sum_current_section['headers'] = non_empty_cells
+                                sum_current_section['header_count'] = len(non_empty_cells)
+                        else:
+                            # We have headers, so this is data
+                            if not non_empty_cells:
+                                continue # Skip empty rows
+                                
+                            # Only add if the first column is not empty
+                            if pd.notna(row[0]) and str(row[0]).strip():
+                                row_list = row.tolist()
+                                data_row = []
+                                header_count = sum_current_section.get('header_count', len(sum_current_section['headers']))
+                                
+                                for i in range(header_count):
+                                    if i < len(row_list):
+                                        cell = row_list[i]
+                                        if pd.notna(cell):
+                                            if isinstance(cell, (int, float)):
+                                                data_row.append(f"{cell:,.2f}")
+                                            else:
+                                                data_row.append(str(cell).strip())
                                         else:
-                                            data_row.append(str(cell).strip())
+                                            data_row.append("")
                                     else:
                                         data_row.append("")
-                                else:
-                                    data_row.append("")
-                            sum_current_section['data'].append(data_row)
-                            
-            if sum_current_section and sum_current_section['data']:
-                summary_sections.append(sum_current_section)
-                
+                                sum_current_section['data'].append(data_row)
+                                
+                if sum_current_section and sum_current_section['data']:
+                    summary_sections.append(sum_current_section)
+                    
         except Exception as e:
-            logger.error(f"Error reading summary sheet: {e}")
+            logger.debug(f"Could not read Summary sheet: {e}")
             
         if not sections and not summary_sections:
             try:
@@ -9178,7 +9181,10 @@ def _enrich_files_with_rejected_artefact(files: list) -> list:
 # Settings API (Dynamic Filters & Cards)
 # ==========================================
 
-from backend.database import get_dynamic_filters, save_dynamic_filter, delete_dynamic_filter, get_dynamic_cards, save_dynamic_card, delete_dynamic_card
+from backend.database import (
+    get_dynamic_filters, save_dynamic_filter, delete_dynamic_filter, reorder_dynamic_filters,
+    get_dynamic_cards, save_dynamic_card, delete_dynamic_card, reorder_dynamic_cards
+)
 
 @app.get('/api/settings/filters')
 async def api_get_dynamic_filters(current_user: Optional[dict] = Depends(get_optional_user)):
@@ -9193,17 +9199,29 @@ async def api_get_dynamic_filters(current_user: Optional[dict] = Depends(get_opt
 async def api_save_dynamic_filter(request: Request, current_user: Optional[dict] = Depends(get_optional_user)):
     try:
         data = await request.json()
-        module_id = current_user.get('module_id', 1) if current_user else 1
+        module_id = data.get('module_id') or (current_user.get('module_id', 1) if current_user else 1)
         fid = save_dynamic_filter(
             module_id,
             data.get('field_name'),
             data.get('filter_type'),
             data.get('validation_id'),
             data.get('target_column'),
+            data.get('target_column_v2'),
+            data.get('target_column_v3'),
             data.get('is_active', 1),
             data.get('id')
         )
         return {'success': True, 'id': fid}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
+@app.post('/api/settings/filters/reorder')
+async def api_reorder_dynamic_filters(request: Request, current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        data = await request.json()
+        module_id = current_user.get('module_id', 1) if current_user else 1
+        reorder_dynamic_filters(data.get('order_list', []), module_id)
+        return {'success': True}
     except Exception as e:
         return {'success': False, 'message': str(e)}
 
@@ -9229,18 +9247,30 @@ async def api_get_dynamic_cards(current_user: Optional[dict] = Depends(get_optio
 async def api_save_dynamic_card(request: Request, current_user: Optional[dict] = Depends(get_optional_user)):
     try:
         data = await request.json()
-        module_id = current_user.get('module_id', 1) if current_user else 1
+        module_id = data.get('module_id') or (current_user.get('module_id', 1) if current_user else 1)
         cid = save_dynamic_card(
             module_id,
             data.get('card_name'),
             data.get('calc_type'),
             data.get('validation_id'),
             data.get('target_column'),
+            data.get('target_column_v2'),
+            data.get('target_column_v3'),
             data.get('sub_calc'),
             data.get('is_active', 1),
             data.get('id')
         )
         return {'success': True, 'id': cid}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
+@app.post('/api/settings/cards/reorder')
+async def api_reorder_dynamic_cards(request: Request, current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        data = await request.json()
+        module_id = current_user.get('module_id', 1) if current_user else 1
+        reorder_dynamic_cards(data.get('order_list', []), module_id)
+        return {'success': True}
     except Exception as e:
         return {'success': False, 'message': str(e)}
 

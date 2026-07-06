@@ -1197,12 +1197,24 @@
             <div class="mb-6 flex items-center justify-between">
                 <div>
                     <h2 class="text-2xl font-bold text-gray-900">Settings</h2>
-                    <p class="text-gray-600 mt-1">Manage User Portal dynamic filters and cards</p>
+                    <p class="text-gray-600 mt-1">Manage User Portal dynamic configurations</p>
                 </div>
             </div>
 
+            <!-- Settings Sub-Tabs -->
+            <div class="mb-6 border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onclick="switchSettingsTab('filters')" id="settings-tab-filters" class="settings-tab-btn border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Filter Management
+                    </button>
+                    <button onclick="switchSettingsTab('cards')" id="settings-tab-cards" class="settings-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Card Management
+                    </button>
+                </nav>
+            </div>
+
             <!-- Filter Management -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+            <div id="settings-content-filters" class="settings-content-pane bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
                 <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                     <h3 class="text-lg font-semibold text-gray-800">Filter Management</h3>
                     <button onclick="addDynamicFilterRow()" class="flex items-center space-x-2 bg-blue-600 text-white text-sm font-medium py-1.5 px-3 rounded hover:bg-blue-700 transition-colors">
@@ -1230,7 +1242,7 @@
             </div>
 
             <!-- Card Management -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div id="settings-content-cards" class="settings-content-pane bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden">
                 <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                     <h3 class="text-lg font-semibold text-gray-800">Card Management</h3>
                     <button onclick="addDynamicCardRow()" class="flex items-center space-x-2 bg-purple-600 text-white text-sm font-medium py-1.5 px-3 rounded hover:bg-purple-700 transition-colors">
@@ -1246,13 +1258,12 @@
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calculation Type</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Validation Setup</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Processed Column</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub-calc (Opt)</th>
                                 <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Visibility</th>
                                 <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="settings-cards-body" class="bg-white divide-y divide-gray-200">
-                            <tr><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500">Loading cards...</td></tr>
+                            <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">Loading cards...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -13306,8 +13317,32 @@ function val13RenderColumns() {
 }
 
         // ==================== SETTINGS (FILTER & CARD MANAGEMENT) ====================
+        function switchSettingsTab(tab) {
+            document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'text-blue-600');
+                btn.classList.add('border-transparent', 'text-gray-500');
+            });
+            document.querySelectorAll('.settings-content-pane').forEach(pane => {
+                pane.classList.add('hidden');
+            });
+            
+            document.getElementById('settings-tab-' + tab).classList.remove('border-transparent', 'text-gray-500');
+            document.getElementById('settings-tab-' + tab).classList.add('border-blue-500', 'text-blue-600');
+            document.getElementById('settings-content-' + tab).classList.remove('hidden');
+        }
+
+        window.ALL_MODULES = [];
+
         async function loadSettings() {
             try {
+                // Pre-load all modules for dropdowns
+                try {
+                    const modData = await apiCall('/api/local-modules');
+                    if (modData && modData.modules) {
+                        window.ALL_MODULES = modData.modules;
+                    }
+                } catch(e) {}
+
                 // Load Filters
                 const filterRes = await apiCall('/api/settings/filters');
                 const filtersBody = document.getElementById('settings-filters-body');
@@ -13333,6 +13368,7 @@ function val13RenderColumns() {
             const tr = document.createElement('tr');
             const fid = filter.id || 'new_' + Date.now();
             tr.id = 'filter_row_' + fid;
+            
             tr.innerHTML = `
                 <td class="px-4 py-3 whitespace-nowrap">
                     <input type="text" class="filter-name bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Field Name" value="${filter.field_name || ''}">
@@ -13346,15 +13382,19 @@ function val13RenderColumns() {
                     </select>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
-                    <select class="filter-validation bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
+                    <select class="filter-validation bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" onchange="const isGlobal = !this.value; const tr = this.closest('tr'); tr.querySelector('.filter-target-v2').classList.toggle('hidden', !isGlobal); tr.querySelector('.filter-target-v3').classList.toggle('hidden', !isGlobal);">
                         <option value="">Global (All)</option>
-                        <option value="1" ${filter.validation_id===1?'selected':''}>Validation 1</option>
-                        <option value="2" ${filter.validation_id===2?'selected':''}>Validation 2</option>
-                        <option value="3" ${filter.validation_id===3?'selected':''}>Validation 3</option>
+                        <option value="1" ${filter.validation_id == 1 ? 'selected':''}>Validation 1</option>
+                        <option value="2" ${filter.validation_id == 2 ? 'selected':''}>Validation 2</option>
+                        <option value="3" ${filter.validation_id == 3 ? 'selected':''}>Validation 3</option>
                     </select>
                 </td>
-                <td class="px-4 py-3 whitespace-nowrap">
-                    <input type="text" class="filter-target bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Target Column (Optional)" value="${filter.target_column || ''}">
+                <td class="px-4 py-3 min-w-[150px]">
+                    <div id="filter_target_container_${fid}" class="flex flex-col gap-2">
+                        <input type="text" class="filter-target bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2 block w-full" placeholder="Target Col (V1)" value="${filter.target_column || ''}">
+                        <input type="text" class="filter-target-v2 bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2 block w-full ${filter.validation_id ? 'hidden' : ''}" placeholder="Target Col (V2)" value="${filter.target_column_v2 || ''}">
+                        <input type="text" class="filter-target-v3 bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2 block w-full ${filter.validation_id ? 'hidden' : ''}" placeholder="Target Col (V3)" value="${filter.target_column_v3 || ''}">
+                    </div>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap text-center">
                     <label class="relative inline-flex items-center cursor-pointer">
@@ -13362,9 +13402,11 @@ function val13RenderColumns() {
                       <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                 </td>
-                <td class="px-4 py-3 whitespace-nowrap text-center space-x-2">
-                    <button onclick="saveDynamicFilter('${fid}')" class="text-green-600 hover:text-green-900"><i class="fas fa-save"></i></button>
-                    <button onclick="deleteDynamicFilter('${fid}')" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                <td class="px-4 py-3 whitespace-nowrap text-center space-x-1">
+                    <button onclick="saveDynamicFilter('${fid}')" class="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded text-xs font-semibold shadow-sm transition-colors">Save</button>
+                    <button onclick="deleteDynamicFilter('${fid}')" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-semibold shadow-sm transition-colors">Delete</button>
+                    <button onclick="moveRow(this, 'up', 'filters')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-semibold shadow-sm transition-colors" title="Move Up">↑</button>
+                    <button onclick="moveRow(this, 'down', 'filters')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-semibold shadow-sm transition-colors" title="Move Down">↓</button>
                 </td>
             `;
             if (!filter.id) {
@@ -13381,13 +13423,19 @@ function val13RenderColumns() {
             const type = tr.querySelector('.filter-type').value;
             const val = tr.querySelector('.filter-validation').value;
             const target = tr.querySelector('.filter-target').value;
+            const target_v2 = tr.querySelector('.filter-target-v2').value;
+            const target_v3 = tr.querySelector('.filter-target-v3').value;
             const active = tr.querySelector('.filter-active').checked ? 1 : 0;
+            const modId = localStorage.getItem('module_id') || 1;
             
             const payload = {
+                module_id: parseInt(modId),
                 field_name: name,
                 filter_type: type,
                 validation_id: val ? parseInt(val) : null,
                 target_column: target || null,
+                target_column_v2: val ? null : (target_v2 || null),
+                target_column_v3: val ? null : (target_v3 || null),
                 is_active: active
             };
             
@@ -13424,36 +13472,75 @@ function val13RenderColumns() {
             renderDynamicFilterRow({});
         }
 
+        async function saveReorder(type) {
+            const tbodyId = type === 'filters' ? 'settings-filters-body' : 'settings-cards-body';
+            const endpoint = type === 'filters' ? '/api/settings/filters/reorder' : '/api/settings/cards/reorder';
+            const rows = document.getElementById(tbodyId).querySelectorAll('tr');
+            const orderList = [];
+            
+            rows.forEach((row, index) => {
+                const idStr = row.id.replace('filter_row_', '').replace('card_row_', '');
+                if (!idStr.startsWith('new_')) {
+                    orderList.push({ id: parseInt(idStr), order: index });
+                }
+            });
+            
+            if (orderList.length > 0) {
+                try {
+                    await apiCall(endpoint, { method: 'POST', body: JSON.stringify({ order_list: orderList }) });
+                } catch(e) {
+                    console.error('Failed to save reorder for', type, e);
+                }
+            }
+        }
+
+        function moveRow(btn, direction, type) {
+            const row = btn.closest('tr');
+            const tbody = row.parentNode;
+            
+            if (direction === 'up' && row.previousElementSibling) {
+                tbody.insertBefore(row, row.previousElementSibling);
+                saveReorder(type);
+            } else if (direction === 'down' && row.nextElementSibling) {
+                tbody.insertBefore(row.nextElementSibling, row);
+                saveReorder(type);
+            }
+        }
+
         function renderDynamicCardRow(card = {}) {
             const tbody = document.getElementById('settings-cards-body');
             const tr = document.createElement('tr');
             const cid = card.id || 'new_' + Date.now();
             tr.id = 'card_row_' + cid;
+            
             tr.innerHTML = `
                 <td class="px-4 py-3 whitespace-nowrap">
                     <input type="text" class="card-name bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Card Name" value="${card.card_name || ''}">
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
-                    <select class="card-calc bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
+                    <select class="card-calc bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" onchange="const tr = this.closest('tr'); tr.querySelector('.card-sub-calc').classList.toggle('hidden', this.value !== 'Percentage');">
                         <option value="Sum" ${card.calc_type==='Sum'?'selected':''}>Sum</option>
                         <option value="Count" ${card.calc_type==='Count'?'selected':''}>Count</option>
                         <option value="Average" ${card.calc_type==='Average'?'selected':''}>Average</option>
+                        <option value="Percentage" ${card.calc_type==='Percentage'?'selected':''}>Percentage</option>
                         <option value="Subtotal" ${card.calc_type==='Subtotal'?'selected':''}>Subtotal</option>
                     </select>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
-                    <select class="card-validation bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
+                    <select class="card-validation bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" onchange="const isGlobal = !this.value; const tr = this.closest('tr'); tr.querySelector('.card-target-v2').classList.toggle('hidden', !isGlobal); tr.querySelector('.card-target-v3').classList.toggle('hidden', !isGlobal);">
                         <option value="">Global (All)</option>
-                        <option value="1" ${card.validation_id===1?'selected':''}>Validation 1</option>
-                        <option value="2" ${card.validation_id===2?'selected':''}>Validation 2</option>
-                        <option value="3" ${card.validation_id===3?'selected':''}>Validation 3</option>
+                        <option value="1" ${card.validation_id == 1 ? 'selected':''}>Validation 1</option>
+                        <option value="2" ${card.validation_id == 2 ? 'selected':''}>Validation 2</option>
+                        <option value="3" ${card.validation_id == 3 ? 'selected':''}>Validation 3</option>
                     </select>
                 </td>
-                <td class="px-4 py-3 whitespace-nowrap">
-                    <input type="text" class="card-target bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Target Column" value="${card.target_column || ''}">
-                </td>
-                <td class="px-4 py-3 whitespace-nowrap">
-                    <input type="text" class="card-subcalc bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" placeholder="Sub-calc label" value="${card.sub_calc || ''}">
+                <td class="px-4 py-3 min-w-[150px]">
+                    <div id="card_target_container_${cid}" class="flex flex-col gap-2">
+                        <input type="text" class="card-target bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2 block w-full" placeholder="Target Col (V1)" value="${card.target_column || ''}">
+                        <input type="text" class="card-target-v2 bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2 block w-full ${card.validation_id ? 'hidden' : ''}" placeholder="Target Col (V2)" value="${card.target_column_v2 || ''}">
+                        <input type="text" class="card-target-v3 bg-white border border-gray-300 text-gray-900 text-xs rounded-lg p-2 block w-full ${card.validation_id ? 'hidden' : ''}" placeholder="Target Col (V3)" value="${card.target_column_v3 || ''}">
+                        <input type="text" class="card-sub-calc bg-yellow-50 border border-yellow-300 text-gray-900 text-xs rounded-lg p-2 block w-full ${card.calc_type==='Percentage' ? '' : 'hidden'}" placeholder="Remark Filter (e.g. Missing)" value="${card.sub_calc || ''}" title="Only rows matching this text exactly will be counted in the percentage (case-insensitive).">
+                    </div>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap text-center">
                     <label class="relative inline-flex items-center cursor-pointer">
@@ -13461,9 +13548,11 @@ function val13RenderColumns() {
                       <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                 </td>
-                <td class="px-4 py-3 whitespace-nowrap text-center space-x-2">
-                    <button onclick="saveDynamicCard('${cid}')" class="text-green-600 hover:text-green-900"><i class="fas fa-save"></i></button>
-                    <button onclick="deleteDynamicCard('${cid}')" class="text-red-600 hover:text-red-900"><i class="fas fa-trash"></i></button>
+                <td class="px-4 py-3 whitespace-nowrap text-center space-x-1">
+                    <button onclick="saveDynamicCard('${cid}')" class="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded text-xs font-semibold shadow-sm transition-colors">Save</button>
+                    <button onclick="deleteDynamicCard('${cid}')" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-semibold shadow-sm transition-colors">Delete</button>
+                    <button onclick="moveRow(this, 'up', 'cards')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-semibold shadow-sm transition-colors" title="Move Up">↑</button>
+                    <button onclick="moveRow(this, 'down', 'cards')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-semibold shadow-sm transition-colors" title="Move Down">↓</button>
                 </td>
             `;
             if (!card.id) {
@@ -13478,17 +13567,23 @@ function val13RenderColumns() {
             const tr = document.getElementById('card_row_' + cid);
             const name = tr.querySelector('.card-name').value;
             const type = tr.querySelector('.card-calc').value;
+            const sub_calc = tr.querySelector('.card-sub-calc').value;
             const val = tr.querySelector('.card-validation').value;
             const target = tr.querySelector('.card-target').value;
-            const subcalc = tr.querySelector('.card-subcalc').value;
+            const target_v2 = tr.querySelector('.card-target-v2').value;
+            const target_v3 = tr.querySelector('.card-target-v3').value;
             const active = tr.querySelector('.card-active').checked ? 1 : 0;
+            const modId = localStorage.getItem('module_id') || 1;
             
             const payload = {
+                module_id: parseInt(modId),
                 card_name: name,
                 calc_type: type,
+                sub_calc: type === 'Percentage' ? (sub_calc || null) : null,
                 validation_id: val ? parseInt(val) : null,
                 target_column: target || null,
-                sub_calc: subcalc || null,
+                target_column_v2: val ? null : (target_v2 || null),
+                target_column_v3: val ? null : (target_v3 || null),
                 is_active: active
             };
             

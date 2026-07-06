@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { Play, Download, Table2, List, Loader2, Search, FileSpreadsheet, Clock, Hash } from 'lucide-react';
@@ -76,7 +76,13 @@ export default function RunRecon() {
               if (resC && resC.cards) setDynamicCards(resC.cards.filter(c => c.is_active));
           } catch(e) { console.error('Failed to load settings', e); }
       };
+      
+      // Load initially
       loadSettings();
+      
+      // Auto-reload settings when user switches back to this tab
+      window.addEventListener('focus', loadSettings);
+      return () => window.removeEventListener('focus', loadSettings);
   }, []);
 
   const [filters, setFilters] = useState({
@@ -98,6 +104,53 @@ export default function RunRecon() {
     v2: '',
     v3: ''
   });
+
+  const dropdownOptions = React.useMemo(() => {
+    const opts = {};
+    if (!dynamicFilters || dynamicFilters.length === 0) return opts;
+    
+    const valLabels = { 1: "GRN vs Vendor", 2: "Vendor vs Tally", 3: "Tally vs Vendor" };
+
+    dynamicFilters.forEach(f => {
+       if (f.filter_type === 'Dropdown' && f.field_name !== 'Period' && f.field_name !== 'Variance') {
+           const grouped = {};
+           
+           [1, 2, 3].forEach(vid => {
+               if (f.validation_id && f.validation_id !== vid) return;
+               
+               const uniqueVals = new Set();
+               const vData = extractedData[`v${vid}`];
+               if (!vData || !vData.data || !vData.data.sections) return;
+               
+               let target = f.target_column;
+               if (!f.validation_id) {
+                   if (vid === 2 && f.target_column_v2) target = f.target_column_v2;
+                   if (vid === 3 && f.target_column_v3) target = f.target_column_v3;
+               }
+               
+               if (target) {
+                   vData.data.sections.forEach(sec => {
+                       let idx = sec.headers.findIndex(h => String(h).trim().toLowerCase() === target.trim().toLowerCase());
+                       if (idx === -1) idx = sec.headers.findIndex(h => String(h).toLowerCase().includes(target.toLowerCase()));
+                       if (idx >= 0 && sec.data) {
+                           sec.data.forEach(row => {
+                               const val = String(row[idx] || '').trim();
+                               if (val) uniqueVals.add(val);
+                           });
+                       }
+                   });
+               }
+               
+               if (uniqueVals.size > 0) {
+                   grouped[valLabels[vid]] = Array.from(uniqueVals).sort();
+               }
+           });
+           
+           opts[f.id] = grouped;
+       }
+    });
+    return opts;
+  }, [extractedData, dynamicFilters]);
 
   useEffect(() => {
     fetchFolders();
@@ -335,7 +388,7 @@ export default function RunRecon() {
     }
   };
 
-    const ValidationSection = ({ title, stateObj, searchKey, summaryTitle, summaryColor, isRunning }) => {
+    const ValidationSection = ({ title, stateObj, searchKey, summaryTitle, summaryColor, isRunning, validationId, dynamicCards, dynamicFilters }) => {
         const [processedData, setProcessedData] = useState(null);
 
         const formatCellData = (cell, header) => {
@@ -373,59 +426,264 @@ export default function RunRecon() {
        
        setIsProcessing(true);
        
-       const workerCode = `
-         self.onmessage = function(e) {
-           const { dataObj, filters, searchTerm, limit } = e.data;
-           
-           let totalRecords = 0;
-           let totalAmount = 0;
-           let processedSections = [];
+        const workerCode = `
+          self.onmessage = function(e) {
+            const { dataObj, filters, searchTerm, limit, dynamicCards, dynamicFilters, validationId } = e.data;
+            
+            let totalRecords = 0;
+            let totalAmount = 0;
+            let processedSections = [];
+            
+            // Initialize dynamic card results
+            let calculatedCards = {};
+            if (dynamicCards && dynamicCards.length > 0) {
+                dynamicCards.forEach(c => {
+                    calculatedCards[c.id] = { ...c, value: 0, _totalValid: 0, _filteredValid: 0 };
+                });
+            }
 
-           dataObj.sections.forEach(sec => {
-               totalRecords += sec.data.length;
-               const amountIdx = sec.headers.findIndex(h => h.toLowerCase().includes('amount') || h.toLowerCase().includes('total'));
-               if (amountIdx >= 0) {
-                  sec.data.forEach(row => {
-                      const val = parseFloat(String(row[amountIdx]).replace(/,/g, ''));
-                      if (!isNaN(val)) totalAmount += val;
-                  });
-               }
+            dataObj.sections.forEach(sec => {
+                totalRecords += sec.data.length;
+                const amountIdx = sec.headers.findIndex(h => h.toLowerCase().includes('amount') || h.toLowerCase().includes('total'));
+                
+                // Pre-compute header indexes for dynamic cards
+                let cardIndexes = {};
+                if (dynamicCards && dynamicCards.length > 0) {
+                    dynamicCards.forEach(c => {
+                        let target = c.target_column;
+                        if (!c.validation_id) {
+                            if (validationId === 2 && c.target_column_v2) target = c.target_column_v2;
+                            if (validationId === 3 && c.target_column_v3) target = c.target_column_v3;
+                        }
+                        if (target) {
+                            let idx = sec.headers.findIndex(h => h.trim().toLowerCase() === target.trim().toLowerCase());
+                            if (idx === -1) idx = sec.headers.findIndex(h => h.toLowerCase().includes(target.toLowerCase()));
+                            if (idx >= 0) cardIndexes[c.id] = idx;
+                        }
+                    });
+                }
 
-               const lowerOrderId = filters.orderId ? filters.orderId.toLowerCase() : '';
-               const lowerSearch = searchTerm ? searchTerm.toLowerCase() : '';
-               const varIndex = filters.matchPercentage !== 'any' 
-                 ? sec.headers.findIndex(h => String(h).toLowerCase().includes('variance') || String(h).toLowerCase().includes('diff'))
-                 : -1;
+                const lowerOrderId = filters.orderId ? filters.orderId.toLowerCase() : '';
+                const lowerSearch = searchTerm ? searchTerm.toLowerCase() : '';
+                const varIndex = filters.matchPercentage !== 'any' 
+                  ? sec.headers.findIndex(h => String(h).toLowerCase().includes('variance') || String(h).toLowerCase().includes('diff'))
+                  : -1;
 
-               const filteredData = sec.data.filter(row => {
-                  if (lowerOrderId && !row.some(cell => String(cell).toLowerCase().includes(lowerOrderId))) return false;
-                  if (lowerSearch && !row.some(cell => String(cell).toLowerCase().includes(lowerSearch))) return false;
-                  if (varIndex >= 0) {
-                     const val = parseFloat(String(row[varIndex]).replace(/,/g, ''));
-                     if (!isNaN(val)) {
-                         if (filters.matchPercentage === '100' && Math.abs(val) > 0.01) return false;
-                         if (filters.matchPercentage === '90' && Math.abs(val) > (0.1 * 100)) return false; 
-                     }
-                  }
-                  return true;
-               });
+                const filteredData = sec.data.filter(row => {
+                   if (dynamicCards && dynamicCards.length > 0) {
+                       dynamicCards.forEach(c => {
+                           if (c.calc_type === 'Percentage' && cardIndexes[c.id] !== undefined) {
+                               const cellVal = String(row[cardIndexes[c.id]] || '').trim();
+                               if (cellVal) calculatedCards[c.id]._totalValid += 1;
+                           }
+                       });
+                   }
+                   
+                   if (lowerOrderId && !row.some(cell => String(cell).toLowerCase().includes(lowerOrderId))) return false;
+                   if (lowerSearch && !row.some(cell => String(cell).toLowerCase().includes(lowerSearch))) return false;
+                   if (varIndex >= 0) {
+                      const val = parseFloat(String(row[varIndex]).replace(/,/g, ''));
+                      if (!isNaN(val)) {
+                          if (filters.matchPercentage === '100' && Math.abs(val) > 0.01) return false;
+                          if (filters.matchPercentage === '90' && Math.abs(val) > (0.1 * 100)) return false; 
+                      }
+                   }
+                   
+                   // Evaluate Generic Dynamic Filters
+                   if (dynamicFilters && dynamicFilters.length > 0) {
+                       let failsDynamic = false;
+                       for (let i = 0; i < dynamicFilters.length; i++) {
+                           const f = dynamicFilters[i];
+                           // Only handle newly added generic dynamic filters
+                           if (f.field_name === 'Period' || f.field_name === 'Order ID' || f.field_name === 'Variance') continue;
+                           
+                           if (f.filter_type === 'Search' || f.filter_type === 'Text' || f.filter_type === 'Dropdown') {
+                               const key = 'dyn_' + f.id;
+                               const fValue = filters[key] ? filters[key].toLowerCase() : '';
+                               if (fValue) {
+                                   let target = f.target_column;
+                                   if (!f.validation_id) {
+                                       if (validationId === 2 && f.target_column_v2) target = f.target_column_v2;
+                                       if (validationId === 3 && f.target_column_v3) target = f.target_column_v3;
+                                   }
+                                   
+                                   if (target) {
+                                       let idx = sec.headers.findIndex(h => h.trim().toLowerCase() === target.trim().toLowerCase());
+                                       if (idx === -1) idx = sec.headers.findIndex(h => h.toLowerCase().includes(target.toLowerCase()));
+                                       if (idx >= 0) {
+                                           const cellVal = String(row[idx]).toLowerCase();
+                                           if (f.filter_type === 'Dropdown') {
+                                               if (cellVal !== fValue) failsDynamic = true;
+                                           } else {
+                                               if (!cellVal.includes(fValue)) failsDynamic = true;
+                                           }
+                                       } else {
+                                           failsDynamic = true; // Required target column not found
+                                       }
+                                   } else {
+                                       // Global search across all columns if no target column specified
+                                       if (f.filter_type === 'Dropdown') {
+                                           if (!row.some(cell => String(cell).toLowerCase() === fValue)) failsDynamic = true;
+                                       } else {
+                                           if (!row.some(cell => String(cell).toLowerCase().includes(fValue))) failsDynamic = true;
+                                       }
+                                   }
+                               }
+                           } else if (f.filter_type === 'Range') {
+                               const keyMin = 'dyn_min_' + f.id;
+                               const keyMax = 'dyn_max_' + f.id;
+                               const minStr = filters[keyMin];
+                               const maxStr = filters[keyMax];
+                               
+                               if (minStr || maxStr) {
+                                   let target = f.target_column;
+                                   if (!f.validation_id) {
+                                       if (validationId === 2 && f.target_column_v2) target = f.target_column_v2;
+                                       if (validationId === 3 && f.target_column_v3) target = f.target_column_v3;
+                                   }
+                                   
+                                   if (target) {
+                                       let idx = sec.headers.findIndex(h => h.trim().toLowerCase() === target.trim().toLowerCase());
+                                       if (idx === -1) idx = sec.headers.findIndex(h => h.toLowerCase().includes(target.toLowerCase()));
+                                       if (idx >= 0) {
+                                           const cellValRaw = String(row[idx] || '').replace(/,/g, '');
+                                           const cellVal = parseFloat(cellValRaw);
+                                           
+                                           if (isNaN(cellVal)) {
+                                               failsDynamic = true;
+                                           } else {
+                                               if (minStr) {
+                                                   const minVal = parseFloat(minStr);
+                                                   if (!isNaN(minVal) && cellVal < minVal) failsDynamic = true;
+                                               }
+                                               if (maxStr) {
+                                                   const maxVal = parseFloat(maxStr);
+                                                   if (!isNaN(maxVal) && cellVal > maxVal) failsDynamic = true;
+                                               }
+                                           }
+                                       } else {
+                                           failsDynamic = true;
+                                       }
+                                   }
+                               }
+                           } else if (f.filter_type === 'Date') {
+                               const key = 'dyn_' + f.id;
+                               const fValue = filters[key];
+                               
+                               if (fValue) {
+                                   let target = f.target_column;
+                                   if (!f.validation_id) {
+                                       if (validationId === 2 && f.target_column_v2) target = f.target_column_v2;
+                                       if (validationId === 3 && f.target_column_v3) target = f.target_column_v3;
+                                   }
+                                   
+                                   if (target) {
+                                       let idx = sec.headers.findIndex(h => h.trim().toLowerCase() === target.trim().toLowerCase());
+                                       if (idx === -1) idx = sec.headers.findIndex(h => h.toLowerCase().includes(target.toLowerCase()));
+                                       if (idx >= 0) {
+                                           const cellValRaw = String(row[idx] || '').trim();
+                                           const cellDate = new Date(cellValRaw);
+                                           if (!isNaN(cellDate.getTime())) {
+                                               // Convert to local YYYY-MM-DD
+                                               const y = cellDate.getFullYear();
+                                               const m = String(cellDate.getMonth() + 1).padStart(2, '0');
+                                               const d = String(cellDate.getDate()).padStart(2, '0');
+                                               const cellDateStr = y + '-' + m + '-' + d;
+                                               
+                                               if (cellDateStr !== fValue) failsDynamic = true;
+                                           } else {
+                                               failsDynamic = true;
+                                           }
+                                       } else {
+                                           failsDynamic = true;
+                                       }
+                                   }
+                               }
+                           }
+                       }
+                       if (failsDynamic) return false;
+                   }
+                   
+                   return true;
+                });
 
-               processedSections.push({
-                   name: sec.name,
-                   headers: sec.headers,
-                   filteredCount: filteredData.length,
-                   dataPreview: filteredData.slice(0, limit)
-               });
-           });
+                // Calculate metrics over filtered data
+                if (filteredData.length > 0) {
+                    filteredData.forEach(row => {
+                        // Keep legacy totalAmount working just in case
+                        if (amountIdx >= 0) {
+                            const val = parseFloat(String(row[amountIdx]).replace(/,/g, ''));
+                            if (!isNaN(val)) totalAmount += val;
+                        }
+                        
+                        // Calculate Dynamic Cards
+                        if (dynamicCards && dynamicCards.length > 0) {
+                            dynamicCards.forEach(c => {
+                                if (c.calc_type === 'Count') {
+                                    if (cardIndexes[c.id] !== undefined) {
+                                        const cellVal = String(row[cardIndexes[c.id]] || '').trim();
+                                        if (cellVal !== '') {
+                                            calculatedCards[c.id].value += 1;
+                                        }
+                                    } else {
+                                        calculatedCards[c.id].value += 1;
+                                    }
+                                } else if (c.calc_type === 'Sum' || c.calc_type === 'Average' || c.calc_type === 'Subtotal') {
+                                    if (cardIndexes[c.id] !== undefined) {
+                                        const cellVal = parseFloat(String(row[cardIndexes[c.id]]).replace(/,/g, ''));
+                                        if (!isNaN(cellVal)) {
+                                            calculatedCards[c.id].value += cellVal;
+                                        }
+                                    }
+                                } else if (c.calc_type === 'Percentage') {
+                                    if (cardIndexes[c.id] !== undefined) {
+                                        const cellVal = String(row[cardIndexes[c.id]] || '').trim();
+                                        if (c.sub_calc) {
+                                            if (cellVal.toLowerCase() === c.sub_calc.toLowerCase().trim()) {
+                                                calculatedCards[c.id]._filteredValid += 1;
+                                            }
+                                        } else {
+                                            if (cellVal) calculatedCards[c.id]._filteredValid += 1;
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
 
-           self.postMessage({ 
-               totalRecords, 
-               totalAmount, 
-               processedSections,
-               summary_sections: dataObj.summary_sections || []
-           });
-         };
-       `;
+                processedSections.push({
+                    name: sec.name,
+                    headers: sec.headers,
+                    filteredCount: filteredData.length,
+                    dataPreview: filteredData.slice(0, limit)
+                });
+            });
+            
+            // Post-process Average
+            if (dynamicCards && dynamicCards.length > 0) {
+                dynamicCards.forEach(c => {
+                    if (c.calc_type === 'Average' && totalRecords > 0) {
+                        calculatedCards[c.id].value = calculatedCards[c.id].value / totalRecords;
+                    } else if (c.calc_type === 'Percentage') {
+                        if (calculatedCards[c.id]._totalValid > 0) {
+                            calculatedCards[c.id].value = (calculatedCards[c.id]._filteredValid / calculatedCards[c.id]._totalValid) * 100;
+                        } else {
+                            calculatedCards[c.id].value = 100;
+                        }
+                    }
+                });
+            }
+
+            self.postMessage({ 
+                totalRecords, 
+                totalAmount, 
+                processedSections,
+                calculatedCards: Object.values(calculatedCards),
+                summary_sections: dataObj.summary_sections || []
+            });
+          };
+        `;
        const blob = new Blob([workerCode], {type: 'application/javascript'});
        const worker = new Worker(URL.createObjectURL(blob));
        
@@ -440,11 +698,14 @@ export default function RunRecon() {
            dataObj: stateObj.data,
            filters: filters,
            searchTerm: searchTerms[searchKey] || '',
-           limit: parseInt(rowLimit, 10) || 50
+           limit: parseInt(rowLimit, 10) || 50,
+           dynamicCards: dynamicCards || [],
+           dynamicFilters: dynamicFilters || [],
+           validationId: validationId
        });
        
        return () => worker.terminate();
-    }, [stateObj, filters, searchTerms[searchKey], rowLimit]);
+    }, [stateObj, filters, searchTerms[searchKey], rowLimit, dynamicCards]);
 
     if (!stateObj || (!stateObj.data && !stateObj.error && !stateObj.isEmpty)) {
         if (!isRunning) {
@@ -532,22 +793,46 @@ export default function RunRecon() {
     
     if (!processedData) return null;
 
-    const { totalRecords, totalAmount, processedSections } = processedData;
+    const { totalRecords, totalAmount, processedSections, calculatedCards } = processedData;
     
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl overflow-hidden mb-12 shadow-md">
-        <div className="p-6 border-b border-gray-200 dark:border-zinc-800 bg-gradient-to-r from-gray-50 to-white dark:from-zinc-900/50 dark:to-zinc-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex flex-col">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center">
-              <Table2 className="mr-3 text-blue-500" size={24} /> {title}
+        {(calculatedCards?.length > 0 || dynamicCards?.length > 0) && (
+            <div className="bg-gray-50 dark:bg-zinc-900/50 border-b border-gray-200 dark:border-zinc-800 p-3 flex flex-row flex-wrap gap-3">
+                {/* Render already calculated cards */}
+                {calculatedCards && calculatedCards.map(card => {
+                    return (
+                        <div key={card.id} className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-4 py-2 flex flex-col min-w-[140px] shadow-sm">
+                            <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{card.card_name}</span>
+                            <span className="text-xl font-bold text-gray-900 dark:text-white block">
+                                {card.calc_type === 'Sum' || card.calc_type === 'Subtotal' ? '₹' : ''}
+                                {card.value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                {card.calc_type === 'Percentage' ? '%' : ''}
+                            </span>
+                        </div>
+                    );
+                })}
+                {/* Render pending cards that haven't been calculated yet (e.g., from old cache) */}
+                {dynamicCards && dynamicCards.filter(dc => !calculatedCards || !calculatedCards.find(cc => cc.id === dc.id)).map(card => (
+                    <div key={'pending_'+card.id} className="bg-white dark:bg-zinc-800 border border-dashed border-gray-300 dark:border-zinc-600 rounded-lg px-4 py-2 flex flex-col min-w-[140px] shadow-sm opacity-60">
+                        <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{card.card_name}</span>
+                        <span className="text-sm font-medium text-gray-400 dark:text-gray-500 mt-1">Pending (Run Validation)</span>
+                    </div>
+                ))}
+            </div>
+        )}
+        <div className="p-4 border-b border-gray-200 dark:border-zinc-800 bg-gradient-to-r from-gray-50 to-white dark:from-zinc-900/50 dark:to-zinc-800/50 flex flex-row justify-between items-center gap-2 overflow-x-auto whitespace-nowrap custom-scrollbar">
+          <div className="flex flex-col min-w-0 mr-2">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+              <Table2 className="mr-2 text-blue-500" size={20} /> {title}
             </h3>
             {stateObj.file && (
-              <div className="flex items-center text-green-600 dark:text-green-500 font-medium text-sm mt-1">
-                <Clock size={14} className="mr-1" /> Last Updated: {stateObj.file.created_at} UTC
+              <div className="flex items-center text-green-600 dark:text-green-500 font-medium text-xs mt-0.5">
+                <Clock size={12} className="mr-1" /> Last Updated: {stateObj.file.created_at} UTC
               </div>
             )}
           </div>
-          <div className="flex items-center space-x-3 w-full md:w-auto">
+          <div className="flex flex-row items-center gap-2 w-auto shrink-0">
             <button 
               onClick={() => {
                  if (stateObj.file && stateObj.file.id) {
@@ -556,33 +841,38 @@ export default function RunRecon() {
                      toast.error('File not available for download');
                  }
               }}
-              className="flex items-center px-4 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors shadow-sm"
+              className="flex items-center px-3 py-1.5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors shadow-sm shrink-0"
               title="Download Excel File (includes Summary sheet)"
             >
-              <FileSpreadsheet size={16} className="mr-2 text-green-600 dark:text-green-500" /> Export
+              <FileSpreadsheet size={14} className="mr-1.5 text-green-600 dark:text-green-500" /> Export
             </button>
             <button 
               onClick={() => setView(view === 'summary' ? 'preview' : 'summary')}
-              className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 text-sm hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 text-xs hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors shrink-0"
             >
-              {view === 'summary' ? <Table2 size={16} /> : <List size={16} />}
+              {view === 'summary' ? <Table2 size={14} /> : <List size={14} />}
               <span>{view === 'summary' ? 'Data Preview' : 'Summary'}</span>
             </button>
             {view === 'preview' && (
               <>
-                <div className="relative flex-1 md:flex-none">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input 
-                    type="number" 
-                    value={rowLimit}
-                    onChange={(e) => setRowLimit(e.target.value)}
-                    placeholder="Rows..." 
-                    title="Number of rows to display"
-                    className="w-24 pl-9 pr-2 py-2 bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 ring-blue-500 shadow-sm"
-                  />
+                <div className="flex shadow-sm rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shrink-0">
+                  <div className="relative">
+                    <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                    <input 
+                      type="number" 
+                      value={rowLimit}
+                      onChange={(e) => setRowLimit(e.target.value)}
+                      placeholder="Rows" 
+                      title="Number of rows to display"
+                      className="w-16 pl-8 pr-2 py-1.5 bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-100 text-xs outline-none border-none focus:ring-0"
+                    />
+                  </div>
+                  <div className="bg-gray-50 dark:bg-zinc-800 border-l border-gray-200 dark:border-zinc-700 px-2 py-1.5 flex items-center justify-center text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap select-none">
+                    / {totalRecords?.toLocaleString()}
+                  </div>
                 </div>
-                <div className="relative flex-1 md:flex-none">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <div className="relative shrink-0">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                   <input 
                     type="text" 
                     value={localSearch}
@@ -592,8 +882,8 @@ export default function RunRecon() {
                         setSearchTerms(prev => ({ ...prev, [searchKey]: localSearch }));
                       }
                     }}
-                    placeholder="Search (Press Enter)..." 
-                    className="w-full pl-9 pr-4 py-2 bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 ring-blue-500 shadow-sm"
+                    placeholder="Search..." 
+                    className="w-24 md:w-32 lg:w-40 pl-8 pr-3 py-1.5 bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-zinc-700 rounded-lg text-xs outline-none focus:ring-2 ring-blue-500 shadow-sm"
                   />
                 </div>
               </>
@@ -659,10 +949,6 @@ export default function RunRecon() {
 
             return (
               <div key={idx} className="mb-0">
-                <div className="px-6 py-3 bg-gray-100/50 dark:bg-zinc-800/80 font-semibold text-gray-700 dark:text-gray-300 border-y border-gray-200 dark:border-zinc-700 flex justify-between items-center">
-                  <span>{section.name}</span>
-                  <span className="text-xs px-2 py-1 bg-white dark:bg-zinc-900 rounded-full border border-gray-200 dark:border-zinc-700 text-gray-500">{section.filteredCount} records</span>
-                </div>
                 <div className="overflow-x-auto max-h-[500px] custom-scrollbar bg-white dark:bg-[#1a1a1a]">
                   <table className="w-full text-sm text-left text-gray-600 dark:text-gray-400 border-collapse">
                     <thead className="text-xs text-gray-700 uppercase bg-gray-50/90 dark:bg-zinc-900/90 backdrop-blur-md dark:text-gray-400 border-b border-gray-200 dark:border-zinc-800 sticky top-0 z-10 shadow-sm">
@@ -741,6 +1027,23 @@ export default function RunRecon() {
                         <option value="90">Minor Variance (≤ 10%)</option>
                     </select>
                 );
+            } else if (f.filter_type === 'Dropdown') {
+                const groupedOptions = dropdownOptions[f.id] || {};
+                inputElement = (
+                    <select 
+                        key={f.id}
+                        className="bg-transparent border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 ring-blue-500 text-gray-700 dark:text-gray-300"
+                        value={filters[key] || ''}
+                        onChange={e => setFilters({...filters, [key]: e.target.value})}
+                    >
+                        <option value="">{f.field_name} (All)</option>
+                        {Object.entries(groupedOptions).map(([groupLabel, options]) => (
+                            <optgroup key={groupLabel} label={groupLabel}>
+                                {options.map((opt, idx) => <option key={idx} value={opt}>{opt}</option>)}
+                            </optgroup>
+                        ))}
+                    </select>
+                );
             } else if (f.filter_type === 'Search' || f.filter_type === 'Text') {
                 inputElement = (
                     <input 
@@ -750,6 +1053,40 @@ export default function RunRecon() {
                         value={filters[key] || ''}
                         onChange={e => setFilters({...filters, [key]: e.target.value})}
                         className="bg-transparent border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 ring-blue-500 w-40 text-gray-700 dark:text-gray-300"
+                    />
+                );
+            } else if (f.filter_type === 'Range') {
+                const keyMin = 'dyn_min_' + f.id;
+                const keyMax = 'dyn_max_' + f.id;
+                inputElement = (
+                    <div key={f.id} className="flex items-center space-x-1 border border-gray-200 dark:border-zinc-700 rounded-lg px-2 bg-transparent text-gray-700 dark:text-gray-300">
+                        <span className="text-xs text-gray-400 pl-1">{f.field_name}:</span>
+                        <input 
+                            type="number" 
+                            placeholder="Min" 
+                            value={filters[keyMin] || ''}
+                            onChange={e => setFilters({...filters, [keyMin]: e.target.value})}
+                            className="bg-transparent w-16 py-1.5 text-sm outline-none focus:ring-0 text-center"
+                        />
+                        <span className="text-gray-400">-</span>
+                        <input 
+                            type="number" 
+                            placeholder="Max" 
+                            value={filters[keyMax] || ''}
+                            onChange={e => setFilters({...filters, [keyMax]: e.target.value})}
+                            className="bg-transparent w-16 py-1.5 text-sm outline-none focus:ring-0 text-center"
+                        />
+                    </div>
+                );
+            } else if (f.filter_type === 'Date') {
+                inputElement = (
+                    <input 
+                        key={f.id}
+                        type="date" 
+                        value={filters[key] || ''}
+                        title={f.field_name}
+                        onChange={e => setFilters({...filters, [key]: e.target.value})}
+                        className="bg-transparent border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 ring-blue-500 text-gray-700 dark:text-gray-300"
                     />
                 );
             } else {
@@ -773,57 +1110,9 @@ export default function RunRecon() {
                 </React.Fragment>
             );
           })}
-          {dynamicFilters.length > 0 && <div className="h-4 w-px bg-gray-300 dark:bg-zinc-700 mx-1"></div>}
-          <div className="relative">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-             <input 
-                 type="text" 
-                 placeholder="Global Find..." 
-                 value={filters.orderId || ''}
-                 onChange={e => setFilters({...filters, orderId: e.target.value})}
-                 className="bg-transparent border border-gray-200 dark:border-zinc-700 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-2 ring-blue-500 w-48 text-gray-700 dark:text-gray-300"
-             />
-          </div>
+
         </div>
       </div>
-
-      {/* Summary Cards */}
-      {dynamicCards.length > 0 && (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {dynamicCards.map((card, i) => {
-            const isGRN = card.card_name.includes('GRN');
-            const isVendor = card.card_name.includes('Vendor');
-            const isTally = card.card_name.includes('Tally');
-            
-            let amount = '₹0.00';
-            let count = 0;
-            let color = 'from-gray-500 to-gray-700';
-            
-            if (isGRN) color = 'from-green-500 to-emerald-700';
-            else if (isVendor) color = 'from-blue-500 to-indigo-700';
-            else if (isTally) color = 'from-purple-500 to-fuchsia-700';
-            else {
-                const colors = ['from-teal-500 to-teal-700', 'from-rose-500 to-rose-700', 'from-amber-500 to-amber-700'];
-                color = colors[i % colors.length];
-            }
-
-            return (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                key={card.id} 
-                className="glass-card rounded-2xl p-6 relative overflow-hidden group"
-              >
-                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${color} opacity-10 rounded-bl-full transition-transform group-hover:scale-110`} />
-                <h3 className="text-gray-500 dark:text-gray-400 font-medium mb-2">{card.card_name}</h3>
-                <div className="text-4xl font-bold text-gray-900 dark:text-white mb-1">{amount}</div>
-                <div className="text-sm text-gray-400">{count} {card.sub_calc || ''}</div>
-              </motion.div>
-            );
-        })}
-      </div>
-      )}
 
       {/* Main Action Button */}
       <div className="flex justify-center mb-10">
@@ -854,9 +1143,9 @@ export default function RunRecon() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <ValidationSection title="Validation 1 (GRN vs Vendor)" stateObj={extractedData.v1} searchKey="v1" summaryTitle="GRN Amount" summaryColor="from-green-500 to-emerald-700" isRunning={running} />
-          <ValidationSection title="Validation 2 (Vendor vs Tally)" stateObj={extractedData.v2} searchKey="v2" summaryTitle="Vendor Invoice Amount" summaryColor="from-blue-500 to-indigo-700" isRunning={running} />
-          <ValidationSection title="Validation 3 (Tally vs Vendor)" stateObj={extractedData.v3} searchKey="v3" summaryTitle="Tally Amount" summaryColor="from-purple-500 to-fuchsia-700" isRunning={running} />
+          <ValidationSection title="GRN vs Vendor" stateObj={extractedData.v1} searchKey="v1" summaryTitle="GRN Amount" summaryColor="from-green-500 to-emerald-700" isRunning={running} validationId={1} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 1)} dynamicFilters={dynamicFilters} />
+          <ValidationSection title="Vendor vs Tally" stateObj={extractedData.v2} searchKey="v2" summaryTitle="Vendor Invoice Amount" summaryColor="from-blue-500 to-indigo-700" isRunning={running} validationId={2} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 2)} dynamicFilters={dynamicFilters} />
+          <ValidationSection title="Tally vs Vendor" stateObj={extractedData.v3} searchKey="v3" summaryTitle="Tally Amount" summaryColor="from-purple-500 to-fuchsia-700" isRunning={running} validationId={3} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 3)} dynamicFilters={dynamicFilters} />
         </motion.div>
       </AnimatePresence>
     </div>
