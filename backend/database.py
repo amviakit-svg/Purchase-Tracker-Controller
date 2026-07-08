@@ -257,6 +257,8 @@ def init_db():
                 formulas TEXT,
                 auto_sync INTEGER DEFAULT 0,
                 hidden_columns TEXT DEFAULT '[]',
+                validation_amount_entered REAL,
+                validation_status TEXT DEFAULT 'Pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (folder_id) REFERENCES folders (id)
             )
@@ -282,6 +284,14 @@ def init_db():
         if 'filter_mappings' not in cols:
             try:
                 conn.execute("ALTER TABLE master_files ADD COLUMN filter_mappings TEXT DEFAULT '{}'")
+                conn.commit()
+            except Exception:
+                pass
+
+        if 'validation_amount_entered' not in cols:
+            try:
+                conn.execute("ALTER TABLE master_files ADD COLUMN validation_amount_entered REAL")
+                conn.execute("ALTER TABLE master_files ADD COLUMN validation_status TEXT DEFAULT 'Pending'")
                 conn.commit()
             except Exception:
                 pass
@@ -434,6 +444,9 @@ def init_db():
             ("master_file_configs", "dedup_columns",   "TEXT"),
             ("master_file_configs", "dedup_separator", "TEXT DEFAULT ' | '"),
             ("master_file_configs", "updated_at",      "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("master_file_configs", "amount_validation_enabled", "INTEGER DEFAULT 0"),
+            ("master_file_configs", "amount_validation_opening_balance", "REAL"),
+            ("master_file_configs", "amount_validation_column", "TEXT"),
             ("dynamic_filters", "target_column_v2", "TEXT"),
             ("dynamic_filters", "target_column_v3", "TEXT"),
             ("dynamic_cards", "target_column_v2", "TEXT"),
@@ -3104,44 +3117,111 @@ def save_dedup_config(folder_id, enabled, columns, separator=' | '):
 
     conn = get_db_connection()
     try:
-        try:
-            existing = conn.execute(
-                "SELECT id FROM master_file_configs WHERE folder_id = ?",
-                (folder_id,),
-            ).fetchone()
-            if existing:
-                conn.execute(
-                    """
-                    UPDATE master_file_configs
-                       SET dedup_enabled   = ?,
-                           dedup_columns   = ?,
-                           dedup_separator = ?,
-                           updated_at      = CURRENT_TIMESTAMP
-                     WHERE folder_id = ?
-                    """,
-                    (1 if enabled else 0, cols_json, separator, folder_id),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO master_file_configs
-                        (folder_id, dedup_enabled, dedup_columns, dedup_separator, updated_at)
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """,
-                    (folder_id, 1 if enabled else 0, cols_json, separator),
-                )
-            conn.commit()
-        finally:
-            pass
-
-
-    # =================== REJECTED ARTEFACTS ===================
-
+        existing = conn.execute(
+            "SELECT id FROM master_file_configs WHERE folder_id = ?",
+            (folder_id,),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """
+                UPDATE master_file_configs
+                   SET dedup_enabled   = ?,
+                       dedup_columns   = ?,
+                       dedup_separator = ?,
+                       updated_at      = CURRENT_TIMESTAMP
+                 WHERE folder_id = ?
+                """,
+                (1 if enabled else 0, cols_json, separator, folder_id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO master_file_configs
+                    (folder_id, dedup_enabled, dedup_columns, dedup_separator, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (folder_id, 1 if enabled else 0, cols_json, separator),
+            )
+        conn.commit()
+    except Exception as e:
+        print(f"Error saving dedup config: {e}")
+        raise
     finally:
         try:
             conn.close()
         except Exception:
             pass
+
+def save_amount_validation_config(folder_id, enabled, opening_balance, column):
+    """
+    Persist the amount validation config on master_file_configs.amount_validation_*.
+    """
+    conn = get_db_connection()
+    try:
+        try:
+            existing = conn.execute(
+                "SELECT id FROM master_file_configs WHERE folder_id = ?",
+                (folder_id,),
+            ).fetchone()
+            
+            enabled_int = 1 if enabled else 0
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE master_file_configs
+                       SET amount_validation_enabled = ?,
+                           amount_validation_opening_balance = ?,
+                           amount_validation_column = ?,
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE folder_id = ?
+                    """,
+                    (enabled_int, opening_balance, column, folder_id),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO master_file_configs
+                        (folder_id, amount_validation_enabled, amount_validation_opening_balance, amount_validation_column, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (folder_id, enabled_int, opening_balance, column),
+                )
+            conn.commit()
+        except Exception as e:
+            print(f"Error saving amount validation config: {e}")
+            raise
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def get_amount_validation_config(folder_id):
+    conn = get_db_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT amount_validation_enabled, amount_validation_opening_balance, amount_validation_column
+            FROM master_file_configs WHERE folder_id = ?
+            """,
+            (folder_id,)
+        ).fetchone()
+        if row:
+            return {
+                "enabled": bool(row["amount_validation_enabled"]),
+                "opening_balance": row["amount_validation_opening_balance"] or 0.0,
+                "column": row["amount_validation_column"]
+            }
+        return None
+    except Exception as e:
+        print(f"Error getting amount validation config: {e}")
+        return None
+    finally:
+        conn.close()
+
+    # =================== REJECTED ARTEFACTS ===================
+
+
 def save_rejected_artefact(folder_id, file_id, original_name, artefact_path,
                            reject_reason, rejected_rows, total_rows, source='merge'):
     """

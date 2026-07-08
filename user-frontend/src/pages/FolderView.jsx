@@ -44,6 +44,11 @@ export default function FolderView() {
   const [isFileDetailsModalOpen, setIsFileDetailsModalOpen] = useState(false);
   const [selectedFileDetails, setSelectedFileDetails] = useState(null);
 
+  const [amountValidation, setAmountValidation] = useState(null);
+  const [isAmountValModalOpen, setIsAmountValModalOpen] = useState(false);
+  const amountValInputRef = useRef(null);
+  const [amountValSubmitting, setAmountValSubmitting] = useState(false);
+
   const handleViewFile = async (fileId) => {
     try {
       const data = await apiCall(`/files/${fileId}/details`);
@@ -91,6 +96,18 @@ export default function FolderView() {
           const dRows = deleted.data || [];
           setDeletedRows(dRows);
           try { localStorage.setItem(`deletedRows_${id}`, JSON.stringify(dRows)); } catch(e) {}
+      }
+
+      // Fetch Amount Validation config
+      try {
+        const valData = await apiCall(`/master/${id}/amount-validation`);
+        if (valData.success && valData.exists && valData.config && valData.config.enabled) {
+          setAmountValidation(valData);
+        } else {
+          setAmountValidation(null);
+        }
+      } catch (err) {
+        console.warn('Could not load amount validation:', err);
       }
 
     } catch (e) {
@@ -328,6 +345,34 @@ export default function FolderView() {
     );
   };
 
+  const handleAmountValidationSubmit = async () => {
+    const val = amountValInputRef.current?.value;
+    if (!val) {
+      toast.warning('Please enter a closing amount');
+      return;
+    }
+    
+    setAmountValSubmitting(true);
+    try {
+      const data = await apiCall(`/master/${id}/amount-validation`, {
+        method: 'POST',
+        body: JSON.stringify({ entered_amount: parseFloat(val) })
+      });
+      
+      if (data.success) {
+        toast.success(data.message);
+        setIsAmountValModalOpen(false);
+        fetchFolderData(); // Refresh the validation status
+      } else {
+        toast.error(data.message || 'Validation failed');
+      }
+    } catch (err) {
+      toast.error(err.message || 'Error occurred');
+    } finally {
+      setAmountValSubmitting(false);
+    }
+  };
+
   const exportToExcel = (data, filename) => {
     if (data.length === 0) {
       toast.info('No data to export');
@@ -486,6 +531,22 @@ export default function FolderView() {
                   className="flex items-center px-3 py-1.5 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors shadow-sm"
                 >
                   <Trash2 size={16} className="mr-1" /> Delete Selected ({selectedMaster.size})
+                </motion.button>
+              )}
+              {amountValidation && amountValidation.config.enabled && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  onClick={() => setIsAmountValModalOpen(true)}
+                  className={`flex items-center px-3 py-1.5 text-white rounded-lg text-sm font-medium transition-colors shadow-sm ${
+                    amountValidation.validation_status === 'Matched' 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : amountValidation.validation_status === 'Not Matched'
+                        ? 'bg-red-600 hover:bg-red-700'
+                        : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
+                >
+                  <CheckSquare size={16} className="mr-1" /> Validation of Amount
                 </motion.button>
               )}
             </div>
@@ -677,6 +738,87 @@ export default function FolderView() {
                 ) : (
                   <p className="text-center text-gray-500 py-8">No details available.</p>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {isAmountValModalOpen && amountValidation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col bg-white dark:bg-zinc-900"
+            >
+              <div className="px-5 py-4 border-b border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Validation of Amount</h3>
+                <button
+                  onClick={() => setIsAmountValModalOpen(false)}
+                  className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-200 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="flex justify-between items-center border-b border-gray-100 dark:border-zinc-800 pb-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Opening Balance:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {Number(amountValidation.config.opening_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center border-b border-gray-100 dark:border-zinc-800 pb-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Total of <span className="font-bold">{amountValidation.config.column || 'Column'}</span>:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {Number(amountValidation.calculated_sum || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center border-b border-gray-100 dark:border-zinc-800 pb-2 bg-gray-50 dark:bg-zinc-800/50 p-2 rounded">
+                  <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Expected Closing Balance:</span>
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                    {(Number(amountValidation.config.opening_balance || 0) + Number(amountValidation.calculated_sum || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Enter Closing Amount <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    ref={amountValInputRef}
+                    defaultValue={amountValidation.validation_amount_entered || ""}
+                    className="w-full border border-gray-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white" 
+                    placeholder="0.00"
+                  />
+                </div>
+                
+                {amountValidation.validation_status && amountValidation.validation_status !== 'Pending' && (
+                  <div className={`mt-2 text-sm font-medium px-3 py-2 rounded ${
+                    amountValidation.validation_status === 'Matched' 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                  }`}>
+                    Status: {amountValidation.validation_status}
+                  </div>
+                )}
+              </div>
+              <div className="px-5 py-4 border-t border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50 flex justify-end space-x-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsAmountValModalOpen(false)} 
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded hover:bg-gray-50 dark:hover:bg-zinc-700"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleAmountValidationSubmit}
+                  disabled={amountValSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {amountValSubmitting ? 'Validating...' : 'Validate'}
+                </button>
               </div>
             </motion.div>
           </div>

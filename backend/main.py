@@ -191,7 +191,7 @@ from database import (
     update_master_activity, delete_master_activity, reorder_master_activities,
     migrate_legacy_master_formulas,
     # Dedup / duplicate-detection (concat) helpers
-    get_dedup_config, save_dedup_config,
+    get_dedup_config, save_dedup_config, get_amount_validation_config, save_amount_validation_config,
     save_rejected_artefact, list_rejected_artefacts,
     get_latest_rejected_artefact_for_file, get_rejected_artefact_by_id,
 )
@@ -237,7 +237,7 @@ async def get_local_modules():
     conn = get_db_connection()
     try:
         # All modules are available locally
-        modules = conn.execute("SELECT id, name, description FROM modules").fetchall()
+        modules = conn.execute("SELECT id, name, description, status FROM modules").fetchall()
         return {"success": True, "modules": [dict(m) for m in modules]}
     finally:
         conn.close()
@@ -256,6 +256,44 @@ async def create_local_module(module: ModuleCreate):
         conn.commit()
         module_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         return {"success": True, "module_id": module_id, "name": module.name}
+    finally:
+        conn.close()
+
+class ModuleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+
+@app.put("/api/local-modules/{module_id}")
+async def update_local_module(module_id: int, module: ModuleUpdate):
+    if module_id == 1 and module.status == "inactive":
+        return JSONResponse(status_code=400, content={"success": False, "error": "Cannot deactivate the default E-Retail module."})
+        
+    conn = get_db_connection()
+    try:
+        updates = []
+        params = []
+        if module.name is not None:
+            updates.append("name = ?")
+            params.append(module.name)
+            # also update code since they are mirroring
+            updates.append("code = ?")
+            params.append(module.name)
+        if module.description is not None:
+            updates.append("description = ?")
+            params.append(module.description)
+        if module.status is not None:
+            updates.append("status = ?")
+            params.append(module.status)
+            
+        if not updates:
+            return {"success": True}
+            
+        params.append(module_id)
+        query = f"UPDATE modules SET {', '.join(updates)} WHERE id = ?"
+        conn.execute(query, params)
+        conn.commit()
+        return {"success": True}
     finally:
         conn.close()
 
@@ -1527,6 +1565,10 @@ async def merge_files(
     dedup_enabled: Optional[str] = Form(None),
     dedup_columns: Optional[str] = Form(None),     # JSON list of column names
     dedup_separator: Optional[str] = Form(None),   # e.g. ' | '
+    # --- Amount validation config (optional) ---
+    amount_validation_enabled: Optional[str] = Form(None),
+    amount_validation_opening_balance: Optional[str] = Form(None),
+    amount_validation_column: Optional[str] = Form(None),
 ):
     try:
         try:
@@ -1972,6 +2014,19 @@ async def merge_files(
                 )
             except Exception as _dedup_save_err:
                 logger.warning(f"Failed to persist dedup config: {_dedup_save_err}")
+
+            # Persist amount validation config
+            try:
+                enabled_bool = (amount_validation_enabled or '0') in ('1', 'true', 'True', 'yes')
+                ob_val = float(amount_validation_opening_balance) if amount_validation_opening_balance else 0.0
+                save_amount_validation_config(
+                    folder_id=folder_id_int,
+                    enabled=enabled_bool,
+                    opening_balance=ob_val,
+                    column=amount_validation_column
+                )
+            except Exception as _amount_val_err:
+                logger.warning(f"Failed to persist amount validation config: {_amount_val_err}")
 
             # Update auto-sync statuses for the UI
             try:
@@ -5888,6 +5943,64 @@ def process_rules_background():
             processing_status["is_processing"] = False
             processing_status["progress"] = "completed"
             return
+
+        # --- Check Amount Validation Constraints ---
+        if cid is not None and mid is not None:
+            # Extract folder IDs used in rules for this specific validation
+            used_master_folder_ids = set()
+            
+            def extract_folder_id(fid, is_master=False):
+                if isinstance(fid, str) and fid.startswith('master_'):
+                    try: return int(fid.replace('master_', ''))
+                    except: return None
+                elif is_master and str(fid).isdigit():
+                    return int(fid)
+                return None
+
+            for rule_list in [phase1_rules, phase2_rules, phase3_rules]:
+                for rule in rule_list:
+                    try:
+                        import json
+                        cfg = json.loads(rule['config'])
+                        if isinstance(cfg, str): cfg = json.loads(cfg)
+                        if not isinstance(cfg, dict): continue
+                        
+                        fid = extract_folder_id(cfg.get('file_id'), cfg.get('is_master'))
+                        if fid: used_master_folder_ids.add(fid)
+                        
+                        src = extract_folder_id(cfg.get('source_file'))
+                        if src: used_master_folder_ids.add(src)
+                    except: pass
+            
+            if used_master_folder_ids:
+                v_conn = get_db_connection()
+                try:
+                    placeholders = ','.join('?' for _ in used_master_folder_ids)
+                    params = [cid, mid] + list(used_master_folder_ids)
+                    
+                    invalid_masters = v_conn.execute(f"""
+                        SELECT f.name, m.validation_status 
+                        FROM master_files m
+                        JOIN folders f ON m.folder_id = f.id
+                        JOIN master_file_configs c ON m.folder_id = c.folder_id
+                        WHERE m.company_id = ? AND m.module_id = ?
+                          AND c.amount_validation_enabled = 1
+                          AND m.validation_status != 'Matched'
+                          AND m.folder_id IN ({placeholders})
+                    """, params).fetchall()
+                    
+                    if invalid_masters:
+                        msg = "due to rule not matching of 'rule - Validation of Amount'"
+                        processing_status["result"] = {"success": False, "message": msg}
+                        processing_status["error"] = msg
+                        processing_status["is_processing"] = False
+                        processing_status["progress"] = "error"
+                        return
+                except Exception as e:
+                    logger.error(f"Error checking amount validation block: {e}")
+                finally:
+                    v_conn.close()
+        # -------------------------------------------
         
         with processing_lock:
             processing_status["progress"] = "loading_primary"
@@ -9094,6 +9207,102 @@ async def api_get_dedup_config(folder_id: int, current_user: Optional[dict] = De
         logger.error(f"Get dedup config error for folder {folder_id}: {e}")
         return {"success": False, "message": str(e)}
 
+@app.get("/api/master/{folder_id}/amount-validation")
+async def api_get_amount_validation(folder_id: int, current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        config = get_amount_validation_config(folder_id)
+        if not config:
+            return {"success": True, "exists": False, "config": {"enabled": False, "opening_balance": 0.0, "column": None}}
+            
+        master = get_master_file(folder_id)
+        calculated_sum = 0.0
+        validation_status = "Pending"
+        validation_amount_entered = 0.0
+        
+        if master:
+            validation_status = master.get("validation_status", "Pending")
+            validation_amount_entered = master.get("validation_amount_entered") or 0.0
+            if config.get("enabled") and config.get("column") and os.path.exists(master["db_path"]):
+                conn = duckdb.connect(master["db_path"])
+                try:
+                    col = config["column"]
+                    query = f'SELECT COALESCE(SUM(TRY_CAST("{col}" AS DOUBLE)), 0) FROM master_data'
+                    calculated_sum = conn.execute(query).fetchone()[0]
+                except Exception as db_err:
+                    logger.warning(f"Failed to calculate sum for amount validation: {db_err}")
+                finally:
+                    conn.close()
+
+        return {
+            "success": True,
+            "exists": True,
+            "config": config,
+            "calculated_sum": calculated_sum,
+            "validation_status": validation_status,
+            "validation_amount_entered": validation_amount_entered
+        }
+    except Exception as e:
+        logger.error(f"Get amount validation error for folder {folder_id}: {e}")
+        return {"success": False, "message": str(e)}
+
+class AmountValidationRequest(BaseModel):
+    entered_amount: float
+
+@app.post("/api/master/{folder_id}/amount-validation")
+async def api_post_amount_validation(folder_id: int, request: AmountValidationRequest, current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        config = get_amount_validation_config(folder_id)
+        if not config or not config.get("enabled"):
+            return {"success": False, "message": "Amount validation is not enabled for this master file."}
+            
+        master = get_master_file(folder_id)
+        if not master or not os.path.exists(master["db_path"]):
+            return {"success": False, "message": "Master file data not found."}
+            
+        calculated_sum = 0.0
+        conn = duckdb.connect(master["db_path"])
+        try:
+            col = config.get("column")
+            if col:
+                query = f'SELECT COALESCE(SUM(TRY_CAST("{col}" AS DOUBLE)), 0) FROM master_data'
+                calculated_sum = conn.execute(query).fetchone()[0]
+        except Exception as db_err:
+            logger.error(f"Failed to calculate sum: {db_err}")
+        finally:
+            conn.close()
+            
+        opening_balance = config.get("opening_balance", 0.0)
+        expected_total = opening_balance + calculated_sum
+        
+        # We allow a small epsilon for floating point comparison, or exact match
+        if abs(expected_total - request.entered_amount) < 0.01:
+            status = "Matched"
+        else:
+            status = "Not Matched"
+            
+        db_conn = get_db_connection()
+        try:
+            db_conn.execute(
+                "UPDATE master_files SET validation_amount_entered = ?, validation_status = ? WHERE folder_id = ?",
+                (request.entered_amount, status, folder_id)
+            )
+            db_conn.commit()
+        finally:
+            db_conn.close()
+        message = (
+            "Validation of Amount has matched, you are able to proceed for final Validation."
+            if status == "Matched" 
+            else "Validation of Amount is not matching, You are not able to proceed for Final Validation."
+        )
+            
+        return {
+            "success": True, 
+            "status": status,
+            "message": message
+        }
+    except Exception as e:
+        logger.error(f"Post amount validation error for folder {folder_id}: {e}")
+        return {"success": False, "message": str(e)}
 
 @app.get("/api/master/{folder_id}/rejected-artefacts")
 async def api_list_rejected_artefacts(folder_id: int, current_user: Optional[dict] = Depends(get_optional_user)):

@@ -22,7 +22,15 @@ export default function Layout({ theme, toggleTheme }) {
       try {
         const data = await apiCall('/local-modules');
         if (data.success && data.modules) {
-          setModules(data.modules);
+          const activeModules = data.modules.filter(m => m.status === 'active' || !m.status);
+          setModules(activeModules);
+          
+          if (!activeModules.find(m => String(m.id) === String(selectedModule))) {
+            const defaultId = '1';
+            setSelectedModule(defaultId);
+            localStorage.setItem('module_id', defaultId);
+            window.location.reload();
+          }
         }
       } catch (err) {
         console.error('Failed to fetch modules', err);

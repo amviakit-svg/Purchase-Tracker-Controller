@@ -112,12 +112,6 @@
                     <select id="local-module-select" onchange="changeLocalModule(this.value)" class="ml-4 px-3 py-1 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="1">E-Retail</option>
                     </select>
-                    <button onclick="showCreateModuleModal()" class="ml-2 px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors" title="Create New Module">
-                        + New
-                    </button>
-                    <button onclick="deleteCurrentModule()" class="ml-2 px-2 py-1 bg-red-50 text-red-700 text-sm font-medium rounded-lg border border-red-200 hover:bg-red-100 transition-colors" title="Delete Current Module">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
                     <button onclick="showModuleInstructions()" class="ml-4 px-3 py-1 bg-purple-50 text-purple-700 text-sm font-medium rounded-lg border border-purple-200 hover:bg-purple-100 transition-colors hidden" id="module-instructions-btn">
                         <i class="fas fa-book mr-1"></i> Module Instructions
                     </button>
@@ -497,6 +491,12 @@
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h3M13 17h.01M9 13h.01M13 13h.01M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path>
                                                         </svg>
                                                         <span>Formula</span>
+                                                    </button>
+                                                    <button type="button" id="btn-amount-validation" data-action="amount-validation" class="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors flex items-center space-x-1 cursor-pointer hidden" onclick="openAmountValidationModal()" title="Validate Amount">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                        </svg>
+                                                        <span>Validation of Amount</span>
                                                     </button>
                                                 </div>
                                             </div>
@@ -1204,7 +1204,10 @@
             <!-- Settings Sub-Tabs -->
             <div class="mb-6 border-b border-gray-200">
                 <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button onclick="switchSettingsTab('filters')" id="settings-tab-filters" class="settings-tab-btn border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <button onclick="switchSettingsTab('modules')" id="settings-tab-modules" class="settings-tab-btn border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Module Management
+                    </button>
+                    <button onclick="switchSettingsTab('filters')" id="settings-tab-filters" class="settings-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         Filter Management
                     </button>
                     <button onclick="switchSettingsTab('cards')" id="settings-tab-cards" class="settings-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
@@ -1213,8 +1216,34 @@
                 </nav>
             </div>
 
+            <!-- Module Management -->
+            <div id="settings-content-modules" class="settings-content-pane bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-semibold text-gray-800">Module Management</h3>
+                    <button onclick="createModuleFromSettings()" class="flex items-center space-x-2 bg-blue-600 text-white text-sm font-medium py-1.5 px-3 rounded hover:bg-blue-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span>Create Module</span>
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="settings-modules-tbody" class="bg-white divide-y divide-gray-200">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Filter Management -->
-            <div id="settings-content-filters" class="settings-content-pane bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+            <div id="settings-content-filters" class="settings-content-pane hidden bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
                 <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                     <h3 class="text-lg font-semibold text-gray-800">Filter Management</h3>
                     <button onclick="addDynamicFilterRow()" class="flex items-center space-x-2 bg-blue-600 text-white text-sm font-medium py-1.5 px-3 rounded hover:bg-blue-700 transition-colors">
@@ -1449,6 +1478,29 @@
                 </div>
             </div>
 
+            <!-- Validation of Amount section -->
+            <div class="border border-gray-200 rounded-lg p-3 mb-3 bg-gray-50">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="checkbox" id="amount-val-enabled" class="mr-2" onchange="toggleAmountValidationFields()">
+                            <span class="text-sm font-medium text-gray-800">Validation of Amount</span>
+                        </label>
+                        <p class="text-xs text-gray-500 mt-1 ml-6">
+                            Require user to validate the sum of a specific column against an opening balance + entered value.
+                        </p>
+                    </div>
+                    <button type="button" id="amount-val-load-columns" onclick="loadAmountValidationColumns()" class="text-xs text-blue-600 hover:underline ml-2 whitespace-nowrap">Load Columns</button>
+                </div>
+                <div id="amount-val-fields" class="mt-2 ml-6 hidden">
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Opening Balance</label>
+                    <input id="amount-val-opening-balance" type="number" step="any" value="0" class="w-full border border-gray-300 rounded p-1.5 text-xs mb-2">
+                    
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Period Amount Column</label>
+                    <select id="amount-val-column" class="w-full border border-gray-300 rounded p-1.5 text-xs"></select>
+                </div>
+            </div>
+
             <!-- Saved Config Display -->
             <div id="master-saved-config-info" class="hidden mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
                 <div class="flex items-center justify-between mb-1">
@@ -1576,6 +1628,47 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Amount Validation Modal -->
+    <div id="amount-validation-modal" class="modal-overlay fixed inset-0 z-[60] hidden items-center justify-center" style="display:none; background-color: rgba(0,0,0,0.5);">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden transform transition-all flex flex-col max-h-[90vh]">
+            <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <h3 class="text-xl font-bold text-gray-900">Validation of Amount</h3>
+                <button onclick="closeAmountValidationModal()" class="text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-full p-1 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-5 overflow-y-auto space-y-4">
+                <div id="amount-val-modal-loading" class="text-sm text-gray-600 text-center py-4">Loading validation data...</div>
+                <div id="amount-val-modal-content" class="hidden space-y-4">
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <span class="text-sm text-gray-600">Opening Balance:</span>
+                        <span id="amount-val-modal-opening" class="font-medium text-gray-900">0.00</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <span class="text-sm text-gray-600">Total of <span id="amount-val-modal-colname" class="font-bold">Column</span>:</span>
+                        <span id="amount-val-modal-sum" class="font-medium text-gray-900">0.00</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b pb-2 bg-gray-50 p-2 rounded">
+                        <span class="text-sm font-bold text-gray-700">Expected Closing Balance:</span>
+                        <span id="amount-val-modal-expected" class="font-bold text-indigo-600">0.00</span>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Enter Closing Amount <span class="text-red-500">*</span></label>
+                        <input type="number" step="any" id="amount-val-modal-input" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="0.00">
+                    </div>
+                    
+                    <div id="amount-val-modal-status-container" class="mt-2 text-sm hidden font-medium px-3 py-2 rounded">
+                    </div>
+                </div>
+            </div>
+            <div class="px-5 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+                <button type="button" onclick="closeAmountValidationModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                <button type="button" id="amount-val-modal-submit" onclick="submitAmountValidation()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50">Validate</button>
             </div>
         </div>
     </div>
@@ -3827,6 +3920,31 @@
                     console.warn('Failed to load dedup config', ed);
                 }
 
+                try {
+                    const valData = await apiCall(`/api/master/${currentFolderId}/amount-validation`);
+                    if (valData.success && valData.exists && valData.config) {
+                        const cb = document.getElementById('amount-val-enabled');
+                        if (cb) {
+                            cb.checked = valData.config.enabled;
+                            toggleAmountValidationFields();
+                        }
+                        if (valData.config.opening_balance !== undefined) {
+                            document.getElementById('amount-val-opening-balance').value = valData.config.opening_balance;
+                        }
+                        if (valData.config.column) {
+                            const select = document.getElementById('amount-val-column');
+                            select.innerHTML = '';
+                            const opt = document.createElement('option');
+                            opt.value = valData.config.column;
+                            opt.textContent = valData.config.column;
+                            opt.selected = true;
+                            select.appendChild(opt);
+                        }
+                    }
+                } catch(ev) {
+                    console.warn('Failed to load amount validation config', ev);
+                }
+
                 
                 if (data.success && data.config && data.config.auto_sync !== undefined) {
                     const cb = document.getElementById('master-auto-sync-checkbox');
@@ -3904,6 +4022,52 @@
             showToast(`Loaded ${cols.length} columns`, 'success');
         }
 
+        function toggleAmountValidationFields() {
+            const isEnabled = document.getElementById('amount-val-enabled').checked;
+            const fields = document.getElementById('amount-val-fields');
+            if (isEnabled) {
+                fields.classList.remove('hidden');
+            } else {
+                fields.classList.add('hidden');
+            }
+        }
+
+        function loadAmountValidationColumns() {
+            const colInput = document.getElementById('master-column-names').value;
+            const select = document.getElementById('amount-val-column');
+            
+            if (!colInput || colInput.trim() === '') {
+                showToast('Please enter Column Names first', 'warning');
+                return;
+            }
+            
+            if (colInput.trim().toUpperCase() === 'ALL') {
+                showToast('Cannot load columns when set to ALL. Please explicitly specify column names.', 'warning');
+                return;
+            }
+            
+            const selectedVal = select.value;
+            const cols = colInput.split(',').map(c => c.trim()).filter(c => c);
+            if (cols.length === 0) {
+                showToast('No valid column names found', 'warning');
+                return;
+            }
+            
+            select.innerHTML = '<option value="">-- Select Column --</option>';
+            
+            cols.forEach(col => {
+                const opt = document.createElement('option');
+                opt.value = col;
+                opt.textContent = col;
+                if (col === selectedVal) {
+                    opt.selected = true;
+                }
+                select.appendChild(opt);
+            });
+            
+            showToast(`Loaded ${cols.length} columns for validation`, 'success');
+        }
+
         async function executeMasterMerge() {
             // Reset previous error states
             clearFieldErrors();
@@ -3946,6 +4110,14 @@
                 const selectedDedupCols = Array.from(dedupSelect.selectedOptions).map(o => o.value);
                 formData.append('dedup_columns', JSON.stringify(selectedDedupCols));
                 formData.append('dedup_separator', document.getElementById('dedup-separator').value || ' | ');
+            }
+
+            // Amount Validation Config
+            const amountValEnabled = document.getElementById('amount-val-enabled').checked;
+            formData.append('amount_validation_enabled', amountValEnabled ? '1' : '0');
+            if (amountValEnabled) {
+                formData.append('amount_validation_opening_balance', document.getElementById('amount-val-opening-balance').value || '0');
+                formData.append('amount_validation_column', document.getElementById('amount-val-column').value || '');
             }
 
             try {
@@ -4040,7 +4212,8 @@
                 loadSourceFilesDropdown(),
                 loadMasterPreview(),
                 loadMasterStats(),
-                loadMasterValidation()
+                loadMasterValidation(),
+                loadAmountValidationStatus()
             ]);
         }
 
@@ -4522,6 +4695,118 @@
                 document.getElementById('master-validation-text').textContent = 'Unable to calculate validation.';
             }
         }
+
+        async function loadAmountValidationStatus() {
+            try {
+                const data = await apiCall(`/api/master/${currentFolderId}/amount-validation`);
+                const btn = document.getElementById('btn-amount-validation');
+                if (btn) {
+                    if (data.success && data.exists && data.config && data.config.enabled) {
+                        btn.classList.remove('hidden');
+                        
+                        // Style button based on status
+                        if (data.validation_status === 'Matched') {
+                            btn.className = 'bg-green-600 text-white text-sm px-3 py-1.5 rounded hover:bg-green-700 transition-colors flex items-center space-x-1 cursor-pointer';
+                        } else if (data.validation_status === 'Not Matched') {
+                            btn.className = 'bg-red-600 text-white text-sm px-3 py-1.5 rounded hover:bg-red-700 transition-colors flex items-center space-x-1 cursor-pointer';
+                        } else {
+                            btn.className = 'bg-indigo-600 text-white text-sm px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors flex items-center space-x-1 cursor-pointer';
+                        }
+                    } else {
+                        btn.classList.add('hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading amount validation status:', error);
+            }
+        }
+
+        async function openAmountValidationModal() {
+            document.getElementById('amount-validation-modal').classList.remove('hidden');
+            document.getElementById('amount-validation-modal').style.display = 'flex';
+            document.getElementById('amount-val-modal-loading').classList.remove('hidden');
+            document.getElementById('amount-val-modal-content').classList.add('hidden');
+            document.getElementById('amount-val-modal-submit').disabled = true;
+            document.getElementById('amount-val-modal-status-container').classList.add('hidden');
+            document.getElementById('amount-val-modal-input').value = '';
+            
+            try {
+                const data = await apiCall(`/api/master/${currentFolderId}/amount-validation`);
+                if (data.success && data.exists) {
+                    document.getElementById('amount-val-modal-opening').textContent = Number(data.config.opening_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    document.getElementById('amount-val-modal-colname').textContent = data.config.column || 'Column';
+                    document.getElementById('amount-val-modal-sum').textContent = Number(data.calculated_sum || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    
+                    const expected = Number(data.config.opening_balance || 0) + Number(data.calculated_sum || 0);
+                    document.getElementById('amount-val-modal-expected').textContent = expected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    
+                    if (data.validation_amount_entered) {
+                        document.getElementById('amount-val-modal-input').value = data.validation_amount_entered;
+                    }
+                    
+                    const statusDiv = document.getElementById('amount-val-modal-status-container');
+                    if (data.validation_status === 'Matched') {
+                        statusDiv.textContent = 'Status: Matched';
+                        statusDiv.className = 'mt-2 text-sm font-medium px-3 py-2 rounded bg-green-100 text-green-800';
+                    } else if (data.validation_status === 'Not Matched') {
+                        statusDiv.textContent = 'Status: Not Matched';
+                        statusDiv.className = 'mt-2 text-sm font-medium px-3 py-2 rounded bg-red-100 text-red-800';
+                    } else {
+                        statusDiv.textContent = 'Status: Pending';
+                        statusDiv.className = 'mt-2 text-sm font-medium px-3 py-2 rounded bg-yellow-100 text-yellow-800';
+                    }
+                    statusDiv.classList.remove('hidden');
+                    
+                    document.getElementById('amount-val-modal-loading').classList.add('hidden');
+                    document.getElementById('amount-val-modal-content').classList.remove('hidden');
+                    document.getElementById('amount-val-modal-submit').disabled = false;
+                } else {
+                    document.getElementById('amount-val-modal-loading').textContent = 'Configuration not found.';
+                }
+            } catch (error) {
+                document.getElementById('amount-val-modal-loading').textContent = 'Failed to load validation details.';
+                console.error(error);
+            }
+        }
+
+        function closeAmountValidationModal() {
+            document.getElementById('amount-validation-modal').classList.add('hidden');
+            document.getElementById('amount-validation-modal').style.display = 'none';
+        }
+
+        async function submitAmountValidation() {
+            const inputVal = document.getElementById('amount-val-modal-input').value;
+            if (inputVal === '') {
+                showToast('Please enter a closing amount', 'warning');
+                return;
+            }
+            
+            const btn = document.getElementById('amount-val-modal-submit');
+            btn.disabled = true;
+            btn.textContent = 'Validating...';
+            
+            try {
+                const data = await apiCall(`/api/master/${currentFolderId}/amount-validation`, {
+                    method: 'POST',
+                    body: JSON.stringify({ entered_amount: parseFloat(inputVal) }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    closeAmountValidationModal();
+                    loadAmountValidationStatus(); // Refresh button color
+                } else {
+                    showToast(data.message || 'Validation failed', 'error');
+                }
+            } catch (error) {
+                showToast(error.message || 'Error occurred', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Validate';
+            }
+        }
+
 
         async function exportMasterData() {
             const exportLimitStr = prompt("How many rows do you want to export?\n\nLeave blank or enter 0 to export All rows.", "");
@@ -13062,11 +13347,21 @@
                     const select = document.getElementById('local-module-select');
                     if (!select) return;
                     
-                    const currentId = localStorage.getItem('module_id') || "1";
+                    let currentId = localStorage.getItem('module_id') || "1";
+                    const activeModules = data.modules.filter(m => m.status === 'active' || !m.status);
                     
-                    select.innerHTML = data.modules.map(m => 
+                    // Fallback to 1 if current is not in active modules
+                    if (!activeModules.find(m => String(m.id) === String(currentId))) {
+                        currentId = "1";
+                        localStorage.setItem('module_id', currentId);
+                    }
+                    
+                    select.innerHTML = activeModules.map(m => 
                         `<option value="${m.id}" ${m.id == currentId ? 'selected' : ''}>${m.name}</option>`
                     ).join('');
+                    
+                    // Also populate Settings Module Management if on settings page
+                    renderSettingsModules(data.modules);
                 }
             } catch (e) {
                 console.error("Failed to load local modules", e);
@@ -13078,8 +13373,44 @@
             // Reload page to re-fetch all data with the new module ID
             window.location.reload();
         }
+
+        function renderSettingsModules(modules) {
+            const tbody = document.getElementById('settings-modules-tbody');
+            if (!tbody) return;
+            
+            tbody.innerHTML = modules.map(m => {
+                const isActive = m.status === 'active' || !m.status;
+                const statusBadge = isActive 
+                    ? `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Active</span>`
+                    : `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Inactive</span>`;
+                    
+                const toggleBtn = m.id == 1 ? '' : (isActive
+                    ? `<button onclick="toggleModuleStatus(${m.id}, 'inactive')" class="text-red-600 hover:text-red-900 mx-2 text-sm">Deactivate</button>`
+                    : `<button onclick="toggleModuleStatus(${m.id}, 'active')" class="text-green-600 hover:text-green-900 mx-2 text-sm">Activate</button>`);
+                    
+                const editBtn = `<button onclick="editModuleFromSettings(${m.id}, '${m.name.replace(/'/g, "\\'")}', '${(m.description || '').replace(/'/g, "\\'")}')" class="text-indigo-600 hover:text-indigo-900 text-sm">Edit</button>`;
+                
+                const deleteBtn = m.id == 1 ? '' : `<button onclick="deleteModuleFromSettings(${m.id})" class="text-gray-400 hover:text-red-600 ml-2 text-sm"><i class="fas fa-trash"></i></button>`;
+
+                return `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${m.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900">${m.name}</div>
+                            <div class="text-sm text-gray-500">${m.description || ''}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">${statusBadge}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            ${editBtn}
+                            ${toggleBtn}
+                            ${deleteBtn}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
         
-        async function showCreateModuleModal() {
+        async function createModuleFromSettings() {
             const name = prompt("Enter a name for the new Module (Workspace):");
             if (!name || !name.trim()) return;
             
@@ -13090,37 +13421,75 @@
                 });
                 
                 if (data.success) {
-                    changeLocalModule(data.module_id);
+                    showToast("Module created successfully", "success");
+                    loadLocalModules();
                 } else {
-                    alert("Failed to create module.");
+                    showToast("Failed to create module", "error");
                 }
             } catch(e) {
-                alert("Error creating module.");
+                showToast("Error creating module", "error");
                 console.error(e);
             }
         }
         
-        async function deleteCurrentModule() {
-            const moduleId = localStorage.getItem('module_id') || "1";
-            if (moduleId === "1") {
-                alert("Cannot delete the E-Retail module.");
+        async function editModuleFromSettings(id, currentName, currentDesc) {
+            const newName = prompt("Edit Module Name:", currentName);
+            if (!newName || !newName.trim()) return;
+            
+            try {
+                const data = await apiCall(`/api/local-modules/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ name: newName.trim(), description: currentDesc })
+                });
+                
+                if (data.success) {
+                    showToast("Module updated successfully", "success");
+                    loadLocalModules();
+                } else {
+                    showToast("Failed to update module", "error");
+                }
+            } catch(e) {
+                showToast("Error updating module", "error");
+            }
+        }
+
+        async function toggleModuleStatus(id, newStatus) {
+            try {
+                const data = await apiCall(`/api/local-modules/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ status: newStatus })
+                });
+                
+                if (data.success) {
+                    showToast(`Module ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`, "success");
+                    loadLocalModules();
+                } else {
+                    showToast("Failed to change module status", "error");
+                }
+            } catch(e) {
+                showToast("Error changing module status", "error");
+            }
+        }
+
+        async function deleteModuleFromSettings(moduleId) {
+            if (moduleId == 1) {
+                showToast("Cannot delete the E-Retail module.", "warning");
                 return;
             }
-            
-            if (!confirm("Are you sure you want to delete this module and all its settings?")) {
+            if (!confirm("Are you sure you want to permanently delete this module and all its settings?")) {
                 return;
             }
             
             try {
                 const data = await apiCall(`/api/local-modules/${moduleId}`, { method: 'DELETE' });
                 if (data.success) {
-                    changeLocalModule(1); // switch back to default
+                    showToast("Module deleted", "success");
+                    loadLocalModules();
                 } else {
-                    alert(data.error || "Failed to delete module.");
+                    showToast(data.error || "Failed to delete module", "error");
                 }
             } catch(e) {
-                alert("Error deleting module.");
-                console.error(e);
+                showToast("Error deleting module", "error");
             }
         }
 
