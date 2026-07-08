@@ -116,8 +116,8 @@ export default function Layout({ theme, toggleTheme }) {
         className="w-64 flex flex-col border-r border-gray-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-xl z-20"
       >
         <div className="p-6 pb-4 flex items-center justify-between gap-2">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent whitespace-nowrap">
-            User Portal
+          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent whitespace-normal leading-tight">
+            Purchase Tracker Controller
           </h1>
           
           <div className="relative group">

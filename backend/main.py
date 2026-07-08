@@ -388,6 +388,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
+USER_FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'user-frontend', 'dist')
+app.mount("/assets", StaticFiles(directory=os.path.join(USER_FRONTEND_DIR, 'assets')), name="user_assets")
+
 # ============ VALIDATION ERROR HANDLER (Detailed 422 Diagnostics) ============
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
@@ -780,10 +783,14 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return FileResponse(os.path.join(USER_FRONTEND_DIR, 'index.html'), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/index.html")
 async def index_html():
+    return FileResponse(os.path.join(USER_FRONTEND_DIR, 'index.html'), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+@app.get("/admin")
+async def admin_portal():
     return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/legacy")
@@ -9491,3 +9498,9 @@ async def api_delete_dynamic_card(card_id: int, current_user: Optional[dict] = D
         return {'success': True}
     except Exception as e:
         return {'success': False, 'message': str(e)}
+
+@app.get("/{full_path:path}")
+async def catch_all(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API route not found")
+    return FileResponse(os.path.join(USER_FRONTEND_DIR, 'index.html'), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
