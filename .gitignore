@@ -73,8 +73,9 @@ node_modules/
 data/*
 !data/module_*/
 data/module_*/*
-!data/module_*/master_files/
 data/module_*/master_files/*
-!data/module_*/master_files/folder_*/
 data/module_*/master_files/folder_*/*
-!data/module_*/master_files/folder_*/*.duckdb
+
+# Track ONLY the safe scrubbed templates, never the live ones
+!data/template_master_dbs/
+!data/template_master_dbs/**

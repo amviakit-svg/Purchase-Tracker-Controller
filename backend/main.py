@@ -353,6 +353,27 @@ async def startup_event():
             # exactly what should happen on first use.
             # ---------------------------------------------
             
+        # Ensure safe template duckdb files are copied to the live path
+        template_dbs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'template_master_dbs')
+        if os.path.exists(template_dbs_dir) and os.path.exists(db_path):
+            import sqlite3
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT module_id, folder_id FROM master_files")
+                for row in cursor.fetchall():
+                    mod_id, fol_id = row
+                    live_duck_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', f'module_{mod_id}', 'master_files', f'folder_{fol_id}', f'folder_{fol_id}_master.duckdb')
+                    template_duck_path = os.path.join(template_dbs_dir, str(fol_id), f'folder_{fol_id}_master.duckdb')
+                    
+                    if os.path.exists(template_duck_path) and not os.path.exists(live_duck_path):
+                        os.makedirs(os.path.dirname(live_duck_path), exist_ok=True)
+                        shutil.copy2(template_duck_path, live_duck_path)
+                        logger.info(f"Initialized live duckdb master file from template for folder {fol_id}")
+                conn.close()
+            except Exception as e:
+                logger.error(f"Failed to initialize duckdb templates: {e}")
+            
         from database import init_db, cleanup_old_notifications
         init_db()
         logger.info("Database initialized successfully.")
