@@ -389,6 +389,7 @@ FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 USER_FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'user-frontend', 'dist')
+os.makedirs(os.path.join(USER_FRONTEND_DIR, 'assets'), exist_ok=True)
 app.mount("/assets", StaticFiles(directory=os.path.join(USER_FRONTEND_DIR, 'assets')), name="user_assets")
 
 # ============ VALIDATION ERROR HANDLER (Detailed 422 Diagnostics) ============
