@@ -2226,6 +2226,12 @@ async def retry_file_sync(file_id: int, current_user: Optional[dict] = Depends(g
         conn.commit()
         conn.close()
         
+        # Explicitly trigger the background sync task so it doesn't stay pending forever
+        import asyncio
+        from backend.auto_sync import trigger_folder_sync
+        user_id = current_user.get('id') if current_user else 1
+        asyncio.create_task(trigger_folder_sync(file_rec['folder_id'], force_sync=True, user_id=user_id))
+        
         return {'success': True}
     except Exception as e:
         logger.error(f"Error retrying sync: {e}")
