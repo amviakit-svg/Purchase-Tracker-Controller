@@ -858,7 +858,22 @@ def get_master_file(folder_id):
     conn = get_db_connection()
     try:
         row = conn.execute('SELECT * FROM master_files WHERE folder_id = ?', (folder_id,)).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        res = dict(row)
+        
+        # Dynamically reconstruct the db_path so it works across different environments/machines
+        # regardless of the absolute path stored in deploy_template.db
+        module_id = res.get('module_id', 1)
+        base_dir = os.path.dirname(__file__)
+        data_dir = os.path.join(base_dir, '..', 'data')
+        module_dir = os.path.join(data_dir, f'module_{module_id}')
+        master_storage_dir = os.path.join(module_dir, 'master_files', f"folder_{folder_id}")
+        
+        # Path gets resolved cleanly
+        res['db_path'] = os.path.abspath(os.path.join(master_storage_dir, f"folder_{folder_id}_master.duckdb"))
+        
+        return res
 
     finally:
         try:

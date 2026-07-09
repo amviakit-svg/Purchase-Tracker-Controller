@@ -42,7 +42,11 @@ data/uploads/**/*.xlsx      # User-uploaded Excel files (recursive)
 data/processed/**/*.xlsx    # User-processed Excel files (runtime output)
 data/rejected/              # Runtime rejected-artefact files
 data/master_files/          # Runtime DuckDB master file artifacts
-data/module_1/              # Runtime module-isolated storage
+data/module_*/              # Runtime module-isolated storage
+
+# Exceptions to ensure DuckDB master files are shipped with the template
+!data/module_*/master_files/
+!data/module_*/master_files/**/*.duckdb
 
 # Deploy bundle (COMMITTED to git - used by startup_event on fresh deploys)
 # template.db              <- keep this tracked (DO NOT add to ignore)
@@ -66,4 +70,11 @@ Thumbs.db
 # Node modules (if applicable)
 node_modules/
 
-data/
+data/*
+!data/module_*/
+data/module_*/*
+!data/module_*/master_files/
+data/module_*/master_files/*
+!data/module_*/master_files/folder_*/
+data/module_*/master_files/folder_*/*
+!data/module_*/master_files/folder_*/*.duckdb
