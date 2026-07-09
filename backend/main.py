@@ -2433,7 +2433,7 @@ async def update_filter_mappings(folder_id: int, request: Request, current_user:
     cid, mid = _get_context(current_user)
     master = get_master_file(folder_id)
     if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-        raise HTTPException(status_code=404, detail="Master file not found")
+        raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
     data = await request.json()
     mappings = data.get('filter_mappings', {})
@@ -2646,9 +2646,9 @@ async def get_master_sheets(folder_id: int, current_user: Optional[dict] = Depen
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         return {"success": True, "sheets": ["Working"]}
     except HTTPException:
         try:
@@ -2675,9 +2675,9 @@ async def get_master_columns(folder_id: int, current_user: Optional[dict] = Depe
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
         conn = duckdb.connect(master['db_path'])
         try:
@@ -2730,7 +2730,7 @@ async def query_master(folder_id: str = Form(...), query: str = Form("SELECT * F
             raise HTTPException(status_code=422, detail="folder_id must be a valid integer")
         master = get_master_file(folder_id_int)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
         conn = duckdb.connect(master['db_path'])
         result = conn.execute(query).fetchdf()
@@ -2783,7 +2783,7 @@ async def preview_master(
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         # Make sure lifecycle meta-columns exist before we open read-only.
         # ALTER TABLE on a read-only DuckDB connection fails, so we use a
@@ -2986,7 +2986,7 @@ async def get_source_files(folder_id: int, current_user: Optional[dict] = Depend
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
         conn = duckdb.connect(master['db_path'])
         try:
@@ -3032,7 +3032,7 @@ async def get_master_stats(folder_id: int, current_user: Optional[dict] = Depend
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
         conn = duckdb.connect(master['db_path'])
         
@@ -3131,7 +3131,7 @@ async def toggle_column_visibility(
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
             
         hidden_cols = []
         if master.get('hidden_columns'):
@@ -3172,12 +3172,12 @@ async def export_master(
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         # When authenticated, enforce company/module match.
         # When running in legacy (no-auth) mode, cid/mid are None and we skip the
         # company/module check so that the endpoint works without a JWT.
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
         conn = duckdb.connect(master['db_path'])
         
@@ -3265,11 +3265,11 @@ async def rename_master_column(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         cid, mid = _get_context(current_user)
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         if not new_name or not new_name.strip():
             raise HTTPException(status_code=422, detail="new_name is required")
@@ -3370,11 +3370,11 @@ async def apply_row_filter(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         cid, mid = _get_context(current_user)
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         # Parse conditions JSON
         try:
@@ -3460,11 +3460,11 @@ async def filtered_preview(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         cid, mid = _get_context(current_user)
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         try:
             conds = json.loads(conditions) if isinstance(conditions, str) else conditions
@@ -3579,11 +3579,11 @@ async def api_delete_master_rows(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         cid, mid = _get_context(current_user)
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         try:
             fps = json.loads(fingerprints) if isinstance(fingerprints, str) else fingerprints
@@ -3655,11 +3655,11 @@ async def api_restore_master_rows(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         cid, mid = _get_context(current_user)
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         try:
             fps = json.loads(fingerprints) if isinstance(fingerprints, str) else fingerprints
@@ -3761,7 +3761,7 @@ async def api_list_deleted_rows(
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         conn = duckdb.connect(master['db_path'])
         try:
@@ -3807,7 +3807,7 @@ async def api_count_deleted_rows(
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         conn = duckdb.connect(master['db_path'])
         try:
@@ -3842,7 +3842,7 @@ async def api_export_deleted_rows(
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master or master.get('company_id') != cid or master.get('module_id') != mid:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         conn = duckdb.connect(master['db_path'])
         try:
@@ -3914,7 +3914,7 @@ async def delete_master_api(folder_id: int, current_user: Optional[dict] = Depen
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
         cid, mid = _get_context(current_user)
         
@@ -3992,7 +3992,7 @@ async def apply_master_formula(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         formula_type = formula_type.upper()
 
@@ -4525,7 +4525,7 @@ async def delete_master_column(folder_id: int, column_name: str, current_user: O
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
         conn = duckdb.connect(master['db_path'])
         
@@ -4611,7 +4611,7 @@ async def preview_master_formula(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         
         formula_type = formula_type.upper()
         
@@ -4869,7 +4869,7 @@ async def find_replace_master(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         if find_text is None or find_text == "":
             raise HTTPException(status_code=422, detail="find_text is required")
@@ -5027,7 +5027,7 @@ async def apply_formula_expression(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         # Connect to DuckDB
         conn = duckdb.connect(master['db_path'])
@@ -5162,7 +5162,7 @@ async def preview_formula_expression(
     try:
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         conn = duckdb.connect(master['db_path'])
 
@@ -5233,9 +5233,9 @@ async def api_list_activities(folder_id: int, current_user: Optional[dict] = Dep
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         activities = list_master_activities(folder_id, company_id=cid, module_id=mid, enabled_only=False)
         # Reorder by step_order then id
@@ -5272,9 +5272,9 @@ async def api_create_activity(
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
         if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         # Parse payload as JSON
         try:
@@ -5471,7 +5471,7 @@ async def api_test_activity(
         cid, mid = _get_context(current_user)
         master = get_master_file(folder_id)
         if not master:
-            raise HTTPException(status_code=404, detail="Master file not found")
+            raise HTTPException(status_code=404, detail="Master file not configured for this folder. Please configure it in the Admin Portal first.")
 
         existing = get_master_activity(activity_id)
         if not existing or existing.get('folder_id') != folder_id:

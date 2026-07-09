@@ -19,16 +19,29 @@ echo ============================================================
 echo.
 
 :: ---- CHECK PYTHON ----
-where python >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Python is not installed or not on PATH.
+set "PYTHON_EXE="
+
+:: First, try py (Windows launcher, avoids Store alias issues)
+py --version >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_EXE=py"
+) else (
+    :: Fallback to python
+    python --version >nul 2>&1
+    if not errorlevel 1 (
+        set "PYTHON_EXE=python"
+    )
+)
+
+if "%PYTHON_EXE%"=="" (
+    echo ERROR: Python is not installed, not on PATH, or the Windows Store alias is blocking it.
     echo Download Python 3.10+ from https://www.python.org/downloads/
     echo During install, make sure to tick "Add Python to PATH".
     pause
     exit /b 1
 )
 
-python --version
+%PYTHON_EXE% --version
 echo.
 
 :: ---- CREATE VENV ----
@@ -36,7 +49,7 @@ if exist venv (
     echo [OK] Virtual environment already exists at .\venv
 ) else (
     echo [1/2] Creating virtual environment in .\venv ...
-    python -m venv venv
+    %PYTHON_EXE% -m venv venv
     if errorlevel 1 (
         echo ERROR: Failed to create virtual environment.
         pause
