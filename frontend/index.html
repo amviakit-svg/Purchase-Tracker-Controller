@@ -702,6 +702,7 @@
                 <button onclick="switchValidation(1)" id="val-1-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md bg-white shadow-sm text-gray-900">Validation 1 - (GRN vs Vendor Invoice)</button>
                 <button onclick="switchValidation(2)" id="val-2-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Validation 2 - (Vendor Invoice vs Tally)</button>
                 <button onclick="switchValidation(3)" id="val-3-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Validation 3 - (Tally vs Vendor Invoice)</button>
+                <button onclick="switchValidation(4)" id="val-4-btn" class="val-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Validation 4 - (Custom)</button>
             </div>
 
             <!-- Validation Environment Container -->
@@ -914,6 +915,7 @@
                         <button onclick="switchFinalValidation(1)" id="final-val-1-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">Validation 1 - (GRN vs Vendor Invoice)</button>
                         <button onclick="switchFinalValidation(2)" id="final-val-2-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors bg-white shadow-sm text-gray-900">Validation 2 - (Vendor Invoice vs Tally)</button>
                         <button onclick="switchFinalValidation(3)" id="final-val-3-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">Validation 3 - (Tally vs Vendor Invoice)</button>
+                        <button onclick="switchFinalValidation(4)" id="final-val-4-btn" class="final-validation-btn px-6 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:text-gray-900">Validation 4 - (Custom)</button>
                     </div>
                 </div>
 
@@ -928,8 +930,8 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                 </svg>
                             </div>
-                            <h3 class="text-2xl font-bold text-gray-900">Ready to Process Validation 1</h3>
-                            <p class="text-gray-500 mt-2">All rules for Validation 1 are configured. Enter the reporting month and year, then click process.</p>
+                            <h3 id="validation-1-title" class="text-2xl font-bold text-gray-900">Ready to Process Validation 1</h3>
+                            <p id="validation-1-desc" class="text-gray-500 mt-2">All rules for Validation 1 are configured. Enter the reporting month and year, then click process.</p>
                         </div>
 
                         <!-- Status Trackers -->
@@ -959,7 +961,7 @@
                         <div class="text-center">
                             <button onclick="processAllRules()" id="process-btn-1" class="bg-blue-600 text-white text-lg font-semibold py-4 px-12 rounded-xl shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all transform hover:-translate-y-0.5 inline-flex items-center gap-3">
                                 <span id="process-spinner-1" class="spinner-sm hidden"></span>
-                                <span>Process Validation 1 Rules</span>
+                                <span id="validation-1-process-text">Process Validation 1 Rules</span>
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
                             </button>
                         </div>
@@ -1013,7 +1015,8 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
                         </div>
-                        <h3 class="text-xl font-semibold text-gray-900 mb-2">Ready to Process Validation 2</h3>
+                        <h3 id="validation-2-title" class="text-xl font-semibold text-gray-900 mb-2">Ready to Process Validation 2</h3>
+                        <p id="validation-2-desc" class="text-sm text-gray-600 mb-4">All rules for Validation 2 are configured. Enter the reporting month and year, then click process.</p>
                         <p class="text-gray-600 max-w-md mx-auto">All configured rules will be executed in sequence: Phase 1 → Phase 2 → Phase 3 → Phase 4</p>
                     </div>
 
@@ -1045,7 +1048,7 @@
 
 
                     <button onclick="processAllRules()" id="process-btn" class="w-full bg-blue-600 text-white text-lg font-semibold py-4 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center space-x-3">
-                        <span>Process Validation 2 rules</span>
+                        <span id="validation-2-process-text">Process Validation 2 rules</span>
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                         </svg>
@@ -1101,8 +1104,8 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                 </svg>
                             </div>
-                            <h3 class="text-2xl font-bold text-gray-900">Ready to Process Validation 3</h3>
-                            <p class="text-gray-500 mt-2">All rules for Validation 3 are configured. Enter the reporting month and year, then click process.</p>
+                            <h3 id="validation-3-title" class="text-2xl font-bold text-gray-900">Ready to Process Validation 3</h3>
+                            <p id="validation-3-desc" class="text-gray-500 mt-2">All rules for Validation 3 are configured. Enter the reporting month and year, then click process.</p>
                         </div>
 
                         <!-- Status Trackers -->
@@ -1134,7 +1137,7 @@
                         <div class="text-center">
                             <button onclick="processAllRules()" id="process-btn-3" class="bg-blue-600 text-white text-lg font-semibold py-4 px-12 rounded-xl shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all transform hover:-translate-y-0.5 inline-flex items-center gap-3">
                                 <span id="process-spinner-3" class="spinner-sm hidden"></span>
-                                <span>Process Validation 3 Rules</span>
+                                <span id="validation-3-process-text">Process Validation 3 Rules</span>
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
                             </button>
                         </div>
@@ -1165,6 +1168,85 @@
                                             <div class="bg-white px-4 py-3 rounded-lg shadow-sm border border-green-100 flex-1">
                                                 <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Time Taken</div>
                                                 <div id="result-time-taken-3" class="text-lg font-bold text-gray-900 mt-1">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="validation-content-4" class="hidden">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
+                        <div class="text-center mb-8">
+                            <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg class="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <h3 id="validation-4-title" class="text-2xl font-bold text-gray-900">Ready to Process Validation 4</h3>
+                            <p id="validation-4-desc" class="text-gray-500 mt-2">All rules for Validation 4 are configured. Enter the reporting month and year, then click process.</p>
+                        </div>
+
+                        <!-- Status Trackers -->
+                        <div class="max-w-4xl mx-auto mb-8 bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
+                            <h4 class="text-sm font-medium text-gray-900 mb-4 text-center">Process Tracking</h4>
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="flex flex-col items-center p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm mb-3">1</div>
+                                    <div class="text-xs font-semibold text-gray-700 text-center mb-2">Phase 1:<br>Master Extraction</div>
+                                    <span id="process-phase1-status-4" class="text-xs text-gray-500 font-medium bg-white px-2 py-1 rounded shadow-sm w-full text-center border border-gray-200">Pending</span>
+                                </div>
+                                <div class="flex flex-col items-center p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm mb-3">2</div>
+                                    <div class="text-xs font-semibold text-gray-700 text-center mb-2">Phase 2:<br>Derived Calc</div>
+                                    <span id="process-phase2-status-4" class="text-xs text-gray-500 font-medium bg-white px-2 py-1 rounded shadow-sm w-full text-center border border-gray-200">Pending</span>
+                                </div>
+                                <div class="flex flex-col items-center p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm mb-3">3</div>
+                                    <div class="text-xs font-semibold text-gray-700 text-center mb-2">Phase 3:<br>Summary Gen</div>
+                                    <span id="process-phase3-status-4" class="text-xs text-gray-500 font-medium bg-white px-2 py-1 rounded shadow-sm w-full text-center border border-gray-200">Pending</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Process Action -->
+                        <div class="text-center">
+                            <button onclick="processAllRules()" id="process-btn-4" class="bg-blue-600 text-white text-lg font-semibold py-4 px-12 rounded-xl shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all transform hover:-translate-y-0.5 inline-flex items-center gap-3">
+                                <span id="process-spinner-4" class="spinner-sm hidden"></span>
+                                <span id="validation-4-process-text">Process Validation 4 Rules</span>
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+
+                        <!-- Processing Results / Status -->
+                        <div id="process-result-4" class="mt-8 hidden">
+                            <div class="bg-green-50 border border-green-200 rounded-xl p-6">
+                                <div class="flex items-start">
+                                    <div class="flex-shrink-0">
+                                        <svg class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                    </div>
+                                    <div class="ml-3 w-full">
+                                        <h3 class="text-sm font-medium text-green-800">Processing Complete</h3>
+                                        <div class="mt-2 text-sm text-green-700">
+                                            <p>All phases processed successfully. Download the extracted file below.</p>
+                                        </div>
+                                        <div class="mt-4 flex flex-col sm:flex-row gap-4">
+                                            <div class="bg-white px-4 py-3 rounded-lg shadow-sm border border-green-100 flex-1">
+                                                <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Rows Processed</div>
+                                                <div id="result-rows-processed-4" class="text-lg font-bold text-gray-900 mt-1">-</div>
+                                            </div>
+                                            <div class="bg-white px-4 py-3 rounded-lg shadow-sm border border-green-100 flex-1">
+                                                <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Rules Applied</div>
+                                                <div id="result-rules-applied-4" class="text-lg font-bold text-gray-900 mt-1">-</div>
+                                            </div>
+                                            <div class="bg-white px-4 py-3 rounded-lg shadow-sm border border-green-100 flex-1">
+                                                <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold">Time Taken</div>
+                                                <div id="result-time-taken-4" class="text-lg font-bold text-gray-900 mt-1">-</div>
                                             </div>
                                         </div>
                                     </div>
@@ -1213,6 +1295,9 @@
                     <button onclick="switchSettingsTab('cards')" id="settings-tab-cards" class="settings-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         Card Management
                     </button>
+                    <button onclick="switchSettingsTab('pages')" id="settings-tab-pages" class="settings-tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        Page Management
+                    </button>
                 </nav>
             </div>
 
@@ -1239,6 +1324,30 @@
                             <!-- Populated by JS -->
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Page Management -->
+            <div id="settings-content-pages" class="settings-content-pane hidden bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-semibold text-gray-800">Page Management</h3>
+                </div>
+                <div class="p-6">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200" id="settings-pages-table">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Validation ID</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Display Name</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visible (Active)</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200" id="settings-pages-tbody">
+                                <!-- Dynamically populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -2012,7 +2121,7 @@
                 if (val) used.push(val);
             });
             
-            const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+            const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4);
             if (isVal1or3 && window.GLOBAL_PHASE1_COLUMNS) {
                 for (let i = 0; i < window.GLOBAL_PHASE1_COLUMNS.length; i++) {
                     used.push(val13GetSequenceLetter(i));
@@ -2049,7 +2158,7 @@
             // CRITICAL FIX: Reserve columns A, B, C for primary data columns
             // In Validation 1 & 3, Phase 1 can map an arbitrary number of active columns dynamically!
             // Thus, we must start auto-assignment AFTER all Phase 1 columns.
-            const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+            const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4);
             let MIN_COLUMN_NUMBER = 4; // Default starting from D
             
             if (isVal1or3 && window.GLOBAL_PHASE1_COLUMNS) {
@@ -2111,7 +2220,7 @@
             
             // Reassign sequentially starting from D (column 4) to reserve A, B, C for primary data
             let MIN_COLUMN_NUMBER = 4; // D
-            const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+            const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4);
             if (isVal1or3 && window.GLOBAL_PHASE1_COLUMNS) {
                 MIN_COLUMN_NUMBER = Math.max(4, window.GLOBAL_PHASE1_COLUMNS.length + 1);
             }
@@ -5021,7 +5130,7 @@
             }
 
             // Toggle Phase 1 UI and Phase 2 tab based on Validation ID
-            const isVal1or3 = (validationId === 1 || validationId === 3);
+            const isVal1or3 = (validationId === 1 || validationId === 3 || validationId === 4);
             const sheetContainer = document.getElementById('phase1-sheet-container');
             const colContainer = document.getElementById('phase1-column-container');
             const phase1Inner = document.querySelector('#phase-1 > div.bg-white.rounded-xl.shadow-sm');
@@ -5095,18 +5204,20 @@
 
             // Reload all phases for the new validation only if it's the first time
             if (isFirstLoad && !document.getElementById('page-rules').classList.contains('hidden')) {
-                loadSavedPhase1().then(async () => {
-                    // Ensure GLOBAL_PHASE1_COLUMNS is populated BEFORE downstream UI renders
-                    if (typeof getPhase1Columns === 'function') {
-                        await getPhase1Columns();
-                    }
-                    
-                    if (window.currentValidation === 2) {
-                        await loadSavedPhase2();
-                    }
-                    await loadSavedPhase3();
-                    await loadSavedPhase4();
-                });
+                const promises = [
+                    loadSavedPhase1().then(async () => {
+                        // Ensure GLOBAL_PHASE1_COLUMNS is populated BEFORE downstream UI renders
+                        if (typeof getPhase1Columns === 'function') {
+                            await getPhase1Columns();
+                        }
+                    }),
+                    loadSavedPhase3(),
+                    loadSavedPhase4()
+                ];
+                if (window.currentValidation === 2) {
+                    promises.push(loadSavedPhase2());
+                }
+                Promise.all(promises).catch(console.error);
             } else {
                 // If not first load, just refresh columns asynchronously
                 if (typeof getPhase1Columns === 'function') {
@@ -5142,39 +5253,23 @@
                 return folderFilesCache;
             }
             
-            const allFilesData = await apiCall('/api/folders');
-            if (!allFilesData.success) return [];
+            const [allFilesData, allMasterData] = await Promise.all([
+                apiCall('/api/files-all'),
+                apiCall('/api/master/all-modules')
+            ]);
             
-            // Fetch all folder files in parallel using Promise.all
-            const folderPromises = allFilesData.folders.map(folder => 
-                apiCall(`/api/files/${folder.id}`).then(res => res.success ? res.files : [])
-            );
-            
-            const folderResults = await Promise.all(folderPromises);
             let allFilesList = [];
-            folderResults.forEach(files => {
-                allFilesList = allFilesList.concat(files);
-            });
+            if (allFilesData.success && allFilesData.files) {
+                allFilesList = allFilesData.files;
+            }
             
-            // Fetch master files for all folders
-            const masterPromises = allFilesData.folders.map(folder => 
-                apiCall(`/api/master/${folder.id}`).then(res => {
-                    if (res.success && res.master && res.master.exists) {
-                        return {
-                            id: `master_${folder.id}`,
-                            original_name: `Master_File_${folder.name}`,
-                            is_master: true,
-                            folder_id: folder.id,
-                            folder_name: folder.name,
-                            row_count: res.master.row_count
-                        };
-                    }
-                    return null;
-                }).catch(() => null)
-            );
-            
-            const masterResults = await Promise.all(masterPromises);
-            const masterFiles = masterResults.filter(m => m !== null);
+            let masterFiles = [];
+            if (allMasterData.success && allMasterData.master_files) {
+                masterFiles = allMasterData.master_files.map(m => ({
+                    ...m,
+                    original_name: `Master_File_${m.folder_name}`
+                }));
+            }
             
             folderFilesCache = { files: allFilesList, masterFiles };
             folderFilesCacheTime = now;
@@ -5270,14 +5365,17 @@
                     }
                 }
 
-                // If we are showing rules page, load them sequentially AFTER dropdowns are populated
+                // If we are showing rules page, load them concurrently AFTER dropdowns are populated
                 if (!document.getElementById('page-rules').classList.contains('hidden')) {
-                    await loadSavedPhase1();
+                    const promises = [
+                        loadSavedPhase1(),
+                        loadSavedPhase3(),
+                        loadSavedPhase4()
+                    ];
                     if (window.currentValidation === 2) {
-                        await loadSavedPhase2();
+                        promises.push(loadSavedPhase2());
                     }
-                    await loadSavedPhase3();
-                    await loadSavedPhase4();
+                    await Promise.all(promises);
                 }
                 
                 resequenceOutputColumns();
@@ -5381,7 +5479,7 @@
 
         async function loadSavedPhase1() {
             // Load saved Phase 1 rules
-            const data = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
+            const data = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, { skipCache: true });
             if (!data.success || !data.rules || data.rules.length === 0) {
                 document.getElementById('phase1-file').value = '';
                 document.getElementById('phase1-sheet').innerHTML = '<option value="">-- Select Sheet --</option>';
@@ -5399,7 +5497,7 @@
                 try {
                     const config = JSON.parse(latestRule.config);
                     
-                    if (window.currentValidation === 1 || window.currentValidation === 3) {
+                    if (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4) {
                         window.val13LoadedFileId = config.file_id;
                         const val13File = document.getElementById('val13-phase1-file');
                         if (val13File && config.file_id) val13File.value = config.file_id;
@@ -5448,7 +5546,7 @@
             try {
                 if (!config) {
                     const vid = window.currentValidation > 0 ? window.currentValidation : (typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : 2);
-                    const data = await apiCall(`/api/rules/1?validation_id=${vid}`);
+                    const data = await apiCall(`/api/rules/1?validation_id=${vid}`, { skipCache: true });
                     if (data.success && data.rules && data.rules.length > 0) {
                         const latestRule = data.rules[data.rules.length - 1];
                         config = JSON.parse(latestRule.config);
@@ -5524,7 +5622,7 @@
             // FIX: For Validation 1 and 3, Phase 2 (Matching Rules) is intentionally hidden
             // in the UI. Skip loading Phase 2 rules for these validations so they
             // don't end up in the database and don't get processed.
-            if (window.currentValidation === 1 || window.currentValidation === 3) {
+            if (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4) {
                 const tbody = document.getElementById('matching-rules-body');
                 if (tbody) {
                     tbody.innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-sm text-gray-500">Phase 2 (Matching Rules) is not used in Validation 1 or 3. Please use Phase 2 (Remarks) instead.</td></tr>';
@@ -5542,7 +5640,7 @@
             
             let data;
             try {
-                data = await apiCall(`/api/rules/2?validation_id=${window.currentValidation}`);
+                data = await apiCall(`/api/rules/2?validation_id=${window.currentValidation}`, { skipCache: true });
             } catch (e) {
                 console.error('Failed to load Phase 2 rules:', e);
                 tbody.innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-sm text-gray-500">Unable to load saved rules. Add new rules below.</td></tr>';
@@ -5806,38 +5904,7 @@
             }
             
             // Step 3: Fetch all file lists ONCE
-            const foldersData = await apiCall('/api/folders');
-            let allFilesList = [];
-            let masterFiles = [];
-            if (foldersData.success) {
-                // Fetch all folder files in parallel
-                const folderPromises = foldersData.folders.map(folder => 
-                    apiCall(`/api/files/${folder.id}`).catch(e => console.warn("Background API error:", e))
-                );
-                const folderResults = await Promise.all(folderPromises);
-                folderResults.forEach(res => {
-                    if (res.success) allFilesList = allFilesList.concat(res.files);
-                });
-                
-                // Fetch master files for all folders
-                const masterPromises = foldersData.folders.map(folder => 
-                    apiCall(`/api/master/${folder.id}`).then(res => {
-                        if (res.success && res.master && res.master.exists) {
-                            return {
-                                id: `master_${folder.id}`,
-                                original_name: `Master_File_${folder.name}`,
-                                is_master: true,
-                                folder_id: folder.id,
-                                folder_name: folder.name,
-                                row_count: res.master.row_count
-                            };
-                        }
-                        return null;
-                    }).catch(() => null)
-                );
-                const masterResults = await Promise.all(masterPromises);
-                masterFiles = masterResults.filter(m => m !== null);
-            }
+            const { files: allFilesList, masterFiles } = await getAllFilesList();
             
             // Get primary file info
             const primaryData = await apiCall('/api/primary/files');
@@ -6071,42 +6138,32 @@
             refreshAllColumnDropdowns();
         }
 
+        let cachedPrimaryPhase1Data = null;
+        let lastPrimaryPhase1Validation = null;
+        
+        async function getPrimaryAndPhase1Data(forceRefresh = false) {
+            if (cachedPrimaryPhase1Data && !forceRefresh && lastPrimaryPhase1Validation === window.currentValidation) {
+                return cachedPrimaryPhase1Data;
+            }
+            try {
+                const [primaryData, rulesData] = await Promise.all([
+                    apiCall('/api/primary/files'),
+                    apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, { skipCache: true })
+                ]);
+                cachedPrimaryPhase1Data = { primaryData, rulesData };
+                lastPrimaryPhase1Validation = window.currentValidation;
+                return cachedPrimaryPhase1Data;
+            } catch (e) {
+                console.error('Error fetching primary/phase1 data:', e);
+                return { primaryData: {success:false}, rulesData: {success:false} };
+            }
+        }
+
         async function populateRuleFileDropdownsForRow(rowId) {
             // Same as populateRuleFileDropdowns but for a specific row
-            const foldersData = await apiCall('/api/folders');
-            let allFilesList = [];
-            let masterFiles = [];
-            
-            if (foldersData.success) {
-                for (const folder of foldersData.folders) {
-                    const filesData = await apiCall(`/api/files/${folder.id}`);
-                    if (filesData.success) {
-                        allFilesList = allFilesList.concat(filesData.files);
-                    }
-                }
-                
-                // Fetch master files for all folders
-                const masterPromises = foldersData.folders.map(folder => 
-                    apiCall(`/api/master/${folder.id}`).then(res => {
-                        if (res.success && res.master && res.master.exists) {
-                            return {
-                                id: `master_${folder.id}`,
-                                original_name: `Master_File_${folder.name}`,
-                                is_master: true,
-                                folder_id: folder.id,
-                                folder_name: folder.name,
-                                row_count: res.master.row_count
-                            };
-                        }
-                        return null;
-                    }).catch(() => null)
-                );
-                const masterResults = await Promise.all(masterPromises);
-                masterFiles = masterResults.filter(m => m !== null);
-            }
+            const { files: allFilesList, masterFiles } = await getAllFilesList();
 
-            const primaryData = await apiCall('/api/primary/files');
-            const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
+            const { primaryData, rulesData } = await getPrimaryAndPhase1Data();
             
             let primaryFiles = [];
             let hasPhase1Rules = false;
@@ -6178,11 +6235,20 @@
                     
                     // Add master files
                     if (masterFiles.length > 0) {
-                        select.innerHTML += `<optgroup label="--- Master Files ---">`;
-                        masterFiles.forEach(file => {
-                            select.innerHTML += `<option value="${file.id}">${file.original_name}</option>`;
+                        const grouped = {};
+                        masterFiles.forEach(f => {
+                            const mod = f.module_name || 'Other';
+                            if (!grouped[mod]) grouped[mod] = [];
+                            grouped[mod].push(f);
                         });
-                        select.innerHTML += `</optgroup>`;
+                        
+                        for (const mod in grouped) {
+                            select.innerHTML += `<optgroup label="--- Master Data (${mod}) ---">`;
+                            grouped[mod].forEach(file => {
+                                select.innerHTML += `<option value="${file.id}">${file.folder_name}</option>`;
+                            });
+                            select.innerHTML += `</optgroup>`;
+                        }
                     }
                     
                     // Add ONLY the latest primary file with column name
@@ -6276,7 +6342,7 @@
             } else if (fileId.startsWith('primary_')) {
                 // Primary data file - always has Working sheet
                 data = { success: true, sheets: ['Working'] };
-            } else if (window.currentValidation === 1 || window.currentValidation === 3) {
+            } else if (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4) {
                 // Val 1/3 use master data implicitly but store it as folder ID (e.g. "5")
                 data = await apiCall(`/api/master/${fileId}/sheets`);
             } else {
@@ -6313,7 +6379,7 @@
             } else if (fileId.startsWith('primary_')) {
                 // Primary data file - always has Unique_ID, Source_File_Name and Primary_Value
                 data = { success: true, columns: ['Unique_ID', 'Source_File_Name', 'Order ID', 'Sales Amount'] };
-            } else if (window.currentValidation === 1 || window.currentValidation === 3) {
+            } else if (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4) {
                 // Val 1/3 use master data implicitly but store it as folder ID (e.g. "5")
                 data = await apiCall(`/api/master/${fileId}/columns`);
             } else {
@@ -6367,7 +6433,7 @@
                 const column = String(document.getElementById('phase1-column').value || '');
 
                 
-                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4);
                 
                 // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
                 if (isVal1or3) {
@@ -7407,42 +7473,10 @@
         }
 
         async function populateRuleFileDropdowns(rowId) {
-            // Get all files from all folders
-            const foldersData = await apiCall('/api/folders');
-            let allFilesList = [];
-            let masterFiles = [];
-            
-            if (foldersData.success) {
-                for (const folder of foldersData.folders) {
-                    const filesData = await apiCall(`/api/files/${folder.id}`);
-                    if (filesData.success) {
-                        allFilesList = allFilesList.concat(filesData.files);
-                    }
-                }
-                
-                // Fetch master files for all folders
-                const masterPromises = foldersData.folders.map(folder => 
-                    apiCall(`/api/master/${folder.id}`).then(res => {
-                        if (res.success && res.master && res.master.exists) {
-                            return {
-                                id: `master_${folder.id}`,
-                                original_name: `Master_File_${folder.name}`,
-                                is_master: true,
-                                folder_id: folder.id,
-                                folder_name: folder.name,
-                                row_count: res.master.row_count
-                            };
-                        }
-                        return null;
-                    }).catch(() => null)
-                );
-                const masterResults = await Promise.all(masterPromises);
-                masterFiles = masterResults.filter(m => m !== null);
-            }
+            const { files: allFilesList, masterFiles } = await getAllFilesList();
 
             // Get primary data files - fetch rules to get column names
-            const primaryData = await apiCall('/api/primary/files');
-            const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
+            const { primaryData, rulesData } = await getPrimaryAndPhase1Data();
             
             let primaryFiles = [];
             let hasPhase1Rules = false;
@@ -7514,11 +7548,20 @@
                     
                     // Add master files
                     if (masterFiles.length > 0) {
-                        select.innerHTML += `<optgroup label="--- Master Files ---">`;
-                        masterFiles.forEach(file => {
-                            select.innerHTML += `<option value="${file.id}">${file.original_name}</option>`;
+                        const grouped = {};
+                        masterFiles.forEach(f => {
+                            const mod = f.module_name || 'Other';
+                            if (!grouped[mod]) grouped[mod] = [];
+                            grouped[mod].push(f);
                         });
-                        select.innerHTML += `</optgroup>`;
+                        
+                        for (const mod in grouped) {
+                            select.innerHTML += `<optgroup label="--- Master Data (${mod}) ---">`;
+                            grouped[mod].forEach(file => {
+                                select.innerHTML += `<option value="${file.id}">${file.folder_name}</option>`;
+                            });
+                            select.innerHTML += `</optgroup>`;
+                        }
                     }
                     
                     // Add ONLY the latest primary file with column name
@@ -7578,28 +7621,21 @@
 
         let GLOBAL_PHASE1_COLUMNS = ['Unique_ID', 'Source_File_Name', 'Order ID', 'Sales Amount'];
         async function getPhase1Columns() {
-            const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+            const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4);
             let cols = isVal1or3 ? [] : ['Unique_ID', 'Source_File_Name'];
             
             try {
-                const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`);
+                const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, { skipCache: true });
                 if (rulesData.success && rulesData.rules && rulesData.rules.length > 0) {
                     let configRaw = rulesData.rules[rulesData.rules.length - 1].config;
                     const p1Config = typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw;
                     
                     if (isVal1or3) {
-                        if (p1Config.fields && p1Config.fields.length > 0) {
-                            p1Config.fields.forEach((f, idx) => {
-                                // Fallback to generating sequence letter if f.letter is missing
-                                const letter = f.letter || val13GetSequenceLetter(idx);
-                                cols.push(`${letter} - ${f.name}`);
-                            });
-                        } else if (p1Config.file_id) {
-                            // Fallback to old behavior if fields not yet generated, but SORT them correctly
+                        if (p1Config.file_id) {
                             const cleanFileId = String(p1Config.file_id).replace('master_', '');
                             const [masterColsData, activitiesData] = await Promise.all([
-                                apiCall(`/api/master/${cleanFileId}/columns`),
-                                apiCall(`/api/master/${cleanFileId}/activities`)
+                                apiCall(`/api/master/${cleanFileId}/columns`, { skipCache: true }),
+                                apiCall(`/api/master/${cleanFileId}/activities`, { skipCache: true })
                             ]);
                             
                             if (masterColsData.success && masterColsData.columns) {
@@ -7613,6 +7649,11 @@
                                     cols.push(`${val13GetSequenceLetter(idx)} - ${c}`);
                                 });
                             }
+                        } else if (p1Config.fields && p1Config.fields.length > 0) {
+                            p1Config.fields.forEach((f, idx) => {
+                                const letter = f.letter || val13GetSequenceLetter(idx);
+                                cols.push(`${letter} - ${f.name}`);
+                            });
                         }
                     } else {
                         cols.push(window.primaryValueColumnName || 'Order ID');
@@ -7708,7 +7749,7 @@
         async function savePhase2Rules() {
             // FIX: For Validation 1 and 3, Phase 2 (Matching Rules) is intentionally hidden
             // in the UI. Do not allow saving of Phase 2 rules for these validations.
-            if (window.currentValidation === 1 || window.currentValidation === 3) {
+            if (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4) {
                 if (typeof showToast === 'function') {
                     showToast('Phase 2 (Matching Rules) is not used in Validation 1 or 3. Please use Phase 2 (Remarks) instead.', 'info');
                 } else {
@@ -7721,7 +7762,7 @@
             const rows = document.querySelectorAll('#matching-rules-body tr');
             const rules = [];
             
-                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3);
+                const isVal1or3 = (window.currentValidation === 1 || window.currentValidation === 3 || window.currentValidation === 4);
                 
                 // If Val 1 or 3, we only need the fileId. We can skip checking sheet/column/fields.
                 if (isVal1or3) {
@@ -8632,7 +8673,7 @@
         }
 
         async function loadSavedPhase3() {
-            const data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`);
+            const data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`, { skipCache: true });
             if (!data.success || !data.rules || data.rules.length === 0) { document.getElementById('remarks-groups-container').innerHTML = ''; return; }
             
             const latestRule = data.rules[data.rules.length - 1];
@@ -8840,7 +8881,7 @@
             }
             
             // Get columns from Phase 3 rules
-            const phase3Data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`);
+            const phase3Data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`, { skipCache: true });
             if (phase3Data.success && phase3Data.rules && phase3Data.rules.length > 0) {
                 try {
                     const groups = JSON.parse(phase3Data.rules[phase3Data.rules.length - 1].config);
@@ -9427,7 +9468,7 @@
 
         async function loadSavedPhase4() {
             try {
-                const data = await apiCall(`/api/summary/list?validation_id=${window.currentValidation || 1}`);
+                const data = await apiCall(`/api/summary/list?validation_id=${window.currentValidation || 1}`, { skipCache: true });
                 console.log('Phase 4 loaded:', data);
                 
                 const container = document.getElementById('summary-configs-container');
@@ -9537,9 +9578,23 @@
             `;
             
             tree.forEach((valNode, valIdx) => {
-                if (valNode.validation_name.includes("Validation 1")) valNode.validation_name = "GRN vs Vendor Invoice";
-                else if (valNode.validation_name.includes("Validation 2")) valNode.validation_name = "Vendor Invoice vs Tally";
-                else if (valNode.validation_name.includes("Validation 3")) valNode.validation_name = "Tally vs Vendor Invoice";
+                let vMatch = valNode.validation_name.match(/Validation\s*([1234])/i);
+                let isNodeActive = true;
+                if (vMatch && window.validationSettings && window.validationSettings[vMatch[1]]) {
+                    if (window.validationSettings[vMatch[1]].is_active === false) {
+                        isNodeActive = false;
+                    }
+                    if (window.validationSettings[vMatch[1]].name) {
+                        valNode.validation_name = window.validationSettings[vMatch[1]].name;
+                    }
+                } else {
+                    if (valNode.validation_name.includes("Validation 1")) valNode.validation_name = "Validation 1 - (GRN vs Vendor Invoice)";
+                    else if (valNode.validation_name.includes("Validation 2")) valNode.validation_name = "Validation 2 - (Vendor Invoice vs Tally)";
+                    else if (valNode.validation_name.includes("Validation 3")) valNode.validation_name = "Validation 3 - (Tally vs Vendor Invoice)";
+                    else if (valNode.validation_name.includes("Validation 4")) valNode.validation_name = "Validation 4 - (Custom)";
+                }
+                
+                if (!isNodeActive) return; // Hide this validation from dashboard tree
                 
                 const valName = valNode.validation_name;
                 
@@ -9669,13 +9724,14 @@
             
             // Extract data for charts
             let monthsSet = new Set();
-            let trendData = { 1: {}, 2: {}, 3: {} };
-            let volumeData = { 1: 0, 2: 0, 3: 0 };
+            let trendData = { 1: {}, 2: {}, 3: {}, 4: {} };
+            let volumeData = { 1: 0, 2: 0, 3: 0, 4: 0 };
             
             tree.forEach(valNode => {
                 let vid = valNode.validation_id || 1;
                 if (valNode.validation_name.includes('2')) vid = 2;
                 if (valNode.validation_name.includes('3')) vid = 3;
+                if (valNode.validation_name.includes('4')) vid = 4;
                 
                 valNode.years.forEach(fy => {
                     fy.months.forEach(mn => {
@@ -9699,7 +9755,8 @@
             const brandColors = {
                 1: { bg: 'rgba(59, 130, 246, 0.2)', border: 'rgba(59, 130, 246, 1)' }, // Blue
                 2: { bg: 'rgba(168, 85, 247, 0.2)', border: 'rgba(168, 85, 247, 1)' }, // Purple
-                3: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 1)' }    // Green
+                3: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 1)' },   // Green
+                4: { bg: 'rgba(249, 115, 22, 0.2)', border: 'rgba(249, 115, 22, 1)' }  // Orange
             };
 
             // Trend Chart (Line)
@@ -9709,27 +9766,46 @@
                     labels: labels,
                     datasets: [
                         {
-                            label: 'Validation 1',
+                            id: 1,
+                            label: window.validationSettings?.[1]?.name || 'Validation 1',
                             data: labels.map(l => trendData[1][l] || 0),
                             borderColor: brandColors[1].border,
                             backgroundColor: brandColors[1].bg,
-                            tension: 0.3, fill: true
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
                         },
                         {
-                            label: 'Validation 2',
+                            id: 2,
+                            label: window.validationSettings?.[2]?.name || 'Validation 2',
                             data: labels.map(l => trendData[2][l] || 0),
                             borderColor: brandColors[2].border,
                             backgroundColor: brandColors[2].bg,
-                            tension: 0.3, fill: true
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
                         },
                         {
-                            label: 'Validation 3',
+                            id: 3,
+                            label: window.validationSettings?.[3]?.name || 'Validation 3',
                             data: labels.map(l => trendData[3][l] || 0),
                             borderColor: brandColors[3].border,
                             backgroundColor: brandColors[3].bg,
-                            tension: 0.3, fill: true
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            id: 4,
+                            label: window.validationSettings?.[4]?.name || 'Validation 4',
+                            data: labels.map(l => trendData[4] ? trendData[4][l] || 0 : 0),
+                            borderColor: brandColors[4].border,
+                            backgroundColor: brandColors[4].bg,
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
                         }
-                    ]
+                    ].filter(ds => window.validationSettings?.[ds.id]?.is_active !== false)
                 },
                 options: {
                     responsive: true,
@@ -9740,14 +9816,16 @@
             });
 
             // Volume Chart (Bar)
+            const activeVids = [1, 2, 3, 4].filter(vid => window.validationSettings?.[vid]?.is_active !== false);
+
             dashboardVolumeChartInstance = new Chart(volumeCtx, {
                 type: 'bar',
                 data: {
-                    labels: ['Validation 1', 'Validation 2', 'Validation 3'],
+                    labels: activeVids.map(vid => window.validationSettings?.[vid]?.name || `Validation ${vid}`),
                     datasets: [{
                         label: 'Total Rows Processed',
-                        data: [volumeData[1], volumeData[2], volumeData[3]],
-                        backgroundColor: [brandColors[1].border, brandColors[2].border, brandColors[3].border],
+                        data: activeVids.map(vid => volumeData[vid] || 0),
+                        backgroundColor: activeVids.map(vid => brandColors[vid].border),
                         borderRadius: 6
                     }]
                 },
@@ -9858,6 +9936,8 @@
                                     displayFilename = `GRN vs Vendor Invoice Reconciliation Report ${dtStr}`;
                                 } else if (valId === 3) {
                                     displayFilename = `Tally vs Vendor Invoice Reconciliation Report ${dtStr}`;
+                                } else if (valId === 4) {
+                                    displayFilename = `Validation 4 (Custom) Reconciliation Report ${dtStr}`;
                                 } else {
                                     displayFilename = `Vendor Invoice vs Tally Reconciliation Report ${dtStr}`;
                                 }
@@ -10216,7 +10296,7 @@
         let currentFinalValidation = 2;
 
         function switchFinalValidation(validationId) {
-            [1, 2, 3].forEach(id => {
+            [1, 2, 3, 4].forEach(id => {
                 const panel = document.getElementById(`validation-content-${id}`);
                 if (panel) panel.classList.add('hidden');
                 const btn = document.getElementById(`final-val-${id}-btn`);
@@ -10244,7 +10324,7 @@
         async function processAllRules(force = false) {
             try {
                 const vid = typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : 2;
-                const suffix = vid === 1 ? '-1' : (vid === 3 ? '-3' : '');
+                const suffix = vid === 1 ? '-1' : (vid === 3 ? '-3' : (vid === 4 ? '-4' : ''));
                 
                 const btn = document.getElementById(`process-btn${suffix}`);
                 const spinner = document.getElementById(`process-spinner${suffix}`);
@@ -10278,11 +10358,13 @@
                 
                 let customFilename;
                 if (vid === 1) {
-                    customFilename = `Validation 1 - (GRN vs Vendor Invoice)`;
+                    customFilename = window.validationSettings?.[1]?.name || `Validation 1 - (GRN vs Vendor Invoice)`;
                 } else if (vid === 3) {
-                    customFilename = `Validation 3 - (Tally vs Vendor Invoice)`;
-                } else {
-                    customFilename = `Validation 2 - (Vendor Invoice vs Tally)`;
+                    customFilename = window.validationSettings?.[3]?.name || `Validation 3 - (Tally vs Vendor Invoice)`;
+                } else if (vid === 2) {
+                    customFilename = window.validationSettings?.[2]?.name || `Validation 2 - (Vendor Invoice vs Tally)`;
+                } else if (vid === 4) {
+                    customFilename = window.validationSettings?.[4]?.name || `Validation 4 - (Custom)`;
                 }
                 
                 // Reset all statuses
@@ -11809,10 +11891,9 @@
             select.innerHTML = '<option value="">-- Select File --</option>';
             
             try {
-                // Get all files from all folders
+                // Get regular files from current module's folders
                 const foldersData = await apiCall('/api/folders');
                 let allFilesList = [];
-                let masterFiles = [];
                 
                 if (foldersData.success) {
                     for (const folder of foldersData.folders) {
@@ -11821,38 +11902,32 @@
                             allFilesList = allFilesList.concat(filesData.files);
                         }
                     }
-                    
-                    // Fetch master files for all folders
-                    const masterPromises = foldersData.folders.map(folder => 
-                        apiCall(`/api/master/${folder.id}`).then(res => {
-                            if (res.success && res.master && res.master.exists) {
-                                return {
-                                    id: `master_${folder.id}`,
-                                    original_name: `Master_File_${folder.name}`,
-                                    is_master: true,
-                                    folder_id: folder.id,
-                                    folder_name: folder.name
-                                };
-                            }
-                            return null;
-                        }).catch(() => null)
-                    );
-                    const masterResults = await Promise.all(masterPromises);
-                    masterFiles = masterResults.filter(m => m !== null);
                 }
-
+                
                 // Add regular files
                 allFilesList.forEach(file => {
                     select.innerHTML += `<option value="${file.id}">${file.original_name}</option>`;
                 });
                 
-                // Add master files
-                if (masterFiles.length > 0) {
-                    select.innerHTML += `<optgroup label="--- Master Files ---">`;
-                    masterFiles.forEach(file => {
-                        select.innerHTML += `<option value="${file.id}">${file.original_name}</option>`;
+                // Fetch ALL master files across ALL modules
+                const allMasterData = await apiCall('/api/master/all-modules');
+                if (allMasterData.success && allMasterData.master_files && allMasterData.master_files.length > 0) {
+                    // Group master files by module name
+                    const groupedMasters = {};
+                    allMasterData.master_files.forEach(file => {
+                        if (!groupedMasters[file.module_name]) {
+                            groupedMasters[file.module_name] = [];
+                        }
+                        groupedMasters[file.module_name].push(file);
                     });
-                    select.innerHTML += `</optgroup>`;
+                    
+                    for (const [moduleName, files] of Object.entries(groupedMasters)) {
+                        select.innerHTML += `<optgroup label="Module: ${moduleName}">`;
+                        files.forEach(file => {
+                            select.innerHTML += `<option value="${file.id}">Master: ${file.folder_name}</option>`;
+                        });
+                        select.innerHTML += `</optgroup>`;
+                    }
                 }
             } catch (e) {
                 console.error('Failed to load secondary files:', e);
@@ -13505,30 +13580,29 @@ async function populateVal13FilesDropdown() {
     if (!val13File) return;
     
     try {
-        const foldersData = await apiCall('/api/folders');
-        if (foldersData.success) {
-            const masterPromises = foldersData.folders.map(folder => 
-                apiCall(`/api/master/${folder.id}`).then(res => {
-                    if (res.success && res.master && res.master.exists) {
-                        return { folder_id: folder.id, folder_name: folder.name };
-                    }
-                    return null;
-                }).catch(() => null)
-            );
-            
-            const masterResults = await Promise.all(masterPromises);
-            const masterFiles = masterResults.filter(m => m !== null);
-            
-            const currentVal = val13File.value;
-            val13File.innerHTML = '<option value="">-- Select Master Data --</option>';
-            masterFiles.forEach(f => {
-                val13File.innerHTML += `<option value="${f.folder_id}">Master Data: ${f.folder_name}</option>`;
+        const { masterFiles } = await getAllFilesList();
+        
+        const currentVal = val13File.value;
+        val13File.innerHTML = '<option value="">-- Select Master Data --</option>';
+        
+        const grouped = {};
+        masterFiles.forEach(f => {
+            const mod = f.module_name || 'Other';
+            if (!grouped[mod]) grouped[mod] = [];
+            grouped[mod].push(f);
+        });
+        
+        for (const mod in grouped) {
+            val13File.innerHTML += `<optgroup label="Module: ${mod}">`;
+            grouped[mod].forEach(f => {
+                val13File.innerHTML += `<option value="${f.folder_id}">${f.folder_name}</option>`;
             });
-            if (window.val13LoadedFileId) {
-                val13File.value = window.val13LoadedFileId;
-            } else if (currentVal) {
-                val13File.value = currentVal;
-            }
+            val13File.innerHTML += `</optgroup>`;
+        }
+        if (window.val13LoadedFileId) {
+            val13File.value = window.val13LoadedFileId;
+        } else if (currentVal) {
+            val13File.value = currentVal;
         }
     } catch (e) {
         console.error("Error populating val13 files", e);
@@ -13538,7 +13612,7 @@ async function populateVal13FilesDropdown() {
 const originalSwitchValidationVal13 = switchValidation;
 switchValidation = function(validationId) {
     originalSwitchValidationVal13(validationId);
-    if (validationId === 1 || validationId === 3) {
+    if (validationId === 1 || validationId === 3 || validationId === 4) {
         populateVal13FilesDropdown();
     }
 };
@@ -13704,6 +13778,9 @@ function val13RenderColumns() {
 
         async function loadSettings() {
             try {
+                // ALSO LOAD PAGE MANAGEMENT SETTINGS FIRST so names are available
+                await loadValidationSettings();
+
                 // Pre-load all modules for dropdowns
                 try {
                     const modData = await apiCall('/api/local-modules');
@@ -13752,10 +13829,10 @@ function val13RenderColumns() {
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
                     <select class="filter-validation bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" onchange="const isGlobal = !this.value; const tr = this.closest('tr'); tr.querySelector('.filter-target-v2').classList.toggle('hidden', !isGlobal); tr.querySelector('.filter-target-v3').classList.toggle('hidden', !isGlobal);">
-                        <option value="">Global (All)</option>
-                        <option value="1" ${filter.validation_id == 1 ? 'selected':''}>Validation 1</option>
-                        <option value="2" ${filter.validation_id == 2 ? 'selected':''}>Validation 2</option>
-                        <option value="3" ${filter.validation_id == 3 ? 'selected':''}>Validation 3</option>
+                        <option value="">Any</option>
+                        ${window.validationSettings?.[1]?.is_active !== false ? `<option value="1" ${filter.validation_id == 1 ? 'selected':''}>${window.validationSettings?.[1]?.name || 'Validation 1'}</option>` : ''}
+                        ${window.validationSettings?.[2]?.is_active !== false ? `<option value="2" ${filter.validation_id == 2 ? 'selected':''}>${window.validationSettings?.[2]?.name || 'Validation 2'}</option>` : ''}
+                        ${window.validationSettings?.[3]?.is_active !== false ? `<option value="3" ${filter.validation_id == 3 ? 'selected':''}>${window.validationSettings?.[3]?.name || 'Validation 3'}</option>` : ''}
                     </select>
                 </td>
                 <td class="px-4 py-3 min-w-[150px]">
@@ -13897,10 +13974,10 @@ function val13RenderColumns() {
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
                     <select class="card-validation bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2" onchange="const isGlobal = !this.value; const tr = this.closest('tr'); tr.querySelector('.card-target-v2').classList.toggle('hidden', !isGlobal); tr.querySelector('.card-target-v3').classList.toggle('hidden', !isGlobal);">
-                        <option value="">Global (All)</option>
-                        <option value="1" ${card.validation_id == 1 ? 'selected':''}>Validation 1</option>
-                        <option value="2" ${card.validation_id == 2 ? 'selected':''}>Validation 2</option>
-                        <option value="3" ${card.validation_id == 3 ? 'selected':''}>Validation 3</option>
+                        <option value="">None</option>
+                        ${window.validationSettings?.[1]?.is_active !== false ? `<option value="1" ${card.validation_id == 1 ? 'selected':''}>${window.validationSettings?.[1]?.name || 'Validation 1'}</option>` : ''}
+                        ${window.validationSettings?.[2]?.is_active !== false ? `<option value="2" ${card.validation_id == 2 ? 'selected':''}>${window.validationSettings?.[2]?.name || 'Validation 2'}</option>` : ''}
+                        ${window.validationSettings?.[3]?.is_active !== false ? `<option value="3" ${card.validation_id == 3 ? 'selected':''}>${window.validationSettings?.[3]?.name || 'Validation 3'}</option>` : ''}
                     </select>
                 </td>
                 <td class="px-4 py-3 min-w-[150px]">
@@ -13989,6 +14066,133 @@ function val13RenderColumns() {
             renderDynamicCardRow({});
         }
 
+        // ==================== PAGE MANAGEMENT ====================
+        window.validationSettings = {1: true, 2: true, 3: true, 4: true};
+
+        function renderSettingsPages(settings) {
+            const tbody = document.getElementById('settings-pages-tbody');
+            if (!tbody) return;
+            let html = '';
+            [1, 2, 3, 4].forEach(vid => {
+                const setting = settings[vid] || {is_active: true, name: `Validation ${vid}`};
+                html += `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Validation ${vid}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <input type="text" id="page-name-${vid}" value="${setting.name}" class="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2 border w-64">
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <label class="flex items-center cursor-pointer">
+                                <div class="relative">
+                                    <input type="checkbox" id="page-active-${vid}" class="sr-only" ${setting.is_active ? 'checked' : ''}>
+                                    <div class="block bg-gray-200 w-10 h-6 rounded-full transition-colors duration-300" id="page-bg-${vid}"></div>
+                                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-300 transform" id="page-dot-${vid}"></div>
+                                </div>
+                            </label>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onclick="savePageSetting(${vid})" class="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm transition-colors shadow-sm">Save</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+            
+            // Add listeners for custom toggle styling
+            [1, 2, 3, 4].forEach(vid => {
+                const cb = document.getElementById(`page-active-${vid}`);
+                if (cb) {
+                    const updateToggle = () => {
+                        const bg = document.getElementById(`page-bg-${vid}`);
+                        const dot = document.getElementById(`page-dot-${vid}`);
+                        if(cb.checked) {
+                            bg.classList.remove('bg-gray-200');
+                            bg.classList.add('bg-blue-600');
+                            dot.style.transform = 'translateX(100%)';
+                        } else {
+                            bg.classList.add('bg-gray-200');
+                            bg.classList.remove('bg-blue-600');
+                            dot.style.transform = 'translateX(0)';
+                        }
+                    };
+                    updateToggle(); // init
+                    cb.addEventListener('change', updateToggle);
+                }
+            });
+        }
+
+        async function savePageSetting(vid) {
+            const name = document.getElementById(`page-name-${vid}`).value;
+            const active = document.getElementById(`page-active-${vid}`).checked;
+            const payload = {
+                module_id: window.currentModuleId || 1,
+                validation_id: vid,
+                is_active: active,
+                name: name
+            };
+            try {
+                await apiCall('/api/validation-settings', { method: 'POST', body: JSON.stringify(payload) });
+                showToast('Page settings saved successfully', 'success');
+                loadValidationSettings(); // reload globally
+            } catch(e) {
+                showToast('Error saving page settings', 'error');
+            }
+        }
+
+        async function loadValidationSettings() {
+            try {
+                const data = await apiCall('/api/validation-settings?module_id=' + (window.currentModuleId || 1));
+                if (data && data.success) {
+                    window.validationSettings = data.settings;
+                    // Populate Settings Page Management if open
+                    if (document.getElementById('settings-pages-tbody')) {
+                        renderSettingsPages(data.settings);
+                    }
+                    // Update button texts dynamically
+                    [1, 2, 3, 4].forEach(vid => {
+                        const setting = window.validationSettings[vid];
+                        const btn = document.getElementById(`val-${vid}-btn`);
+                        const finalBtn = document.getElementById(`final-val-${vid}-btn`);
+                        const title = document.getElementById(`validation-${vid}-title`);
+                        if (setting && setting.name) {
+                            if (btn) btn.innerText = setting.name;
+                            if (finalBtn) finalBtn.innerText = setting.name;
+                            if (title) title.innerText = `Ready to Process ${setting.name}`;
+                            
+                            const desc = document.getElementById(`validation-${vid}-desc`);
+                            if (desc) desc.innerText = `All rules for ${setting.name} are configured. Enter the reporting month and year, then click process.`;
+                            
+                            const pText = document.getElementById(`validation-${vid}-process-text`);
+                            if (pText) pText.innerText = `Process ${setting.name} Rules`;
+                        }
+                        
+                        // Update Rule Mapping Tab visibility
+                        if (setting && setting.is_active === false) {
+                            if (btn) btn.style.display = 'none';
+                            if (finalBtn) finalBtn.style.display = 'none';
+                        } else {
+                            if (btn) btn.style.display = 'inline-block';
+                            if (finalBtn) finalBtn.style.display = 'inline-block';
+                        }
+                    });
+                    
+                    // Switch away from an inactive validation if currently selected
+                    if (typeof currentValidation !== 'undefined' && window.validationSettings[currentValidation] && window.validationSettings[currentValidation].is_active === false) {
+                        // Find first active
+                        for (let i of [1, 2, 3, 4]) {
+                            if (!window.validationSettings[i] || window.validationSettings[i].is_active !== false) {
+                                switchValidation(i);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error('Failed to load validation settings', e);
+            }
+        }
+
+        loadValidationSettings();
     </script>
 </body>
 </html>

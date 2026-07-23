@@ -1208,6 +1208,42 @@ async def upload_file(
         err = format_storage_error("unknown", {"detail": str(e)})
         return JSONResponse(status_code=500, content=err)
 
+@app.get("/api/files-all")
+async def api_get_all_files(current_user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        cid, mid = _get_context(current_user)
+        from database import get_db_connection
+        conn = get_db_connection()
+        # Recover stale
+        conn.execute(
+            """UPDATE files
+               SET sync_status = 'pending', sync_error = COALESCE(sync_error, 'Recovered from stale in_processing state')
+               WHERE company_id = ? AND module_id = ?
+                 AND sync_status = 'in_processing'
+                 AND (sync_error IS NULL OR sync_error = '')""",
+            (cid, mid),
+        )
+        conn.commit()
+        
+        files_cursor = conn.execute("""
+            SELECT id, name, original_name, size, format, folder_id, company_id, module_id, created_at, sync_status, sync_error
+            FROM files 
+            WHERE company_id = ? AND module_id = ?
+            ORDER BY created_at DESC
+        """, (cid, mid)).fetchall()
+        conn.close()
+        
+        files = [dict(f) for f in files_cursor]
+        _enrich_files_with_rejected_artefact(files)
+        
+        return {"success": True, "files": files}
+    except Exception as e:
+        if 'conn' in locals() and hasattr(conn, 'close'):
+            try: conn.close()
+            except: pass
+        logger.error(f"Error fetching all files: {traceback.format_exc()}")
+        return {"success": False, "error": str(e)}
+
 @app.get("/api/files/{folder_id}")
 async def api_get_files(folder_id: int):
     # --- Stale-sync recovery: any file stuck in 'in_processing' for >5 minutes
@@ -2462,6 +2498,45 @@ async def update_filter_mappings(folder_id: int, request: Request, current_user:
             
     return {"success": True, "message": "Filter mappings updated successfully"}
 
+@app.get("/api/master/all-modules")
+async def get_all_master_files(current_user: Optional[dict] = Depends(get_optional_user)):
+    """Fetch all master files across all modules for the current company"""
+    try:
+        cid, _ = _get_context(current_user)
+        from database import get_db_connection
+        conn = get_db_connection()
+        try:
+            query = '''
+                SELECT 
+                    m.folder_id, 
+                    f.name as folder_name, 
+                    mod.name as module_name
+                FROM master_files m
+                JOIN folders f ON m.folder_id = f.id
+                JOIN modules mod ON m.module_id = mod.id
+                WHERE m.company_id = ?
+                ORDER BY mod.name, f.name
+            '''
+            rows = conn.execute(query, (cid,)).fetchall()
+            
+            master_files = []
+            for row in rows:
+                master_files.append({
+                    "id": f"master_{row['folder_id']}",
+                    "original_name": f"{row['folder_name']}",
+                    "is_master": True,
+                    "folder_id": row['folder_id'],
+                    "folder_name": row['folder_name'],
+                    "module_name": row['module_name']
+                })
+                
+            return {"success": True, "master_files": master_files}
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.error(f"Error fetching cross-module master files: {e}")
+        return {"success": False, "error": str(e)}
+
 @app.get("/api/master/{folder_id}")
 async def get_master_info(folder_id: int, current_user: Optional[dict] = Depends(get_optional_user)):
     cid, mid = _get_context(current_user)
@@ -2682,8 +2757,8 @@ async def get_master_columns(folder_id: int, current_user: Optional[dict] = Depe
         master = get_master_file(folder_id)
         if not master:
             return {"success": False, "error": "Master file not configured for this folder. Please configure it in the Admin Portal first."}
-        if current_user is not None and (master.get('company_id') != cid or master.get('module_id') != mid):
-            return {"success": False, "error": "Master file not configured for this folder. Please configure it in the Admin Portal first."}
+        if current_user is not None and (master.get('company_id') != cid):
+            return {"success": False, "error": "Master file not configured or belongs to another company."}
         
         conn = duckdb.connect(master['db_path'])
         try:
@@ -3798,6 +3873,9 @@ async def api_list_deleted_rows(
         raise
     except Exception as e:
         logger.error(f"List deleted rows error: {e}")
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+        except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -4848,6 +4926,10 @@ async def preview_master_formula(
         raise
     except Exception as e:
         logger.error(f"Formula preview error: {e}")
+        try:
+            if 'conn' in locals() and hasattr(conn, 'close'): conn.close()
+            if 'sec_conn' in locals() and hasattr(sec_conn, 'close'): sec_conn.close()
+        except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -7539,7 +7621,7 @@ async def process_all_rules(
             # For Validation 1 and 3, Phase 2 (Matching Rules) is not used.
             # The "Phase 2" the user sees in Val 1/3 is the renamed Phase 3 (Remarks),
             # so Phase 2 rules should NOT participate in column generation here.
-            if p2_rules and validation_id not in (1, 3):
+            if p2_rules and validation_id not in (1, 3, 4):
                 try:
                     c2 = json.loads(p2_rules['config'])
                     for r in c2:
@@ -7566,7 +7648,7 @@ async def process_all_rules(
                 except: pass
                 
             missing = required_cols - generated_cols
-            if missing and validation_id not in (1, 3):
+            if missing and validation_id not in (1, 3, 4):
                 return {
                     "success": False,
                     "type": "validation_warning",
@@ -9427,8 +9509,31 @@ def _enrich_files_with_rejected_artefact(files: list) -> list:
 
 from backend.database import (
     get_dynamic_filters, save_dynamic_filter, delete_dynamic_filter, reorder_dynamic_filters,
-    get_dynamic_cards, save_dynamic_card, delete_dynamic_card, reorder_dynamic_cards
+    get_dynamic_cards, save_dynamic_card, delete_dynamic_card, reorder_dynamic_cards,
+    get_validation_settings, update_validation_setting
 )
+
+class ValidationSettingUpdate(BaseModel):
+    module_id: int = 1
+    validation_id: int
+    is_active: bool
+    name: Optional[str] = None
+
+@app.get('/api/validation-settings')
+async def api_get_validation_settings(module_id: int = 1):
+    try:
+        settings = get_validation_settings(module_id)
+        return {'success': True, 'settings': settings}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
+@app.post('/api/validation-settings')
+async def api_update_validation_setting(data: ValidationSettingUpdate):
+    try:
+        success = update_validation_setting(data.module_id, data.validation_id, data.is_active, data.name)
+        return {'success': success}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
 
 @app.get('/api/settings/filters')
 async def api_get_dynamic_filters(current_user: Optional[dict] = Depends(get_optional_user)):

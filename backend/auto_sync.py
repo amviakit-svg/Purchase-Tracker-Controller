@@ -27,7 +27,33 @@ MASTER_DIR = os.path.join(BASE_DIR, '..', 'data', 'master_files')
 # Structure: {folder_id: {"is_running": False, "sync_needed": False}}
 SYNC_QUEUES = {}
 
-async def trigger_folder_sync(folder_id: int, force_sync: bool = False, user_id: int = None):
+def get_dependent_folders(folder_id: int) -> list:
+    """Find all folders that have a formula dependent on this folder_id."""
+    conn = get_db_connection()
+    try:
+        rows = conn.execute("SELECT folder_id, formulas FROM master_files WHERE formulas IS NOT NULL").fetchall()
+        
+        target_dep = f"master_{folder_id}"
+        dependents = []
+        for r in rows:
+            if r['folder_id'] == folder_id:
+                continue
+            try:
+                formulas = json.loads(r['formulas'])
+                for f in formulas:
+                    if f.get('secondary_file') == target_dep:
+                        dependents.append(r['folder_id'])
+                        break
+            except Exception:
+                pass
+        return dependents
+    except Exception as e:
+        logger.error(f"Error checking dependent folders: {e}")
+        return []
+    finally:
+        conn.close()
+
+async def trigger_folder_sync(folder_id: int, force_sync: bool = False, user_id: int = None, depth: int = 0):
     """
     Triggers a background sync for the given folder.
     Implements the Folder-Level Debounce Queue strategy.
@@ -53,6 +79,13 @@ async def trigger_folder_sync(folder_id: int, force_sync: bool = False, user_id:
                 import asyncio
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, run_incremental_sync, folder_id, force_sync, user_id)
+                
+                # Check for dependencies and trigger them automatically
+                if depth < 3:
+                    dependents = get_dependent_folders(folder_id)
+                    for dep_id in dependents:
+                        logger.info(f"Triggering auto-sync for dependent folder {dep_id} (depth {depth + 1})")
+                        asyncio.create_task(trigger_folder_sync(dep_id, force_sync=True, user_id=user_id, depth=depth + 1))
             except Exception as e:
                 logger.error(f"Error during background sync for folder {folder_id}: {e}")
                 

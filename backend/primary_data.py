@@ -76,8 +76,8 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
     from database import get_db_connection, get_master_file
     
 
-    # Validation 1 & 3: Raw dump of all columns
-    if validation_id in [1, 3]:
+    # Validation 1, 3, and 4: Raw dump of all columns
+    if validation_id in [1, 3, 4]:
         # Handle regular file vs master file
         if isinstance(file_id, str) and file_id.startswith('master_'):
             folder_id = int(file_id.replace('master_', ''))
@@ -291,14 +291,20 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
             df = pd.read_excel(file_path, sheet_name=sheet_name, header=header_row-1, dtype=str)
     
     # Check if column exists
-    if column_name not in df.columns:
+    if column_name and column_name not in df.columns:
         raise Exception(f"Column '{column_name}' not found in file. Available columns: {list(df.columns)}")
     
     # Validate all field source columns exist
     for field in fields:
-        if field['source_column'] not in df.columns:
-            raise Exception(f"Field '{field['name']}' source column '{field['source_column']}' not found in file. Available columns: {list(df.columns)}")
-    
+        source_col = field.get('source_column', field.get('name'))
+        if source_col not in df.columns:
+            raise Exception(f"Field '{field.get('name')}' source column '{source_col}' not found in file. Available columns: {list(df.columns)}")
+            
+    # ---- Handle empty column_name (No grouping) ----
+    if not column_name:
+        df['_Row_ID'] = [str(i) for i in range(1, len(df) + 1)]
+        column_name = '_Row_ID'
+        
     # ---- Get unique values (Order IDs) ----
     has_source_file_name = 'Source_File_Name' in df.columns
     if has_source_file_name:
@@ -326,8 +332,8 @@ def generate_primary_data(file_id, sheet_name, column_name, header_row=1, sales_
     
     # ---- Process each dynamic field ----
     for field in fields:
-        field_name = field.get('name', field['source_column'])
-        source_col = field['source_column']
+        field_name = field.get('name', field.get('source_column'))
+        source_col = field.get('source_column', field.get('name'))
         aggregation = field.get('aggregation', 'SUM').upper()
         output_col = field.get('output_column', 'D')
         

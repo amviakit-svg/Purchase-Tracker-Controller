@@ -509,6 +509,23 @@ def init_db():
             )
         ''')
 
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS validation_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id INTEGER NOT NULL,
+                validation_id INTEGER NOT NULL,
+                is_active INTEGER DEFAULT 1,
+                name TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(module_id, validation_id)
+            )
+        ''')
+        
+        try:
+            conn.execute("ALTER TABLE validation_settings ADD COLUMN name TEXT")
+        except Exception:
+            pass
+
         # Seed defaults if empty
         cursor = conn.cursor()
         cursor.execute("SELECT count(*) FROM dynamic_filters")
@@ -3475,5 +3492,54 @@ def reorder_dynamic_cards(order_list, module_id=1):
                 WHERE id = ? AND module_id = ?
             ''', (item.get('order', 0), item.get('id'), module_id))
         conn.commit()
+    finally:
+        conn.close()
+
+def get_validation_settings(module_id):
+    import sqlite3
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("SELECT validation_id, is_active, name FROM validation_settings WHERE module_id = ?", (module_id,)).fetchall()
+        
+        defaults = {
+            1: 'Validation 1 - (GRN vs Vendor Invoice)',
+            2: 'Validation 2 - (Vendor Invoice vs Tally)',
+            3: 'Validation 3 - (Tally vs Vendor Invoice)',
+            4: 'Validation 4 - (Custom)'
+        }
+        
+        settings = {}
+        for row in rows:
+            settings[row['validation_id']] = {
+                'is_active': bool(row['is_active']),
+                'name': row['name'] if row['name'] else defaults.get(row['validation_id'], f'Validation {row["validation_id"]}')
+            }
+            
+        for v in [1, 2, 3, 4]:
+            if v not in settings:
+                settings[v] = {'is_active': True, 'name': defaults[v]}
+                
+        return settings
+    finally:
+        conn.close()
+
+def update_validation_setting(module_id, validation_id, is_active, name=None):
+    conn = get_db_connection()
+    try:
+        if name is not None:
+            conn.execute("""
+                INSERT INTO validation_settings (module_id, validation_id, is_active, name)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(module_id, validation_id) DO UPDATE SET is_active = excluded.is_active, name = excluded.name, updated_at = CURRENT_TIMESTAMP
+            """, (module_id, validation_id, int(is_active), name))
+        else:
+            conn.execute("""
+                INSERT INTO validation_settings (module_id, validation_id, is_active)
+                VALUES (?, ?, ?)
+                ON CONFLICT(module_id, validation_id) DO UPDATE SET is_active = excluded.is_active, updated_at = CURRENT_TIMESTAMP
+            """, (module_id, validation_id, int(is_active)))
+        conn.commit()
+        return True
     finally:
         conn.close()
