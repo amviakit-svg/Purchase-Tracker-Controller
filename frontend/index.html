@@ -132,6 +132,15 @@
         </div>
     </header>
 
+    <!-- Background Sync Indicator -->
+    <div id="bg-sync-indicator" class="absolute top-4 right-20 z-[100] flex items-center bg-blue-50/90 backdrop-blur border border-blue-200 text-blue-700 px-3 py-1.5 rounded-full shadow-sm transition-all duration-300 transform translate-x-10 opacity-0 pointer-events-none hidden">
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span id="bg-sync-text" class="text-xs font-semibold tracking-wide">Syncing...</span>
+    </div>
+
     <!-- Notification Bell (Top Right Corner) -->
     <div id="notification-container" class="absolute top-4 right-6 z-[100] items-center hidden">
         <button id="notification-bell-btn" class="text-gray-500 hover:text-blue-600 focus:outline-none relative transition-colors duration-200 flex items-center bg-white/80 backdrop-blur rounded-full p-2 shadow-sm border border-gray-200" title="Notifications">
@@ -2656,9 +2665,30 @@
             return '';
         })();
 
+        function showBackgroundSync(message = "Syncing...") {
+            const indicator = document.getElementById('bg-sync-indicator');
+            const textEl = document.getElementById('bg-sync-text');
+            if (indicator && textEl) {
+                textEl.textContent = message;
+                indicator.classList.remove('hidden');
+                // Trigger reflow for transition
+                void indicator.offsetWidth;
+                indicator.classList.remove('translate-x-10', 'opacity-0');
+            }
+        }
+
+        function hideBackgroundSync() {
+            const indicator = document.getElementById('bg-sync-indicator');
+            if (indicator) {
+                indicator.classList.add('translate-x-10', 'opacity-0');
+                setTimeout(() => {
+                    indicator.classList.add('hidden');
+                }, 300);
+            }
+        }
+
         async function apiCall(url, options = {}) {
             const base = window.API_BASE_URL || '';
-            if (base && url.startsWith('/api/')) {
                 url = base + url;
             }
             const isGet = !options.method || options.method.toUpperCase() === 'GET';
@@ -3153,6 +3183,8 @@
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('folder_id', folderId);
+                
+                showBackgroundSync(`Uploading ${file.name}...`);
 
                 try {
                     const data = await apiCall('/api/upload', {
@@ -3170,6 +3202,7 @@
                     if (error.rawData && error.rawData.prompt_replace) {
                         if (confirm(`File "${file.name}" already exists. Do you want to replace it?`)) {
                             formData.append('replace', 'true');
+                            showBackgroundSync(`Replacing ${file.name}...`);
                             try {
                                 const data2 = await apiCall('/api/upload', {
                                     method: 'POST',
@@ -3194,6 +3227,7 @@
                 }
             }
 
+            hideBackgroundSync();
             progressDiv.classList.add('hidden');
             fileInput.value = '';
             
@@ -5084,13 +5118,7 @@
         window.validationEnvironments = {1: null, 2: null, 3: null};
         window.templateValidationEnv = null;
 
-        function switchValidation(validationId) {
-            if (typeof window.debounceTimer !== 'undefined' && window.debounceTimer !== null) {
-                clearTimeout(window.debounceTimer);
-                window.debounceTimer = null;
-            }
-            
-            if (window.currentValidation === validationId) return;
+        async function preloadValidation(vid) {
             const envContainer = document.getElementById('validation-env-container');
             if (!envContainer) return;
 
@@ -5099,43 +5127,38 @@
                 window.validationEnvironments[1] = document.getElementById('validation-env-inner');
             }
 
-            // Save state of current validation before switching
             if (window.currentValidation !== 0 && window.validationEnvironments[window.currentValidation]) {
                 const searchInput = document.getElementById('search-columns');
                 if (searchInput) window.searchState[window.currentValidation] = searchInput.value;
+                if (envContainer.firstElementChild) {
+                    window.validationEnvironments[window.currentValidation] = envContainer.firstElementChild;
+                    envContainer.removeChild(envContainer.firstElementChild);
+                }
             }
-            if (envContainer && envContainer.firstElementChild) {
-                window.validationEnvironments[window.currentValidation] = envContainer.firstElementChild;
-                envContainer.removeChild(envContainer.firstElementChild);
+            window.currentValidation = vid;
+            if (!window.validationEnvironments[vid]) {
+                window.validationEnvironments[vid] = window.templateValidationEnv.cloneNode(true);
+                window.validationEnvironments[vid].isLoaded = false;
             }
+            envContainer.appendChild(window.validationEnvironments[vid]);
 
-            window.currentValidation = validationId;
             const dyn = document.getElementById('phase1-dynamic-fields');
-            if (dyn) dyn.innerHTML = ''; // prevent bleeding between tabs
+            if (dyn) dyn.innerHTML = '';
 
             document.querySelectorAll('.val-btn').forEach(btn => {
                 btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-900');
                 btn.classList.add('text-gray-600');
             });
-            document.getElementById(`val-${validationId}-btn`).classList.add('bg-white', 'shadow-sm', 'text-gray-900');
-            document.getElementById(`val-${validationId}-btn`).classList.remove('text-gray-600');
-
-            let isFirstLoad = false;
-            if (!window.validationEnvironments[validationId]) {
-                window.validationEnvironments[validationId] = window.templateValidationEnv.cloneNode(true);
-                isFirstLoad = true;
-            }
-            if (envContainer) {
-                envContainer.appendChild(window.validationEnvironments[validationId]);
+            const btn = document.getElementById(`val-${vid}-btn`);
+            if (btn) {
+                btn.classList.add('bg-white', 'shadow-sm', 'text-gray-900');
+                btn.classList.remove('text-gray-600');
             }
 
-            // Toggle Phase 1 UI and Phase 2 tab based on Validation ID
-            const isVal1or3 = (validationId === 1 || validationId === 3 || validationId === 4);
-            const sheetContainer = document.getElementById('phase1-sheet-container');
-            const colContainer = document.getElementById('phase1-column-container');
+            const isVal1or3 = (vid === 1 || vid === 3 || vid === 4);
             const phase1Inner = document.querySelector('#phase-1 > div.bg-white.rounded-xl.shadow-sm');
-
             let customPhase1 = document.getElementById('val13-phase1-custom');
+            
             if (!customPhase1) {
                 customPhase1 = document.createElement('div');
                 customPhase1.id = 'val13-phase1-custom';
@@ -5157,7 +5180,6 @@
                             </div>
                         </div>
                     </div>
-                    
                     <div id="val13-phase1-preview-section" class="mt-8 hidden">
                         <div class="flex items-center justify-between mb-4">
                             <div>
@@ -5181,32 +5203,15 @@
 
             if (isVal1or3) {
                 if (phase1Inner) phase1Inner.classList.add('hidden');
-                customPhase1.classList.remove('hidden');
-                
-                // Hide Phase 2 and rename Phase 3/4
-                const phase2Btn = document.getElementById('phase-2-btn');
-                if (phase2Btn) phase2Btn.classList.add('hidden');
-                document.getElementById('phase-3-btn').textContent = "Phase 2: Remarks";
-                document.getElementById('phase-4-btn').textContent = "Phase 3: Summary";
-                if (document.getElementById('phase-2') && !document.getElementById('phase-2').classList.contains('hidden')) {
-                    switchPhase(1);
-                }
+                if (customPhase1) customPhase1.classList.remove('hidden');
             } else {
                 if (phase1Inner) phase1Inner.classList.remove('hidden');
                 if (customPhase1) customPhase1.classList.add('hidden');
-                
-                // Restore tabs
-                const phase2Btn = document.getElementById('phase-2-btn');
-                if (phase2Btn) phase2Btn.classList.remove('hidden');
-                document.getElementById('phase-3-btn').textContent = "Phase 3: Remarks";
-                document.getElementById('phase-4-btn').textContent = "Phase 4: Summary";
             }
 
-            // Reload all phases for the new validation only if it's the first time
-            if (isFirstLoad && !document.getElementById('page-rules').classList.contains('hidden')) {
+            if (!window.validationEnvironments[vid].isLoaded) {
                 const promises = [
                     loadSavedPhase1().then(async () => {
-                        // Ensure GLOBAL_PHASE1_COLUMNS is populated BEFORE downstream UI renders
                         if (typeof getPhase1Columns === 'function') {
                             await getPhase1Columns();
                         }
@@ -5214,15 +5219,38 @@
                     loadSavedPhase3(),
                     loadSavedPhase4()
                 ];
-                if (window.currentValidation === 2) {
+                if (vid === 2) {
                     promises.push(loadSavedPhase2());
                 }
-                Promise.all(promises).catch(console.error);
-            } else {
-                // If not first load, just refresh columns asynchronously
-                if (typeof getPhase1Columns === 'function') {
-                    getPhase1Columns();
+                await Promise.all(promises);
+                window.validationEnvironments[vid].isLoaded = true;
+            }
+        }
+
+        async function switchValidation(validationId) {
+            if (typeof window.debounceTimer !== 'undefined' && window.debounceTimer !== null) {
+                clearTimeout(window.debounceTimer);
+                window.debounceTimer = null;
+            }
+            
+            if (window.currentValidation === validationId) return;
+
+            await preloadValidation(validationId);
+
+            // Update Phase 2, 3, 4 button texts
+            const isVal1or3 = (validationId === 1 || validationId === 3 || validationId === 4);
+            const phase2Btn = document.getElementById('phase-2-btn');
+            if (isVal1or3) {
+                if (phase2Btn) phase2Btn.classList.add('hidden');
+                document.getElementById('phase-3-btn').textContent = "Phase 2: Remarks";
+                document.getElementById('phase-4-btn').textContent = "Phase 3: Summary";
+                if (document.getElementById('phase-2') && !document.getElementById('phase-2').classList.contains('hidden')) {
+                    switchPhase(1);
                 }
+            } else {
+                if (phase2Btn) phase2Btn.classList.remove('hidden');
+                document.getElementById('phase-3-btn').textContent = "Phase 3: Remarks";
+                document.getElementById('phase-4-btn').textContent = "Phase 4: Summary";
             }
         }
         function switchPhase(phase) {
@@ -5365,17 +5393,30 @@
                     }
                 }
 
-                // If we are showing rules page, load them concurrently AFTER dropdowns are populated
+                // Initialize all validations sequentially (with API calls prefetched concurrently)
                 if (!document.getElementById('page-rules').classList.contains('hidden')) {
-                    const promises = [
-                        loadSavedPhase1(),
-                        loadSavedPhase3(),
-                        loadSavedPhase4()
-                    ];
-                    if (window.currentValidation === 2) {
-                        promises.push(loadSavedPhase2());
+                    // Prefetch rules concurrently so preloadValidation is instant
+                    const prefetchPromises = [];
+                    [1, 2, 3, 4].forEach(vid => {
+                        if (window.validationSettings && window.validationSettings[vid]?.is_active === false) return;
+                        prefetchPromises.push(apiCall(`/api/rules/1?validation_id=${vid}`));
+                        if (vid === 2) prefetchPromises.push(apiCall(`/api/rules/2?validation_id=${vid}`));
+                        prefetchPromises.push(apiCall(`/api/rules/3?validation_id=${vid}`));
+                        prefetchPromises.push(apiCall(`/api/summary/list?validation_id=${vid}`));
+                    });
+                    await Promise.all(prefetchPromises);
+                    
+                    const originalVid = window.currentValidation || 1;
+                    const vidsToLoad = [1, 2, 3, 4];
+                    for (const vid of vidsToLoad) {
+                        if (window.validationSettings && window.validationSettings[vid]?.is_active === false) continue;
+                        updateProgress(`Loading Validation ${vid} Configuration...`);
+                        await preloadValidation(vid);
                     }
-                    await Promise.all(promises);
+                    
+                    // Restore original
+                    await preloadValidation(originalVid);
+                    switchPhase(1);
                 }
                 
                 resequenceOutputColumns();
@@ -5479,7 +5520,7 @@
 
         async function loadSavedPhase1() {
             // Load saved Phase 1 rules
-            const data = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, { skipCache: true });
+            const data = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, {});
             if (!data.success || !data.rules || data.rules.length === 0) {
                 document.getElementById('phase1-file').value = '';
                 document.getElementById('phase1-sheet').innerHTML = '<option value="">-- Select Sheet --</option>';
@@ -5546,7 +5587,7 @@
             try {
                 if (!config) {
                     const vid = window.currentValidation > 0 ? window.currentValidation : (typeof currentFinalValidation !== 'undefined' ? currentFinalValidation : 2);
-                    const data = await apiCall(`/api/rules/1?validation_id=${vid}`, { skipCache: true });
+                    const data = await apiCall(`/api/rules/1?validation_id=${vid}`, {});
                     if (data.success && data.rules && data.rules.length > 0) {
                         const latestRule = data.rules[data.rules.length - 1];
                         config = JSON.parse(latestRule.config);
@@ -5640,7 +5681,7 @@
             
             let data;
             try {
-                data = await apiCall(`/api/rules/2?validation_id=${window.currentValidation}`, { skipCache: true });
+                data = await apiCall(`/api/rules/2?validation_id=${window.currentValidation}`, {});
             } catch (e) {
                 console.error('Failed to load Phase 2 rules:', e);
                 tbody.innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-sm text-gray-500">Unable to load saved rules. Add new rules below.</td></tr>';
@@ -6148,7 +6189,7 @@
             try {
                 const [primaryData, rulesData] = await Promise.all([
                     apiCall('/api/primary/files'),
-                    apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, { skipCache: true })
+                    apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, {})
                 ]);
                 cachedPrimaryPhase1Data = { primaryData, rulesData };
                 lastPrimaryPhase1Validation = window.currentValidation;
@@ -6638,15 +6679,25 @@
                     isRulesPageLoaded = false; // Force reload on next visit since data changed
                     window.primaryValueColumnName = column;
                     
-                    // Immediately update Phase 4 available columns
-                    await loadAvailableColumnsForSummary();
-                    
-                    // Automatically refresh Phase 2/3 UI to reflect any column changes
-                    if (typeof loadSavedPhase2 === 'function') {
-                        await loadSavedPhase2();
-                    }
-                    if (typeof loadSavedPhase3 === 'function') {
-                        await loadSavedPhase3();
+                    showBackgroundSync("Syncing Dependent Rules...");
+                    try {
+                        // Immediately update Phase 4 available columns
+                        await loadAvailableColumnsForSummary();
+                        
+                        // Automatically refresh Phase 2/3 UI to reflect any column changes
+                        if (typeof loadSavedPhase2 === 'function') {
+                            await loadSavedPhase2();
+                        }
+                        if (typeof loadSavedPhase3 === 'function') {
+                            await loadSavedPhase3();
+                        }
+                    } catch (syncErr) {
+                        console.error("Background sync error:", syncErr);
+                    } finally {
+                        hideBackgroundSync();
+                        if (!isAutoSave) {
+                            showToast('Dependent rules (Phase 2 & 3) synchronized successfully.', 'info');
+                        }
                     }
                 } else {
                     if (!isAutoSave) {
@@ -7625,7 +7676,7 @@
             let cols = isVal1or3 ? [] : ['Unique_ID', 'Source_File_Name'];
             
             try {
-                const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, { skipCache: true });
+                const rulesData = await apiCall(`/api/rules/1?validation_id=${window.currentValidation}`, {});
                 if (rulesData.success && rulesData.rules && rulesData.rules.length > 0) {
                     let configRaw = rulesData.rules[rulesData.rules.length - 1].config;
                     const p1Config = typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw;
@@ -8673,7 +8724,7 @@
         }
 
         async function loadSavedPhase3() {
-            const data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`, { skipCache: true });
+            const data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`, {});
             if (!data.success || !data.rules || data.rules.length === 0) { document.getElementById('remarks-groups-container').innerHTML = ''; return; }
             
             const latestRule = data.rules[data.rules.length - 1];
@@ -8881,7 +8932,7 @@
             }
             
             // Get columns from Phase 3 rules
-            const phase3Data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`, { skipCache: true });
+            const phase3Data = await apiCall(`/api/rules/3?validation_id=${window.currentValidation}`, {});
             if (phase3Data.success && phase3Data.rules && phase3Data.rules.length > 0) {
                 try {
                     const groups = JSON.parse(phase3Data.rules[phase3Data.rules.length - 1].config);
@@ -9468,7 +9519,7 @@
 
         async function loadSavedPhase4() {
             try {
-                const data = await apiCall(`/api/summary/list?validation_id=${window.currentValidation || 1}`, { skipCache: true });
+                const data = await apiCall(`/api/summary/list?validation_id=${window.currentValidation || 1}`, {});
                 console.log('Phase 4 loaded:', data);
                 
                 const container = document.getElementById('summary-configs-container');
@@ -13833,6 +13884,7 @@ function val13RenderColumns() {
                         ${window.validationSettings?.[1]?.is_active !== false ? `<option value="1" ${filter.validation_id == 1 ? 'selected':''}>${window.validationSettings?.[1]?.name || 'Validation 1'}</option>` : ''}
                         ${window.validationSettings?.[2]?.is_active !== false ? `<option value="2" ${filter.validation_id == 2 ? 'selected':''}>${window.validationSettings?.[2]?.name || 'Validation 2'}</option>` : ''}
                         ${window.validationSettings?.[3]?.is_active !== false ? `<option value="3" ${filter.validation_id == 3 ? 'selected':''}>${window.validationSettings?.[3]?.name || 'Validation 3'}</option>` : ''}
+                        ${window.validationSettings?.[4]?.is_active !== false ? `<option value="4" ${filter.validation_id == 4 ? 'selected':''}>${window.validationSettings?.[4]?.name || 'Validation 4'}</option>` : ''}
                     </select>
                 </td>
                 <td class="px-4 py-3 min-w-[150px]">
@@ -13978,6 +14030,7 @@ function val13RenderColumns() {
                         ${window.validationSettings?.[1]?.is_active !== false ? `<option value="1" ${card.validation_id == 1 ? 'selected':''}>${window.validationSettings?.[1]?.name || 'Validation 1'}</option>` : ''}
                         ${window.validationSettings?.[2]?.is_active !== false ? `<option value="2" ${card.validation_id == 2 ? 'selected':''}>${window.validationSettings?.[2]?.name || 'Validation 2'}</option>` : ''}
                         ${window.validationSettings?.[3]?.is_active !== false ? `<option value="3" ${card.validation_id == 3 ? 'selected':''}>${window.validationSettings?.[3]?.name || 'Validation 3'}</option>` : ''}
+                        ${window.validationSettings?.[4]?.is_active !== false ? `<option value="4" ${card.validation_id == 4 ? 'selected':''}>${window.validationSettings?.[4]?.name || 'Validation 4'}</option>` : ''}
                     </select>
                 </td>
                 <td class="px-4 py-3 min-w-[150px]">

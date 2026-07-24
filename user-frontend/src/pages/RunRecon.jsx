@@ -66,6 +66,7 @@ export default function RunRecon() {
   
   const [dynamicFilters, setDynamicFilters] = useState([]);
   const [dynamicCards, setDynamicCards] = useState([]);
+  const [validationSettings, setValidationSettings] = useState({});
   
   useEffect(() => {
       const loadSettings = async () => {
@@ -74,6 +75,9 @@ export default function RunRecon() {
               if (resF && resF.filters) setDynamicFilters(resF.filters.filter(f => f.is_active));
               const resC = await apiCall('/settings/cards');
               if (resC && resC.cards) setDynamicCards(resC.cards.filter(c => c.is_active));
+              
+              const resVS = await apiCall(`/validation-settings?module_id=${localStorage.getItem('module_id') || "1"}`);
+              if (resVS && resVS.success) setValidationSettings(resVS.settings || {});
           } catch(e) { console.error('Failed to load settings', e); }
       };
       
@@ -96,26 +100,33 @@ export default function RunRecon() {
   const [extractedData, setExtractedData] = useState({
     v1: { data: null, file: null, error: null },
     v2: { data: null, file: null, error: null },
-    v3: { data: null, file: null, error: null }
+    v3: { data: null, file: null, error: null },
+    v4: { data: null, file: null, error: null }
   });
 
   const [searchTerms, setSearchTerms] = useState({
     v1: '',
     v2: '',
-    v3: ''
+    v3: '',
+    v4: ''
   });
 
   const dropdownOptions = React.useMemo(() => {
     const opts = {};
     if (!dynamicFilters || dynamicFilters.length === 0) return opts;
     
-    const valLabels = { 1: "GRN vs Vendor", 2: "Vendor vs Tally", 3: "Tally vs Vendor" };
+    const valLabels = {
+        1: validationSettings[1]?.name || "GRN vs Vendor",
+        2: validationSettings[2]?.name || "Vendor vs Tally",
+        3: validationSettings[3]?.name || "Tally vs Vendor",
+        4: validationSettings[4]?.name || "Validation 4 (Custom)"
+    };
 
     dynamicFilters.forEach(f => {
        if (f.filter_type === 'Dropdown' && f.field_name !== 'Period' && f.field_name !== 'Variance') {
            const grouped = {};
            
-           [1, 2, 3].forEach(vid => {
+           [1, 2, 3, 4].forEach(vid => {
                if (f.validation_id && f.validation_id !== vid) return;
                
                const uniqueVals = new Set();
@@ -126,6 +137,7 @@ export default function RunRecon() {
                if (!f.validation_id) {
                    if (vid === 2 && f.target_column_v2) target = f.target_column_v2;
                    if (vid === 3 && f.target_column_v3) target = f.target_column_v3;
+                   if (vid === 4 && f.target_column_v4) target = f.target_column_v4;
                }
                
                if (target) {
@@ -149,8 +161,8 @@ export default function RunRecon() {
            opts[f.id] = grouped;
        }
     });
-    return opts;
-  }, [extractedData, dynamicFilters]);
+     return opts;
+   }, [extractedData, dynamicFilters, validationSettings]);
 
   useEffect(() => {
     fetchFolders();
@@ -176,7 +188,7 @@ export default function RunRecon() {
 
   const loadHistoricalData = async () => {
      try {
-       const vids = [1, 2, 3];
+       const vids = [1, 2, 3, 4];
        const results = await Promise.all(vids.map(async (vid) => {
           try {
              const res = await apiCall(`/processed/files?validation_id=${vid}&t=${Date.now()}`, { skipCache: true });
@@ -312,9 +324,10 @@ export default function RunRecon() {
     formData.append('force', 'false');
     
     let customFilename;
-    if (vid === 1) customFilename = `Validation 1 - (GRN vs Vendor Invoice)`;
-    else if (vid === 3) customFilename = `Validation 3 - (Tally vs Vendor Invoice)`;
-    else customFilename = `Validation 2 - (Vendor Invoice vs Tally)`;
+    if (vid === 1) customFilename = validationSettings[1]?.name || `Validation 1 - (GRN vs Vendor Invoice)`;
+    else if (vid === 3) customFilename = validationSettings[3]?.name || `Validation 3 - (Tally vs Vendor Invoice)`;
+    else if (vid === 4) customFilename = validationSettings[4]?.name || `Validation 4 - (Custom)`;
+    else customFilename = validationSettings[2]?.name || `Validation 2 - (Vendor Invoice vs Tally)`;
     formData.append('custom_filename', customFilename);
 
     try {
@@ -349,37 +362,61 @@ export default function RunRecon() {
     updateExtractedData({ 
        v1: { data: null, file: null, error: null }, 
        v2: { data: null, file: null, error: null }, 
-       v3: { data: null, file: null, error: null } 
+       v3: { data: null, file: null, error: null },
+       v4: { data: null, file: null, error: null }
     });
     
     let errCount = 0;
+    let expectedCount = 0;
     
-    try {
-      const v1 = await runValidation(1);
-      updateExtractedData(prev => ({ ...prev, v1: { ...v1, error: null } }));
-    } catch (e) {
-      errCount++;
-      updateExtractedData(prev => ({ ...prev, v1: { data: null, file: null, error: e.message } }));
+    if (validationSettings[1]?.is_active !== false) {
+      expectedCount++;
+      try {
+        const v1 = await runValidation(1);
+        updateExtractedData(prev => ({ ...prev, v1: { ...v1, error: null } }));
+      } catch (e) {
+        errCount++;
+        updateExtractedData(prev => ({ ...prev, v1: { data: null, file: null, error: e.message } }));
+      }
     }
 
-    try {
-      const v2 = await runValidation(2);
-      updateExtractedData(prev => ({ ...prev, v2: { ...v2, error: null } }));
-    } catch (e) {
-      errCount++;
-      updateExtractedData(prev => ({ ...prev, v2: { data: null, file: null, error: e.message } }));
+    if (validationSettings[2]?.is_active !== false) {
+      expectedCount++;
+      try {
+        const v2 = await runValidation(2);
+        updateExtractedData(prev => ({ ...prev, v2: { ...v2, error: null } }));
+      } catch (e) {
+        errCount++;
+        updateExtractedData(prev => ({ ...prev, v2: { data: null, file: null, error: e.message } }));
+      }
     }
 
-    try {
-      const v3 = await runValidation(3);
-      updateExtractedData(prev => ({ ...prev, v3: { ...v3, error: null } }));
-    } catch (e) {
-      errCount++;
-      updateExtractedData(prev => ({ ...prev, v3: { data: null, file: null, error: e.message } }));
+    if (validationSettings[3]?.is_active !== false) {
+      expectedCount++;
+      try {
+        const v3 = await runValidation(3);
+        updateExtractedData(prev => ({ ...prev, v3: { ...v3, error: null } }));
+      } catch (e) {
+        errCount++;
+        updateExtractedData(prev => ({ ...prev, v3: { data: null, file: null, error: e.message } }));
+      }
+    }
+
+    if (validationSettings[4]?.is_active !== false) {
+      expectedCount++;
+      try {
+        const v4 = await runValidation(4);
+        updateExtractedData(prev => ({ ...prev, v4: { ...v4, error: null } }));
+      } catch (e) {
+        errCount++;
+        updateExtractedData(prev => ({ ...prev, v4: { data: null, file: null, error: e.message } }));
+      }
     }
     
     setRunning(false);
-    if (errCount === 3) {
+    if (expectedCount === 0) {
+       toast.warning("No validations are currently active.");
+    } else if (errCount === expectedCount) {
        toast.error("All validations failed.");
     } else if (errCount > 0) {
        toast.warning("Reconciliation finished with some errors.");
@@ -454,6 +491,7 @@ export default function RunRecon() {
                         if (!c.validation_id) {
                             if (validationId === 2 && c.target_column_v2) target = c.target_column_v2;
                             if (validationId === 3 && c.target_column_v3) target = c.target_column_v3;
+                            if (validationId === 4 && c.target_column_v4) target = c.target_column_v4;
                         }
                         if (target) {
                             let idx = sec.headers.findIndex(h => h.trim().toLowerCase() === target.trim().toLowerCase());
@@ -505,6 +543,7 @@ export default function RunRecon() {
                                    if (!f.validation_id) {
                                        if (validationId === 2 && f.target_column_v2) target = f.target_column_v2;
                                        if (validationId === 3 && f.target_column_v3) target = f.target_column_v3;
+                                       if (validationId === 4 && f.target_column_v4) target = f.target_column_v4;
                                    }
                                    
                                    if (target) {
@@ -540,6 +579,7 @@ export default function RunRecon() {
                                    if (!f.validation_id) {
                                        if (validationId === 2 && f.target_column_v2) target = f.target_column_v2;
                                        if (validationId === 3 && f.target_column_v3) target = f.target_column_v3;
+                                       if (validationId === 4 && f.target_column_v4) target = f.target_column_v4;
                                    }
                                    
                                    if (target) {
@@ -575,6 +615,7 @@ export default function RunRecon() {
                                    if (!f.validation_id) {
                                        if (validationId === 2 && f.target_column_v2) target = f.target_column_v2;
                                        if (validationId === 3 && f.target_column_v3) target = f.target_column_v3;
+                                       if (validationId === 4 && f.target_column_v4) target = f.target_column_v4;
                                    }
                                    
                                    if (target) {
@@ -1143,9 +1184,10 @@ export default function RunRecon() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <ValidationSection title="GRN vs Vendor" stateObj={extractedData.v1} searchKey="v1" summaryTitle="GRN Amount" summaryColor="from-green-500 to-emerald-700" isRunning={running} validationId={1} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 1)} dynamicFilters={dynamicFilters} />
-          <ValidationSection title="Vendor vs Tally" stateObj={extractedData.v2} searchKey="v2" summaryTitle="Vendor Invoice Amount" summaryColor="from-blue-500 to-indigo-700" isRunning={running} validationId={2} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 2)} dynamicFilters={dynamicFilters} />
-          <ValidationSection title="Tally vs Vendor" stateObj={extractedData.v3} searchKey="v3" summaryTitle="Tally Amount" summaryColor="from-purple-500 to-fuchsia-700" isRunning={running} validationId={3} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 3)} dynamicFilters={dynamicFilters} />
+          {validationSettings[1]?.is_active !== false && <ValidationSection title={validationSettings[1]?.name || "GRN vs Vendor"} stateObj={extractedData.v1} searchKey="v1" summaryTitle={validationSettings[1]?.name ? `${validationSettings[1].name} Amount` : "GRN Amount"} summaryColor="from-green-500 to-emerald-700" isRunning={running} validationId={1} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 1)} dynamicFilters={dynamicFilters} />}
+          {validationSettings[2]?.is_active !== false && <ValidationSection title={validationSettings[2]?.name || "Vendor vs Tally"} stateObj={extractedData.v2} searchKey="v2" summaryTitle={validationSettings[2]?.name ? `${validationSettings[2].name} Amount` : "Vendor Invoice Amount"} summaryColor="from-blue-500 to-indigo-700" isRunning={running} validationId={2} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 2)} dynamicFilters={dynamicFilters} />}
+          {validationSettings[3]?.is_active !== false && <ValidationSection title={validationSettings[3]?.name || "Tally vs Vendor"} stateObj={extractedData.v3} searchKey="v3" summaryTitle={validationSettings[3]?.name ? `${validationSettings[3].name} Amount` : "Tally Amount"} summaryColor="from-purple-500 to-fuchsia-700" isRunning={running} validationId={3} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 3)} dynamicFilters={dynamicFilters} />}
+          {validationSettings[4]?.is_active !== false && <ValidationSection title={validationSettings[4]?.name || "Validation 4 (Custom)"} stateObj={extractedData.v4} searchKey="v4" summaryTitle={validationSettings[4]?.name ? `${validationSettings[4].name} Amount` : "Validation 4 Amount"} summaryColor="from-orange-500 to-red-700" isRunning={running} validationId={4} dynamicCards={dynamicCards.filter(c => !c.validation_id || c.validation_id == 4)} dynamicFilters={dynamicFilters} />}
         </motion.div>
       </AnimatePresence>
     </div>
